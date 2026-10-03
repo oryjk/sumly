@@ -11,9 +11,13 @@ import { getCapabilities } from "@/api/auth";
 import { getSession } from "@/utils/sessionBridge";
 import { isMockEnabled } from "@/mock";
 import type { AuthCapabilities } from "@/types/auth";
+import { useHoldingsStore } from "@/stores/holdings";
 import GoldTabBar from "@/components/GoldTabBar/GoldTabBar.vue";
 import AccountActions from "./components/AccountActions.vue";
 import AuthenticationForm from "./components/AuthenticationForm.vue";
+import SyncStatus from "./components/SyncStatus.vue";
+
+const holdings = useHoldingsStore();
 
 const session = getSession();
 
@@ -51,6 +55,9 @@ async function loadCapabilities() {
 onShow(() => {
   // 恢复已保存的会话；手动退出过则保持游客态
   session.ensureSessionReady();
+  // 登录后打开对应账户工作区，游客数据不被重新归属
+  const userID = session.currentUser.value?.id;
+  holdings.openWorkspace(userID === undefined ? "guest" : `user:${userID}`);
   void loadCapabilities();
 });
 </script>
@@ -77,6 +84,11 @@ onShow(() => {
           <text class="gold-field-label">{{ row.label }}</text>
           <text class="gold-field-value">{{ row.value }}</text>
         </view>
+      </view>
+
+      <view class="gold-card">
+        <text class="gold-card-title">云端同步</text>
+        <SyncStatus />
       </view>
 
       <view class="gold-card">

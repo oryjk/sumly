@@ -32,8 +32,22 @@ function failure(message: string, code: number): BackendApiResponse<never> {
 let mockProvider: AuthProvider = "wechat";
 let mockSessionActive = false;
 
+/** mock 持仓快照：按账户隔离，用于验证 CAS 与多账户隔离。 */
+const mockSnapshots = new Map<string, { revision: string; document: unknown }>();
+let mockRevision = 1;
+
+function emptyMockDocument() {
+  return { schemaVersion: 1, books: ["默认账本"], records: [] };
+}
+
 export function resetMockSession(): void {
   mockSessionActive = false;
+}
+
+let currentMockUserId = 1;
+
+function mockUserId(): number {
+  return currentMockUserId;
 }
 
 function asAuthUser(user: MockUser) {
@@ -51,6 +65,7 @@ function asAuthUser(user: MockUser) {
 
 function loginResult() {
   mockSessionActive = true;
+  currentMockUserId = getMockUser().id;
   return success({
     token: "mock-access-token",
     refresh_token: "mock-refresh-token",
@@ -147,6 +162,29 @@ export function tryMockHandler(method: RequestMethod, url: string, data: unknown
       setMockNickname(body.nickname.trim());
     }
     return success(getMockUser());
+  }
+
+  // ---- 持仓云同步 ----
+  if (path === "/holdings" && method === "GET") {
+    const key = `user:${mockUserId()}`;
+    const snapshot = mockSnapshots.get(key);
+    return success(snapshot ?? { revision: "0", document: emptyMockDocument() });
+  }
+  if (path === "/holdings" && method === "PUT") {
+    const key = `user:${mockUserId()}`;
+    const expected = Number(body.expectedRevision);
+    const current = mockSnapshots.get(key);
+    const currentRevision = current ? Number(current.revision) : 0;
+    if (expected !== currentRevision) {
+      return { code: 409, message: "revision 不匹配", data: null };
+    }
+    const next = {
+      revision: String(currentRevision + 1),
+      document: body.document ?? emptyMockDocument(),
+    };
+    mockSnapshots.set(key, next);
+    mockRevision += 1;
+    return success(next);
   }
 
   // ---- 行情 ----
