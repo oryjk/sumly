@@ -1,26 +1,28 @@
 <script setup lang="ts">
 import { onHide, onLaunch, onPageNotFound, onShow } from "@dcloudio/uni-app";
-import { ensureSessionReady } from "@/stores/appSession";
+import { getSession } from "@/utils/sessionBridge";
 
 const HOME_PAGE_PATH = "/pages/home/index";
 
 onLaunch(() => {
-  console.log("sumly_mini launch");
-  ensureSessionReady().catch((error) => {
-    console.warn("session bootstrap failed", error);
-  });
+  // 只恢复已保存的会话，不在启动时自动登录。
+  // 手动退出过（hasManualLogout）时保持游客态。
+  getSession().ensureSessionReady();
 });
 
 onShow(() => {
-  console.log("sumly_mini show");
+  // 返回前台时若access 已过期，做一次静默刷新
+  const session = getSession();
+  if (session.isLoggedIn.value && session.needsRefresh()) {
+    void session.refreshAccess();
+  }
 });
 
 onHide(() => {
-  console.log("sumly_mini hide");
+  // 后台暂停行情轮询由各页面自行处理
 });
 
-onPageNotFound((options) => {
-  console.warn("page not found, relaunch home", options);
+onPageNotFound(() => {
   uni.reLaunch({
     url: HOME_PAGE_PATH,
   });
