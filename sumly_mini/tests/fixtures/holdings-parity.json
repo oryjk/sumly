@@ -1,0 +1,108 @@
+{
+  "_comment": "跨端一致性样例：同一组输入送入 Swift GoldReturnCalculatorTests 与本目录 TS 测试，两端输出必须一致。改动此文件前先确认两端都通过。",
+  "cases": [
+    {
+      "name": "计划固定样例",
+      "input": {
+        "grams": 10,
+        "purity": 0.99,
+        "unitPrice": 500,
+        "laborFee": 100,
+        "otherCost": 20,
+        "totalCostOverride": null,
+        "rule": { "perGramDeduction": 10, "discountRate": 0.02, "fixedFee": 30 }
+      },
+      "referencePrice": 600,
+      "expected": {
+        "totalCost": 5120,
+        "effectiveGrams": 9.9,
+        "recoveryUnitPrice": 578.2,
+        "proceeds": 5694.18,
+        "profit": 574.18
+      }
+    },
+    {
+      "name": "实付总额覆盖成本",
+      "input": {
+        "grams": 10,
+        "purity": 0.99,
+        "unitPrice": 500,
+        "laborFee": 100,
+        "otherCost": 20,
+        "totalCostOverride": 5200,
+        "rule": { "perGramDeduction": 10, "discountRate": 0.02, "fixedFee": 30 }
+      },
+      "referencePrice": 600,
+      "expected": { "totalCost": 5200 }
+    },
+    {
+      "name": "零裸金价配正实付",
+      "input": {
+        "grams": 10,
+        "purity": 0.99,
+        "unitPrice": 0,
+        "laborFee": 0,
+        "otherCost": 0,
+        "totalCostOverride": 1000,
+        "rule": { "perGramDeduction": 10, "discountRate": 0.02, "fixedFee": 30 }
+      },
+      "referencePrice": 600,
+      "expected": { "totalCost": 1000 }
+    },
+    {
+      "name": "缺报价时利润为 null",
+      "input": {
+        "grams": 10,
+        "purity": 0.99,
+        "unitPrice": 500,
+        "laborFee": 100,
+        "otherCost": 20,
+        "totalCostOverride": null,
+        "rule": { "perGramDeduction": 10, "discountRate": 0.02, "fixedFee": 30 }
+      },
+      "referencePrice": null,
+      "expected": { "totalCost": 5120, "profit": null, "proceeds": null }
+    },
+    {
+      "name": "报价极低时到手有零下限",
+      "input": {
+        "grams": 10,
+        "purity": 0.99,
+        "unitPrice": 500,
+        "laborFee": 100,
+        "otherCost": 20,
+        "totalCostOverride": null,
+        "rule": { "perGramDeduction": 10, "discountRate": 0.02, "fixedFee": 30 }
+      },
+      "referencePrice": 1,
+      "expected": { "proceeds": 0, "profit": -5120 }
+    }
+  ],
+  "portfolio": [
+    {
+      "name": "异质回收规则组合",
+      "inputs": [
+        {
+          "grams": 10,
+          "purity": 0.99,
+          "unitPrice": 500,
+          "laborFee": 100,
+          "otherCost": 20,
+          "totalCostOverride": null,
+          "rule": { "perGramDeduction": 10, "discountRate": 0.02, "fixedFee": 30 }
+        },
+        {
+          "grams": 5,
+          "purity": 0.99,
+          "unitPrice": 480,
+          "laborFee": 0,
+          "otherCost": 0,
+          "totalCostOverride": null,
+          "rule": { "perGramDeduction": 0, "discountRate": 0, "fixedFee": 0 }
+        }
+      ],
+      "referencePrice": 600,
+      "expected": { "grams": 15, "totalCost": 7520 }
+    }
+  ]
+}
