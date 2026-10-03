@@ -30,3 +30,37 @@ func TestLoadConfigParsesDevLoginEnabled(t *testing.T) {
 		})
 	}
 }
+
+// WECHAT_LEGACY_APP_ID 是可选的：留空表示不迁移旧裸 openid 身份，
+// 而不是配置错误。误设为必填会让所有部署直接启动失败。
+func TestLoadConfigTreatsWechatLegacyAppIDAsOptional(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("JWT_SECRET", "secret")
+	t.Setenv("WECHAT_APP_ID", "appid")
+	t.Setenv("WECHAT_APP_SECRET", "appsecret")
+	t.Setenv("WECHAT_LEGACY_APP_ID", "")
+
+	config, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if config.WechatLegacyAppID != "" {
+		t.Fatalf("expected empty legacy appid, got %q", config.WechatLegacyAppID)
+	}
+}
+
+func TestLoadConfigKeepsConfirmedLegacyAppID(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("JWT_SECRET", "secret")
+	t.Setenv("WECHAT_APP_ID", "appid")
+	t.Setenv("WECHAT_APP_SECRET", "appsecret")
+	t.Setenv("WECHAT_LEGACY_APP_ID", "appid")
+
+	config, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if config.WechatLegacyAppID != "appid" {
+		t.Fatalf("legacy appid = %q", config.WechatLegacyAppID)
+	}
+}

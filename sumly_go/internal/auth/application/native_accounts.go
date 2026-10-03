@@ -16,11 +16,17 @@ type Accounts struct {
 	Codes     Codes
 	Sessions  Sessions
 	Apple     ports.AppleGateway
+	Wechat    *WechatSessions
 	DummyHash string
 }
 
 func (a Accounts) Capabilities() domain.Capabilities {
-	return domain.Capabilities{Apple: a.Apple != nil && a.Apple.Enabled(), Phone: a.Codes.Phone != nil && a.Codes.Phone.Enabled(), Email: a.Codes.Email != nil && a.Codes.Email.Enabled()}
+	return domain.Capabilities{
+		Apple:  a.Apple != nil && a.Apple.Enabled(),
+		Wechat: a.Wechat != nil && a.Wechat.Enabled(),
+		Phone:  a.Codes.Phone != nil && a.Codes.Phone.Enabled(),
+		Email:  a.Codes.Email != nil && a.Codes.Email.Enabled(),
+	}
 }
 func (a Accounts) throttle(ctx context.Context, subject, ip string) error {
 	return a.Store.TakeQuota(ctx, []domain.Quota{{Key: "login:ip:" + a.Crypto.Digest("ip", ip), Limit: 60, Window: time.Hour}, {Key: "login:subject:" + a.Crypto.Digest("subject", subject), Limit: 20, Window: time.Hour}})

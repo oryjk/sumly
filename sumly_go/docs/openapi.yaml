@@ -259,6 +259,57 @@ paths:
               required: ["challenge_id", "identity_token", "authorization_code"]
               additionalProperties: false
 
+  /api/v1/app/auth/wechat/session:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeWechatSessionLogin"
+      summary: "微信小程序统一会话登录"
+      description: |
+        用 uni.login 返回的 js_code 换取 openid，签发与手机号/邮箱相同结构的
+        access/refresh 会话（access 有效期 900 秒）。身份以 appid + openid 编码，
+        禁止跨 appid 误绑定。
+
+        旧 /auth/wechat/login 签发的 24 小时 JWT 不能刷新或注销，其契约保持不变；
+        两条链路共用同一身份解析，不会为同一 openid 创建两个账户。
+
+        旧微信用户只在 WECHAT_LEGACY_APP_ID 与 WECHAT_APP_ID 明确一致时
+        才迁移到新身份，复用原用户 ID，不复制或重新归属持仓；归属未确认时
+        不做猜测性关联。
+
+        未配置 WECHAT_APP_ID 时不注册该路由，capabilities.wechat 为 false。
+        响应不含 openid 与 session_key。
+      security: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                js_code:
+                  type: "string"
+                  description: "uni.login 返回的临时登录凭证"
+              required: ["js_code"]
+              additionalProperties: false
+      responses:
+        "200":
+          description: "成功，返回统一 code/message/data envelope"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, example: 0}
+                  message: {type: string, example: ok}
+                  data:
+                    $ref: "#/components/schemas/NativeLoginResult"
+        "401":
+          description: "code 无效、上游拒绝或账户不可用"
+        "422":
+          description: "js_code 为空或包含未知字段"
+        "503":
+          description: "微信登录未配置"
+
   /api/v1/app/auth/apple/notifications:
     post:
       tags: ["App Auth"]
@@ -1119,6 +1170,9 @@ components:
       properties:
         apple:
           type: "boolean"
+        wechat:
+          type: "boolean"
+          description: "配置了 WECHAT_APP_ID 且微信会话路由已注册时为 true"
         phone:
           type: "boolean"
         email:

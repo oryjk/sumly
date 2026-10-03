@@ -17,10 +17,12 @@ import (
 type NativeHandler struct {
 	accounts application.Accounts
 	sessions application.Sessions
+	wechat   *application.WechatSessions
 }
 
-func NewNativeHandler(a application.Accounts, s application.Sessions) *NativeHandler {
-	return &NativeHandler{a, s}
+// NewNativeHandler 构造原生认证 handler。wechat 为 nil 时不注册微信会话路由。
+func NewNativeHandler(a application.Accounts, s application.Sessions, wechat *application.WechatSessions) *NativeHandler {
+	return &NativeHandler{accounts: a, sessions: s, wechat: wechat}
 }
 
 type nativeRequest struct {
@@ -36,6 +38,7 @@ type nativeRequest struct {
 	Authorization string `json:"authorization_code"`
 	Nickname      string `json:"nickname"`
 	Confirmation  string `json:"confirmation"`
+	JsCode        string `json:"js_code"`
 }
 
 type appleNotificationRequest struct {
@@ -71,6 +74,10 @@ func (h *NativeHandler) RegisterRoutes(g *gin.RouterGroup) {
 	for _, path := range []string{"apple/challenge", "apple/login", "phone/code", "phone/login", "email/code", "email/register", "email/login", "email/reset-password", "refresh", "logout"} {
 		g.POST("/auth/"+path, h.endpoint(path))
 	}
+	// 微信统一会话：仅在配置了 appid 时注册，未配置时不暴露该能力。
+	if h.wechat != nil && h.wechat.Enabled() {
+		g.POST("/auth/wechat/session", h.endpoint("wechat/session"))
+	}
 	g.GET("/auth/me", h.endpoint("me"))
 	g.DELETE("/auth/account", h.endpoint("account"))
 }
@@ -101,6 +108,12 @@ func (h *NativeHandler) endpoint(path string) gin.HandlerFunc {
 		var e error
 		ip := c.ClientIP()
 		switch path {
+		case "wechat/session":
+			if h.wechat == nil {
+				nativeError(c, domain.ErrUnavailable)
+				return
+			}
+			data, e = h.wechat.Login(ctx, req.JsCode)
 		case "apple/challenge":
 			data, e = h.accounts.Challenge(ctx, ip)
 		case "apple/login":

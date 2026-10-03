@@ -14,6 +14,7 @@ import (
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/jwt"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/postgres"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/providers"
+	wechatclient "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/wechat"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/application"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -67,7 +68,7 @@ func loadNativeConfig() (NativeConfig, error) {
 func buildNative(config Config, pool *pgxpool.Pool, tokens *jwt.Service) (*authhttp.NativeHandler, authhttp.Middleware, error) {
 	middleware := authhttp.NewMiddleware(tokens)
 	if !config.Native.Enabled {
-		return authhttp.NewNativeHandler(application.Accounts{}, application.Sessions{}), middleware, nil
+		return authhttp.NewNativeHandler(application.Accounts{}, application.Sessions{}, nil), middleware, nil
 	}
 	crypto, e := credentials.New(config.JWTSecret)
 	if e != nil {
@@ -81,6 +82,21 @@ func buildNative(config Config, pool *pgxpool.Pool, tokens *jwt.Service) (*authh
 	if e != nil {
 		return nil, middleware, e
 	}
-	accounts := application.Accounts{Store: store, Crypto: crypto, Codes: codes, Sessions: sessions, Apple: apple, DummyHash: dummy}
-	return authhttp.NewNativeHandler(accounts, sessions), authhttp.NewMiddleware(jwt.LiveTokens{Service: tokens, Store: store}), nil
+	// 微信统一会话：与旧 /auth/wechat/login 共用身份解析，但签发可刷新的会话。
+	// LegacyAppID 只有在明确确认归属时才允许迁移旧裸 openid 身份。
+	var wechat *application.WechatSessions
+	if config.WechatAppID != "" {
+		gateway := wechatclient.NewClient(nil, wechatEndpoint, config.WechatAppID, config.WechatAppSecret)
+		wechat = &application.WechatSessions{
+			Wechat:      gateway,
+			Store:       store,
+			Crypto:      crypto,
+			Tokens:      tokens,
+			Sessions:    sessions,
+			AppID:       config.WechatAppID,
+			LegacyAppID: config.WechatLegacyAppID,
+		}
+	}
+	accounts := application.Accounts{Store: store, Crypto: crypto, Codes: codes, Sessions: sessions, Apple: apple, Wechat: wechat, DummyHash: dummy}
+	return authhttp.NewNativeHandler(accounts, sessions, wechat), authhttp.NewMiddleware(jwt.LiveTokens{Service: tokens, Store: store}), nil
 }

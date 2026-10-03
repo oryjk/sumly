@@ -13,7 +13,7 @@ import (
 func TestNativeContractDisabledAndBounded(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := NewNativeHandler(application.Accounts{}, application.Sessions{})
+	h := NewNativeHandler(application.Accounts{}, application.Sessions{}, nil)
 	h.RegisterRoutes(r.Group("/api/v1/app"))
 	for _, tc := range []struct {
 		method, path, body string
@@ -31,7 +31,7 @@ func TestNativeContractDisabledAndBounded(t *testing.T) {
 		if w.Code != tc.status {
 			t.Fatalf("%s %s: %d %s", tc.method, tc.path, w.Code, w.Body.String())
 		}
-		if tc.path == "/capabilities" && w.Body.String() != `{"code":0,"message":"ok","data":{"apple":false,"phone":false,"email":false}}` {
+		if tc.path == "/capabilities" && w.Body.String() != `{"code":0,"message":"ok","data":{"apple":false,"wechat":false,"phone":false,"email":false}}` {
 			t.Fatal(w.Body.String())
 		}
 	}

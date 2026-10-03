@@ -38,6 +38,7 @@ type AuthIdentity struct {
 	PasswordHash         string             `json:"password_hash"`
 	AppleRefresh         []byte             `json:"apple_refresh"`
 	AppleAuthenticatedAt pgtype.Timestamptz `json:"apple_authenticated_at"`
+	MigratedFrom         string             `json:"migrated_from"`
 }
 
 type AuthQuota struct {

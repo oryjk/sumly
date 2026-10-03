@@ -72,9 +72,10 @@ type LoginResult struct {
 	User         User   `json:"user"`
 }
 type Capabilities struct {
-	Apple bool `json:"apple"`
-	Phone bool `json:"phone"`
-	Email bool `json:"email"`
+	Apple  bool `json:"apple"`
+	Wechat bool `json:"wechat"`
+	Phone  bool `json:"phone"`
+	Email  bool `json:"email"`
 }
 type Challenge struct {
 	ID        string `json:"challenge_id"`

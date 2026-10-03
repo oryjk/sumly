@@ -38,6 +38,7 @@ type AuthIdentity struct {
 	PasswordHash         string
 	AppleRefresh         []byte
 	AppleAuthenticatedAt pgtype.Timestamptz
+	MigratedFrom         string
 }
 
 type AuthQuota struct {

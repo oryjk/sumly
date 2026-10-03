@@ -131,6 +131,22 @@ func (q *Queries) NativeAppleNotificationExists(ctx context.Context, id string) 
 	return exists, err
 }
 
+const nativeAttachWechatIdentity = `-- name: NativeAttachWechatIdentity :exec
+INSERT INTO auth_identities(user_id,provider,subject,migrated_from) VALUES($1,'wechat',$2,$3)
+ON CONFLICT (provider,subject) DO NOTHING
+`
+
+type NativeAttachWechatIdentityParams struct {
+	UserID       int64  `json:"user_id"`
+	Subject      string `json:"subject"`
+	MigratedFrom string `json:"migrated_from"`
+}
+
+func (q *Queries) NativeAttachWechatIdentity(ctx context.Context, arg NativeAttachWechatIdentityParams) error {
+	_, err := q.db.Exec(ctx, nativeAttachWechatIdentity, arg.UserID, arg.Subject, arg.MigratedFrom)
+	return err
+}
+
 const nativeAttemptCode = `-- name: NativeAttemptCode :one
 UPDATE auth_codes SET attempts=attempts+1 WHERE key=$1 AND active AND expires_at>now() AND attempts<5
 RETURNING hash
@@ -204,7 +220,7 @@ func (q *Queries) NativeDeleteUser(ctx context.Context, id int64) error {
 }
 
 const nativeIdentity = `-- name: NativeIdentity :one
-SELECT i.user_id, i.provider, i.subject, i.password_hash, i.apple_refresh, i.apple_authenticated_at,u.nickname,COALESCE(u.avatar_url,'')::text AS avatar_url,u.status FROM auth_identities i JOIN users u ON u.id=i.user_id WHERE provider=$1 AND subject=$2
+SELECT i.user_id, i.provider, i.subject, i.password_hash, i.apple_refresh, i.apple_authenticated_at, i.migrated_from,u.nickname,COALESCE(u.avatar_url,'')::text AS avatar_url,u.status FROM auth_identities i JOIN users u ON u.id=i.user_id WHERE provider=$1 AND subject=$2
 `
 
 type NativeIdentityParams struct {
@@ -219,6 +235,7 @@ type NativeIdentityRow struct {
 	PasswordHash         string             `json:"password_hash"`
 	AppleRefresh         []byte             `json:"apple_refresh"`
 	AppleAuthenticatedAt pgtype.Timestamptz `json:"apple_authenticated_at"`
+	MigratedFrom         string             `json:"migrated_from"`
 	Nickname             string             `json:"nickname"`
 	AvatarUrl            string             `json:"avatar_url"`
 	Status               string             `json:"status"`
@@ -234,6 +251,7 @@ func (q *Queries) NativeIdentity(ctx context.Context, arg NativeIdentityParams) 
 		&i.PasswordHash,
 		&i.AppleRefresh,
 		&i.AppleAuthenticatedAt,
+		&i.MigratedFrom,
 		&i.Nickname,
 		&i.AvatarUrl,
 		&i.Status,
@@ -335,6 +353,21 @@ SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
 
 func (q *Queries) NativeLock(ctx context.Context, dollar_1 string) error {
 	_, err := q.db.Exec(ctx, nativeLock, dollar_1)
+	return err
+}
+
+const nativeMarkWechatMigrated = `-- name: NativeMarkWechatMigrated :exec
+UPDATE auth_identities SET migrated_from=$3 WHERE provider='wechat' AND subject=$1 AND user_id=$2
+`
+
+type NativeMarkWechatMigratedParams struct {
+	Subject      string `json:"subject"`
+	UserID       int64  `json:"user_id"`
+	MigratedFrom string `json:"migrated_from"`
+}
+
+func (q *Queries) NativeMarkWechatMigrated(ctx context.Context, arg NativeMarkWechatMigratedParams) error {
+	_, err := q.db.Exec(ctx, nativeMarkWechatMigrated, arg.Subject, arg.UserID, arg.MigratedFrom)
 	return err
 }
 
@@ -557,6 +590,31 @@ type NativeUpdatePasswordParams struct {
 func (q *Queries) NativeUpdatePassword(ctx context.Context, arg NativeUpdatePasswordParams) error {
 	_, err := q.db.Exec(ctx, nativeUpdatePassword, arg.Subject, arg.PasswordHash)
 	return err
+}
+
+const nativeWechatLegacyUser = `-- name: NativeWechatLegacyUser :one
+SELECT i.user_id,u.nickname,COALESCE(u.avatar_url,'')::text AS avatar_url,u.status
+FROM auth_identities i JOIN users u ON u.id=i.user_id
+WHERE i.provider='wechat' AND i.subject=$1
+`
+
+type NativeWechatLegacyUserRow struct {
+	UserID    int64  `json:"user_id"`
+	Nickname  string `json:"nickname"`
+	AvatarUrl string `json:"avatar_url"`
+	Status    string `json:"status"`
+}
+
+func (q *Queries) NativeWechatLegacyUser(ctx context.Context, subject string) (NativeWechatLegacyUserRow, error) {
+	row := q.db.QueryRow(ctx, nativeWechatLegacyUser, subject)
+	var i NativeWechatLegacyUserRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Nickname,
+		&i.AvatarUrl,
+		&i.Status,
+	)
+	return i, err
 }
 
 const updateUserAppProfile = `-- name: UpdateUserAppProfile :one

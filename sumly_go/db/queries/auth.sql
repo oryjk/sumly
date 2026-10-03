@@ -125,3 +125,12 @@ WHERE provider='apple' AND subject=$1;
 -- name: NativeAppleAuthenticationAfter :one
 SELECT EXISTS(SELECT 1 FROM auth_identities
 WHERE provider='apple' AND subject=$1 AND apple_authenticated_at>$2::timestamptz);
+-- name: NativeWechatLegacyUser :one
+SELECT i.user_id,u.nickname,COALESCE(u.avatar_url,'')::text AS avatar_url,u.status
+FROM auth_identities i JOIN users u ON u.id=i.user_id
+WHERE i.provider='wechat' AND i.subject=$1;
+-- name: NativeAttachWechatIdentity :exec
+INSERT INTO auth_identities(user_id,provider,subject,migrated_from) VALUES($1,'wechat',$2,$3)
+ON CONFLICT (provider,subject) DO NOTHING;
+-- name: NativeMarkWechatMigrated :exec
+UPDATE auth_identities SET migrated_from=$3 WHERE provider='wechat' AND subject=$1 AND user_id=$2;

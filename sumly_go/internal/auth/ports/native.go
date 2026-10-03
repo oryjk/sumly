@@ -16,6 +16,9 @@ type NativeStore interface {
 	FindIdentityByUser(context.Context, int64, string) (domain.Identity, error)
 	FindIdentity(context.Context, string, string) (domain.Identity, error)
 	Login(context.Context, LoginMutation) (domain.User, error)
+	// LoginWechat 在一个事务内关联或迁移微信身份并插入会话。
+	// legacyAppID 仅在等于当前 appid 时才允许迁移旧裸 openid 身份。
+	LoginWechat(context.Context, string, string, string, domain.Session) (domain.User, error)
 	ResetPassword(context.Context, string, string, string) error
 	NewChallenge(context.Context, string, string, time.Time) error
 	ConsumeChallenge(context.Context, string) (string, error)

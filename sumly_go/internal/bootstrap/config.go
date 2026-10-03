@@ -23,8 +23,12 @@ type Config struct {
 	JWTSecret       string
 	WechatAppID     string
 	WechatAppSecret string
-	AppEnvironment  AppEnvironment
-	DevLoginEnabled bool
+	// WechatLegacyAppID 为已确认归属的旧小程序 appid。
+	// 仅当与 WechatAppID 相同时才允许把旧裸 openid 身份迁移到新身份；
+	// 留空表示不迁移，避免猜测归属造成错误关联。
+	WechatLegacyAppID string
+	AppEnvironment    AppEnvironment
+	DevLoginEnabled   bool
 }
 
 func LoadConfig() (Config, error) {
@@ -35,8 +39,10 @@ func LoadConfig() (Config, error) {
 		JWTSecret:       os.Getenv("JWT_SECRET"),
 		WechatAppID:     os.Getenv("WECHAT_APP_ID"),
 		WechatAppSecret: os.Getenv("WECHAT_APP_SECRET"),
-		AppEnvironment:  parseAppEnvironment(os.Getenv("APP_ENV")),
-		DevLoginEnabled: os.Getenv("DEV_LOGIN_ENABLED") == "true",
+		// 可选项：留空表示不迁移旧裸 openid 身份
+		WechatLegacyAppID: os.Getenv("WECHAT_LEGACY_APP_ID"),
+		AppEnvironment:    parseAppEnvironment(os.Getenv("APP_ENV")),
+		DevLoginEnabled:   os.Getenv("DEV_LOGIN_ENABLED") == "true",
 	}
 
 	for name, value := range map[string]string{

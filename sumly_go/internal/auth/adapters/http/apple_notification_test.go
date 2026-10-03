@@ -29,7 +29,7 @@ func (*httpNotificationStore) ApplyAppleEvent(context.Context, domain.AppleNotif
 func TestAppleNotificationEndpointAcceptsPayloadAndBoundsBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := NewNativeHandler(application.Accounts{Store: &httpNotificationStore{}, Apple: httpNotificationApple{}}, application.Sessions{})
+	h := NewNativeHandler(application.Accounts{Store: &httpNotificationStore{}, Apple: httpNotificationApple{}}, application.Sessions{}, nil)
 	h.RegisterRoutes(r.Group("/api/v1/app"))
 
 	w := httptest.NewRecorder()
