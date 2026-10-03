@@ -1,174 +1,44 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { ensureSessionReady, clearSession, loginWithDevIdentifier, useAppSession } from "@/stores/appSession";
-import { isMockEnabled } from "@/mock";
-import NeoInput from "@/components/NeoInput/NeoInput.vue";
-
-const PROFILE_PAGE_PATH = "/pages/user/index";
-
-const { currentUser, bootstrapError, isBootstrapping } = useAppSession();
-
-const displayName = computed(() => {
-  const user = currentUser.value;
-  if (!user) {
-    return "未登录";
-  }
-  return user.nickname || `用户 ${user.id}`;
-});
-
-const isLoggedIn = computed(() => currentUser.value !== null);
-
-async function handleLogin() {
-  try {
-    await ensureSessionReady(true);
-    uni.$emit("session:login-completed");
-  } catch (error) {
-    uni.showToast({ title: error instanceof Error ? error.message : "登录失败", icon: "none" });
-  }
-}
-
-const devIdentifier = ref("");
-const isDevLoggingIn = ref(false);
-
-async function handleDevLogin() {
-  const identifier = devIdentifier.value.trim();
-  if (!identifier) {
-    uni.showToast({ title: "请输入测试标识", icon: "none" });
-    return;
-  }
-  if (isDevLoggingIn.value) {
-    return;
-  }
-  isDevLoggingIn.value = true;
-  try {
-    await loginWithDevIdentifier(identifier);
-    uni.$emit("session:login-completed");
-  } catch (error) {
-    uni.showToast({ title: error instanceof Error ? error.message : "登录失败", icon: "none" });
-  } finally {
-    isDevLoggingIn.value = false;
-  }
-}
-
-function handleLogout() {
-  clearSession();
-  uni.showToast({ title: "已退出登录", icon: "none" });
-}
-
-function openProfile() {
-  if (!isLoggedIn.value) {
-    uni.showToast({ title: "请先登录", icon: "none" });
-    return;
-  }
-  uni.navigateTo({ url: PROFILE_PAGE_PATH });
-}
+/**
+ * 首页 —— A1 阶段只承载深色金主题与底部导航。
+ * A3 会用 QuoteHeader / GoldChart 等组件充实为完整行情页。
+ */
+import GoldTabBar from "@/components/GoldTabBar/GoldTabBar.vue";
 </script>
 
 <template>
-  <view class="page-container">
-    <view class="app-card">
-      <view class="home-title">记金</view>
-      <view class="home-subtitle">记录你的黄金资产</view>
+  <view class="page-container page-body">
+    <view class="home-header">
+      <text class="home-title">记金</text>
+      <text class="home-subtitle">记录你的黄金资产</text>
     </view>
 
-    <view class="app-card">
-      <view class="app-card-title">登录状态</view>
-
-      <view v-if="isBootstrapping" class="app-hint">正在初始化会话...</view>
-
-      <template v-else>
-        <view class="app-field-row">
-          <text class="app-field-label">当前用户</text>
-          <text class="app-field-value">{{ displayName }}</text>
-        </view>
-        <view v-if="isLoggedIn" class="app-field-row">
-          <text class="app-field-label">用户 ID</text>
-          <text class="app-field-value">{{ currentUser?.id }}</text>
-        </view>
-        <view v-if="isLoggedIn" class="app-field-row">
-          <text class="app-field-label">状态</text>
-          <text class="app-field-value">{{ currentUser?.status }}</text>
-        </view>
-
-        <view v-if="bootstrapError" class="app-hint home-error">{{ bootstrapError }}</view>
-
-        <!-- #ifndef H5 -->
-        <button v-if="!isLoggedIn" class="app-primary-button home-action" @click="handleLogin">
-          微信登录
-        </button>
-        <!-- #endif -->
-        <!-- #ifdef H5 -->
-        <template v-if="!isLoggedIn">
-          <button v-if="isMockEnabled()" class="app-primary-button home-action" @click="handleLogin">
-            登录（mock）
-          </button>
-          <view v-else class="home-dev-login">
-            <NeoInput v-model="devIdentifier" placeholder="测试标识，如 test-user-01" :maxlength="120" />
-            <button class="app-primary-button home-action" :disabled="isDevLoggingIn" @click="handleDevLogin">
-              {{ isDevLoggingIn ? "登录中..." : "开发登录" }}
-            </button>
-          </view>
-        </template>
-        <!-- #endif -->
-        <template v-else>
-          <button class="app-primary-button home-action" @click="openProfile">查看我的资料</button>
-          <button class="app-plain-button home-action" @click="handleLogout">退出登录</button>
-        </template>
-      </template>
-
-      <!-- #ifndef H5 -->
-      <view class="app-hint">
-        {{ isMockEnabled() ? "当前为 mock 模式（VITE_USE_MOCK=true），登录不请求真实后端。" : "登录走 sumly_go 后端 POST /api/v1/app/auth/wechat/login。" }}
-      </view>
-      <!-- #endif -->
-      <!-- #ifdef H5 -->
-      <view class="app-hint">
-        {{ isMockEnabled() ? "当前为 mock 模式（VITE_USE_MOCK=true），登录不请求真实后端。" : "H5 开发登录走 POST /api/v1/app/auth/dev/login（后端需 DEV_LOGIN_ENABLED=true）。" }}
-      </view>
-      <!-- #endif -->
+    <view class="gold-card">
+      <text class="gold-card-title">行情</text>
+      <text class="gold-hint">国内与国际金价行情建设中。</text>
     </view>
+
+    <GoldTabBar active="market" />
   </view>
 </template>
 
 <style scoped>
+.home-header {
+  padding: 48rpx 0 32rpx;
+}
+
 .home-title {
+  display: block;
   font-size: 52rpx;
-  font-weight: 900;
-  color: #111111;
+  font-weight: 800;
+  color: var(--gold-ink);
   letter-spacing: 2rpx;
 }
 
 .home-subtitle {
+  display: block;
   margin-top: 8rpx;
   font-size: 26rpx;
-  color: #6b6560;
-}
-
-.home-action {
-  margin-top: 24rpx;
-}
-
-.home-error {
-  color: #ff6b6b;
-  font-weight: 600;
-}
-
-.home-dev-login {
-  margin-top: 24rpx;
-}
-
-@media (min-width: 768px) {
-  .home-title {
-    font-size: 28px;
-  }
-
-  .home-subtitle {
-    font-size: 14px;
-  }
-
-  .home-action,
-  .home-dev-login {
-    margin-top: 16px;
-  }
+  color: var(--gold-muted);
 }
 </style>

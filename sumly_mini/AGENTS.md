@@ -38,11 +38,15 @@ src/
 - 新增接口优先放入 `src/api/<domain>.ts`，并补充对应类型（`src/types/`）。
 - 登录态只通过 `src/stores/appSession.ts` 与 `src/utils/authStorage.ts` 读写，
   页面不要直接操作 token 存储。
-- 视觉规范：全站 neo-brutalism 风格，颜色/边框/阴影/圆角/控件高度只允许引用
-  `src/uni.css` 里的 `--neo-*` 令牌，禁止硬编码；桌面端适配通过在
-  `@media (min-width: 768px)` 中重定义令牌实现。通用控件做成 `src/components/`
-  下的组件（如 `NeoInput`），样式随组件走并吃令牌。
-- H5 开发测试登录：首页在 `#ifdef H5` 下提供"标识 + 开发登录"入口
+- 视觉规范：全站「深色 + 金」主题，视觉基准为 iOS 端
+  `../sumly_ios/Sumly/Sources/DesignSystem/GoldTheme.swift`。颜色/描边/圆角/控件高度/间距
+  只允许引用 `src/uni.css` 里的 `--gold-*` 令牌，禁止硬编码；桌面端适配通过在
+  `@media (min-width: 768px)` 中收敛为手机宽度列实现。通用控件做成 `src/components/`
+  下的组件（如 `GoldInput`），样式随组件走并吃令牌。
+- 涨跌配色遵守国内习惯：红涨（`--gold-up`）绿跌（`--gold-down`）。
+- 底部导航与中央添加入口统一走 `src/stores/navigation.ts` 的注册路径，
+  页面不硬编码跳转地址。
+- H5 开发测试登录：「我的」页在 `#ifdef H5` 下提供"标识 + 开发登录"入口
   （`loginWithDevIdentifier`），走后端 `/auth/dev/login`（需 `DEV_LOGIN_ENABLED=true`）；
   mock 模式下不渲染该入口。
 - 修改核心流程时，确认字段与后端真实 JSON 一致；后端契约见 `../sumly_go/docs/openapi.yaml`。

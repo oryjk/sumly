@@ -9,7 +9,14 @@
     {
       "path": "pages/home/index",
       "style": {
-        "navigationBarTitleText": "首页"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "记金"
+      }
+    },
+    {
+      "path": "pages/holdings/index",
+      "style": {
+        "navigationBarTitleText": "持仓"
       }
     },
     {
@@ -20,9 +27,11 @@
     }
   ],
   "globalStyle": {
-    "navigationBarTextStyle": "black",
+    "navigationBarTextStyle": "white",
     "navigationBarTitleText": "记金",
-    "navigationBarBackgroundColor": "#faf3e8",
-    "backgroundColor": "#faf3e8"
+    "navigationBarBackgroundColor": "#1b1b1d",
+    "backgroundColor": "#1b1b1d",
+    "backgroundColorTop": "#1b1b1d",
+    "backgroundColorBottom": "#1b1b1d"
   }
 }
