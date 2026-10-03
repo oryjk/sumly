@@ -13,10 +13,15 @@ import { totalPurchaseCost } from "@/domain/holdings/disposal";
 import { displayName } from "@/domain/holdings/selection";
 import { formatGrams, formatMoney, formatPercent } from "@/domain/holdings/presentation";
 import type { HoldingRecord } from "@/types/holdings";
+import { useHoldingAlerts } from "@/stores/holdingAlerts";
+import { getSession } from "@/utils/sessionBridge";
+import HoldingAlerts from "./components/HoldingAlerts.vue";
 import ProfitBreakdown from "./components/ProfitBreakdown.vue";
 
 const holdings = useHoldingsStore();
 const market = useMarketStore();
+const alerts = useHoldingAlerts();
+const session = getSession();
 
 const record = ref<HoldingRecord | null>(null);
 const expanded = ref<string | null>(null);
@@ -47,6 +52,27 @@ const trendClass = computed(() => {
   if (profit === null || profit === undefined || Number(profit) === 0) return "";
   return Number(profit) > 0 ? "gold-up" : "gold-down";
 });
+
+/** 保存提醒配置：落盘成功后重置受影响提醒的运行态。 */
+function saveAlerts(payload: { alerts: typeof record.value extends null ? never : any; resetIDs: string[] }) {
+  const current = record.value;
+  if (!current) return;
+  const next = { ...current, alerts: payload.alerts };
+  const ok = holdings.mutate((doc) => ({
+    ...doc,
+    records: doc.records.map((item) => (item.id === next.id ? next : item)),
+  }));
+  if (!ok) {
+    uni.showToast({ title: holdings.saveError.value ?? "保存失败", icon: "none" });
+    return;
+  }
+  record.value = next;
+  // 配置变了，旧的 armed/基线不再适用
+  for (const alertID of payload.resetIDs) {
+    uni.removeStorageSync(`sumly:alerts:${alerts.workspace()}:${current.id}:${alertID}`);
+  }
+  uni.showToast({ title: "提醒已保存", icon: "success" });
+}
 
 function dateText(ms: number | null): string {
   if (ms === null) return "--";
@@ -151,6 +177,18 @@ onLoad((options) => {
             <text class="gold-field-value">{{ formatPercent(result?.requiredRisePercent, hidden) }}</text>
           </view>
         </template>
+      </view>
+
+      <view v-if="!isDisposed" class="gold-card">
+        <text class="gold-card-title">目标提醒</text>
+        <HoldingAlerts
+          :record="record"
+          :basis="market.basis.value"
+          @save="saveAlerts"
+        />
+        <text class="gold-hint">
+          提醒只在小程序前台监测；关闭小程序后不再检测。后台弹窗不代表微信消息已送达。
+        </text>
       </view>
 
       <view class="gold-card">

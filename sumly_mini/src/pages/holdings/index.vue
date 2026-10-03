@@ -7,6 +7,8 @@ import { computed, ref } from "vue";
 import { onHide, onShow } from "@dcloudio/uni-app";
 import { useHoldingsStore } from "@/stores/holdings";
 import { useMarketStore } from "@/stores/market";
+import { useHoldingAlerts } from "@/stores/holdingAlerts";
+import { getSession } from "@/utils/sessionBridge";
 import { selectHoldings, type HoldingFilter, type HoldingSort } from "@/domain/holdings/selection";
 import { returnInput } from "@/domain/holdings/returns";
 import { aggregateReturn } from "@/domain/holdings/returns";
@@ -18,6 +20,8 @@ import HoldingCard from "./components/HoldingCard.vue";
 
 const holdings = useHoldingsStore();
 const market = useMarketStore();
+const alerts = useHoldingAlerts();
+const session = getSession();
 
 const book = ref("");
 const search = ref("");
@@ -194,13 +198,40 @@ function submitDisposal(payload: {
   uni.showToast({ title: payload.kind === "sold" ? "已记录卖出" : "已记录赠送", icon: "success" });
 }
 
+/** 提醒只在持仓页前台监测，与 App 保持一致。 */
+function runAlertMonitor() {
+  const quote = market.quote.value;
+  if (!quote) return;
+  const now = Date.now();
+  alerts.setWorkspace(holdings.workspace.value.key);
+  alerts.evaluate(holdings.document.value.records, quote.cny_per_gram, now, now);
+  // 送达确认：前台反馈已展示即视为本地已送达
+  for (const event of alerts.pending.value) {
+    alerts.acknowledge(event.id, "delivered");
+  }
+}
+
+let alertTimer: ReturnType<typeof setInterval> | null = null;
+
 onShow(() => {
-  holdings.openWorkspace("guest");
+  const userID = session.currentUser.value?.id;
+  holdings.openWorkspace(userID === undefined ? "guest" : `user:${userID}`);
   market.start("holdings");
+  alerts.setWorkspace(holdings.workspace.value.key);
+  alerts.start("holdings");
+  // 前台每 3 秒检查一次
+  if (alertTimer) clearInterval(alertTimer);
+  runAlertMonitor();
+  alertTimer = setInterval(runAlertMonitor, 3000);
 });
 
 onHide(() => {
   market.stop("holdings");
+  alerts.stop("holdings");
+  if (alertTimer) {
+    clearInterval(alertTimer);
+    alertTimer = null;
+  }
 });
 </script>
 

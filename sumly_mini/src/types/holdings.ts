@@ -13,7 +13,7 @@
 export type HoldingDisposition = "holding" | "sold" | "gift";
 
 /** 提醒目标类型。 */
-export type HoldingAlertKind = "breakeven" | "profitPercent" | "profitAmount" | "price";
+export type HoldingAlertKind = "breakEven" | "profitPercent" | "profitAmount" | "price";
 
 /** 提醒所用行情口径。 */
 export type HoldingAlertBasis = "domestic" | "international";
