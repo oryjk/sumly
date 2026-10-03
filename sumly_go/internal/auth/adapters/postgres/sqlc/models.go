@@ -89,6 +89,13 @@ type GoldRealtimeSample struct {
 	PriceCny  float64            `json:"price_cny"`
 }
 
+type HoldingsSnapshot struct {
+	UserID    int64              `json:"user_id"`
+	Revision  int64              `json:"revision"`
+	Document  []byte             `json:"document"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type MarketDailyJob struct {
 	Symbol       string             `json:"symbol"`
 	CompletedDay pgtype.Date        `json:"completed_day"`
@@ -116,6 +123,25 @@ type MarketHistoryPoint struct {
 
 type MarketHistorySeed struct {
 	Name string `json:"name"`
+}
+
+type MarketIntradaySnapshot struct {
+	Symbol  string             `json:"symbol"`
+	EventAt pgtype.Timestamptz `json:"event_at"`
+	Points  []byte             `json:"points"`
+}
+
+type MarketLatestQuote struct {
+	Symbol             string             `json:"symbol"`
+	Currency           string             `json:"currency"`
+	Price              float64            `json:"price"`
+	Open               float64            `json:"open"`
+	High               float64            `json:"high"`
+	Low                float64            `json:"low"`
+	PrevClose          float64            `json:"prev_close"`
+	UsdCny             float64            `json:"usd_cny"`
+	AsOf               pgtype.Timestamptz `json:"as_of"`
+	SourceDelaySeconds int32              `json:"source_delay_seconds"`
 }
 
 type User struct {

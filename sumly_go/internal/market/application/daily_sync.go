@@ -3,18 +3,19 @@ package application
 import (
 	"context"
 	"fmt"
-	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
-	"gitee.com/oryjk/sumly/sumly_go/internal/market/ports"
 	"math"
 	"sort"
 	"time"
+
+	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
+	"gitee.com/oryjk/sumly/sumly_go/internal/market/ports"
 )
 
 // SyncDaily runs independently of readers. The durable schedule coalesces all
 // collectors for a symbol and retries failed requests after the lease expires.
-func (s *GoldMarketService) SyncDaily(ctx context.Context) (result error) {
-	s.dailyFetchMu.Lock()
-	defer s.dailyFetchMu.Unlock()
+func (s *GoldCollector) SyncDaily(ctx context.Context) (result error) {
+	s.dailyMu.Lock()
+	defer s.dailyMu.Unlock()
 	now := s.now()
 	if schedule, ok := s.store.(ports.DailySyncSchedule); ok {
 		acquired, err := schedule.TryDailySync(ctx, now)
@@ -36,16 +37,6 @@ func (s *GoldMarketService) SyncDaily(ctx context.Context) (result error) {
 	if err != nil {
 		return err
 	}
-	current := map[string]domain.DailyBar{}
-	if s.store != nil {
-		stored, err := s.store.LoadDaily(ctx)
-		if err != nil {
-			return err
-		}
-		for _, bar := range stored {
-			current[bar.Date.Format("2006-01-02")] = bar
-		}
-	}
 	valid := map[string]domain.DailyBar{}
 	for _, bar := range bars {
 		key := bar.Date.Format("2006-01-02")
@@ -61,14 +52,11 @@ func (s *GoldMarketService) SyncDaily(ctx context.Context) (result error) {
 		return fmt.Errorf("source returned no valid closed daily bars")
 	}
 	changes := []domain.DailyBar{}
-	for key, bar := range valid {
-		old, exists := current[key]
-		if !exists || old.Open != bar.Open || old.High != bar.High || old.Low != bar.Low || old.Close != bar.Close {
-			changes = append(changes, bar)
-		}
+	for _, bar := range valid {
+		changes = append(changes, bar)
 	}
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Date.Before(changes[j].Date) })
-	if len(changes) > 0 && s.store != nil {
+	if len(changes) > 0 {
 		if err := s.store.SaveDaily(ctx, changes); err != nil {
 			return err
 		}

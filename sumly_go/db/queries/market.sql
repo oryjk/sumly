@@ -70,3 +70,22 @@ RETURNING symbol;
 -- name: FinishDailySync :exec
 UPDATE market_daily_jobs SET completed_day=CASE WHEN sqlc.arg(success)::boolean THEN sqlc.arg(day)::date ELSE completed_day END
 WHERE symbol=$1;
+
+-- name: SaveQuote :exec
+INSERT INTO market_latest_quotes(symbol,currency,price,open,high,low,prev_close,usd_cny,as_of,source_delay_seconds)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+ON CONFLICT(symbol) DO UPDATE SET currency=EXCLUDED.currency,price=EXCLUDED.price,
+ open=EXCLUDED.open,high=EXCLUDED.high,low=EXCLUDED.low,prev_close=EXCLUDED.prev_close,
+ usd_cny=EXCLUDED.usd_cny,as_of=EXCLUDED.as_of,source_delay_seconds=EXCLUDED.source_delay_seconds
+WHERE EXCLUDED.as_of >= market_latest_quotes.as_of;
+
+-- name: LoadQuote :one
+SELECT * FROM market_latest_quotes WHERE symbol=$1;
+
+-- name: SaveIntraday :exec
+INSERT INTO market_intraday_snapshots(symbol,event_at,points) VALUES($1,$2,$3)
+ON CONFLICT(symbol) DO UPDATE SET event_at=EXCLUDED.event_at,points=EXCLUDED.points
+WHERE EXCLUDED.event_at >= market_intraday_snapshots.event_at;
+
+-- name: LoadIntraday :one
+SELECT points FROM market_intraday_snapshots WHERE symbol=$1;

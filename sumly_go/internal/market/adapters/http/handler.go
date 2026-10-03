@@ -9,6 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// The HTTP contract uses Beijing time regardless of the database scan location.
+var beijingZone = time.FixedZone("CST", 8*3600)
+
 // GoldMarketUseCase 由 application 层实现；行情是公开数据，无需登录。
 type GoldMarketUseCase interface {
 	GetGoldRealtime(context.Context) ([]domain.RealtimePoint, int, error)
@@ -69,7 +72,7 @@ func (h *Handler) GoldQuote(c *gin.Context) {
 		ChangePercent: quote.ChangePercent(),
 		USDCNY:        quote.USDCNY,
 		CNYPerGram:    quote.CNYPerGram(),
-		AsOf:          quote.AsOf.Format(time.RFC3339),
+		AsOf:          quote.AsOf.In(beijingZone).Format(time.RFC3339),
 	})
 }
 

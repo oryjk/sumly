@@ -2,13 +2,21 @@ package application
 
 import (
 	"context"
+
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 	sharederror "gitee.com/oryjk/sumly/sumly_go/internal/shared/domain"
 )
 
+// InstrumentQueries exposes only query use cases.
+type InstrumentQueries interface {
+	GetGoldQuote(context.Context) (domain.GoldQuote, error)
+	GetGoldDailyKLines(context.Context) ([]domain.DailyBar, error)
+	GetGoldRealtime(context.Context) ([]domain.RealtimePoint, int, error)
+}
+
 type InstrumentMarket struct {
 	Instrument domain.Instrument
-	Service    *GoldMarketService
+	Service    InstrumentQueries
 }
 type Instruments struct{ markets []InstrumentMarket }
 

@@ -89,6 +89,13 @@ type GoldRealtimeSample struct {
 	PriceCny  float64
 }
 
+type HoldingsSnapshot struct {
+	UserID    int64
+	Revision  int64
+	Document  []byte
+	UpdatedAt pgtype.Timestamptz
+}
+
 type MarketDailyJob struct {
 	Symbol       string
 	CompletedDay pgtype.Date
@@ -116,6 +123,25 @@ type MarketHistoryPoint struct {
 
 type MarketHistorySeed struct {
 	Name string
+}
+
+type MarketIntradaySnapshot struct {
+	Symbol  string
+	EventAt pgtype.Timestamptz
+	Points  []byte
+}
+
+type MarketLatestQuote struct {
+	Symbol             string
+	Currency           string
+	Price              float64
+	Open               float64
+	High               float64
+	Low                float64
+	PrevClose          float64
+	UsdCny             float64
+	AsOf               pgtype.Timestamptz
+	SourceDelaySeconds int32
 }
 
 type User struct {

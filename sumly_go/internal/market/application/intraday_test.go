@@ -3,9 +3,10 @@ package application
 import (
 	"context"
 	"errors"
-	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 	"testing"
 	"time"
+
+	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 )
 
 type intradaySource struct {
@@ -18,30 +19,38 @@ func (f *intradaySource) FetchGoldIntraday(context.Context) ([]domain.IntradayPo
 	f.calls++
 	return f.points, f.err
 }
-func TestIntradayCachesReturnsCopiesAndPreservesTimestampOnFailure(t *testing.T) {
+func TestIntradayQueriesReturnCopiesAndKeepStoredTimestamp(t *testing.T) {
 	now := time.Now()
-	source := &intradaySource{points: []domain.IntradayPoint{{Time: now, Price: 4300}}}
-	service := NewGoldMarketService(source)
-	service.now = func() time.Time { return now }
-	first, err := service.GetGoldIntraday(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	store := &readOnlyMarket{minutes: []domain.IntradayPoint{{Time: now, Price: 4300}}}
+	q := NewGoldQuery(store)
+	first, e := q.GetGoldIntraday(context.Background())
+	if e != nil {
+		t.Fatal(e)
 	}
 	first[0].Price = 1
-	second, err := service.GetGoldIntraday(context.Background())
-	if err != nil || second[0].Price != 4300 || source.calls != 1 {
-		t.Fatalf("cache = %+v, err=%v", second, err)
-	}
-	now = now.Add(time.Minute)
-	source.err = errors.New("offline")
-	stale, err := service.GetGoldIntraday(context.Background())
-	if err != nil || stale[0].Price != 4300 || !stale[0].Time.Equal(source.points[0].Time) {
-		t.Fatalf("stale = %+v, err=%v", stale, err)
+	second, e := q.GetGoldIntraday(context.Background())
+	if e != nil || second[0].Price != 4300 || !second[0].Time.Equal(now) {
+		t.Fatal(second, e)
 	}
 }
-func TestIntradayFailsWithoutCache(t *testing.T) {
-	source := &intradaySource{fakeSource: fakeSource{err: errors.New("offline")}}
-	if _, err := NewGoldMarketService(source).GetGoldIntraday(context.Background()); err == nil {
-		t.Fatal("expected error")
+func TestIntradayCollectorKeepsLastSnapshotOnFailureOrEmptyData(t *testing.T) {
+	now := time.Now()
+	source := &intradaySource{points: []domain.IntradayPoint{{Time: now, Price: 4300}}}
+	writer := &writeOnlyMarket{}
+	c := NewGoldCollector(source, writer)
+	if e := c.SyncIntraday(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	source.err = errors.New("offline")
+	if e := c.SyncIntraday(context.Background()); e == nil {
+		t.Fatal("hidden failed fetch")
+	}
+	source.err = nil
+	source.points = nil
+	if e := c.SyncIntraday(context.Background()); e == nil {
+		t.Fatal("empty snapshot accepted")
+	}
+	if len(writer.minutes) != 1 || writer.minutes[0].Price != 4300 || !writer.minutes[0].Time.Equal(now) {
+		t.Fatal(writer.minutes)
 	}
 }

@@ -163,6 +163,17 @@ func (q *Queries) LoadDaily(ctx context.Context, symbol string) ([]LoadDailyRow,
 	return items, nil
 }
 
+const loadIntraday = `-- name: LoadIntraday :one
+SELECT points FROM market_intraday_snapshots WHERE symbol=$1
+`
+
+func (q *Queries) LoadIntraday(ctx context.Context, symbol string) ([]byte, error) {
+	row := q.db.QueryRow(ctx, loadIntraday, symbol)
+	var points []byte
+	err := row.Scan(&points)
+	return points, err
+}
+
 const loadNativeSamples = `-- name: LoadNativeSamples :many
 SELECT target.sampled_at,target.source_at,target.price FROM gold_native_samples AS target WHERE target.instrument=$1 AND target.sampled_at >=
  (SELECT MAX(latest.source_at)-INTERVAL '20 minutes' FROM gold_native_samples AS latest WHERE latest.instrument=$1) ORDER BY sampled_at
@@ -192,6 +203,28 @@ func (q *Queries) LoadNativeSamples(ctx context.Context, instrument string) ([]L
 		return nil, err
 	}
 	return items, nil
+}
+
+const loadQuote = `-- name: LoadQuote :one
+SELECT symbol, currency, price, open, high, low, prev_close, usd_cny, as_of, source_delay_seconds FROM market_latest_quotes WHERE symbol=$1
+`
+
+func (q *Queries) LoadQuote(ctx context.Context, symbol string) (MarketLatestQuote, error) {
+	row := q.db.QueryRow(ctx, loadQuote, symbol)
+	var i MarketLatestQuote
+	err := row.Scan(
+		&i.Symbol,
+		&i.Currency,
+		&i.Price,
+		&i.Open,
+		&i.High,
+		&i.Low,
+		&i.PrevClose,
+		&i.UsdCny,
+		&i.AsOf,
+		&i.SourceDelaySeconds,
+	)
+	return i, err
 }
 
 const loadRealtime = `-- name: LoadRealtime :many
@@ -278,6 +311,23 @@ func (q *Queries) SaveDaily(ctx context.Context, arg SaveDailyParams) error {
 	return err
 }
 
+const saveIntraday = `-- name: SaveIntraday :exec
+INSERT INTO market_intraday_snapshots(symbol,event_at,points) VALUES($1,$2,$3)
+ON CONFLICT(symbol) DO UPDATE SET event_at=EXCLUDED.event_at,points=EXCLUDED.points
+WHERE EXCLUDED.event_at >= market_intraday_snapshots.event_at
+`
+
+type SaveIntradayParams struct {
+	Symbol  string
+	EventAt pgtype.Timestamptz
+	Points  []byte
+}
+
+func (q *Queries) SaveIntraday(ctx context.Context, arg SaveIntradayParams) error {
+	_, err := q.db.Exec(ctx, saveIntraday, arg.Symbol, arg.EventAt, arg.Points)
+	return err
+}
+
 const saveNativeSample = `-- name: SaveNativeSample :exec
 INSERT INTO gold_native_samples(instrument,bucket,sampled_at,source_at,price)
 VALUES($1,$2,$3,$4,$5)
@@ -300,6 +350,44 @@ func (q *Queries) SaveNativeSample(ctx context.Context, arg SaveNativeSamplePara
 		arg.SampledAt,
 		arg.SourceAt,
 		arg.Price,
+	)
+	return err
+}
+
+const saveQuote = `-- name: SaveQuote :exec
+INSERT INTO market_latest_quotes(symbol,currency,price,open,high,low,prev_close,usd_cny,as_of,source_delay_seconds)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+ON CONFLICT(symbol) DO UPDATE SET currency=EXCLUDED.currency,price=EXCLUDED.price,
+ open=EXCLUDED.open,high=EXCLUDED.high,low=EXCLUDED.low,prev_close=EXCLUDED.prev_close,
+ usd_cny=EXCLUDED.usd_cny,as_of=EXCLUDED.as_of,source_delay_seconds=EXCLUDED.source_delay_seconds
+WHERE EXCLUDED.as_of >= market_latest_quotes.as_of
+`
+
+type SaveQuoteParams struct {
+	Symbol             string
+	Currency           string
+	Price              float64
+	Open               float64
+	High               float64
+	Low                float64
+	PrevClose          float64
+	UsdCny             float64
+	AsOf               pgtype.Timestamptz
+	SourceDelaySeconds int32
+}
+
+func (q *Queries) SaveQuote(ctx context.Context, arg SaveQuoteParams) error {
+	_, err := q.db.Exec(ctx, saveQuote,
+		arg.Symbol,
+		arg.Currency,
+		arg.Price,
+		arg.Open,
+		arg.High,
+		arg.Low,
+		arg.PrevClose,
+		arg.UsdCny,
+		arg.AsOf,
+		arg.SourceDelaySeconds,
 	)
 	return err
 }

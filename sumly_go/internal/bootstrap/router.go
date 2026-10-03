@@ -45,6 +45,9 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 		if dependencies.ActiveUsers != nil {
 			userRoutes.Use(dependencies.AuthMiddleware.RequireActiveUser(dependencies.ActiveUsers))
 		}
+		if dependencies.Holdings != nil {
+			dependencies.Holdings.RegisterAppRoutes(userRoutes)
+		}
 		if dependencies.AppUsers != nil {
 			dependencies.AppUsers.RegisterAppRoutes(userRoutes)
 		}

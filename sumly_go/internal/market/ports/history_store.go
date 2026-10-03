@@ -2,14 +2,23 @@ package ports
 
 import (
 	"context"
+
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 )
 
-// GoldHistoryStore 秒级样本按保留窗口清理；日线按交易日幂等保存、长期保留。
-type GoldHistoryStore interface {
+// GoldReadStore exposes only durable queries. HTTP reads never ingest data.
+type GoldReadStore interface {
+	LoadQuote(context.Context) (domain.GoldQuote, bool, error)
+	LoadIntraday(context.Context) ([]domain.IntradayPoint, error)
+	LoadRealtime(context.Context) ([]domain.RealtimePoint, error)
+	LoadDaily(context.Context) ([]domain.DailyBar, error)
+}
+
+// GoldWriteStore exposes only ingestion. Upserts handle idempotency atomically.
+type GoldWriteStore interface {
+	SaveQuote(context.Context, domain.GoldQuote) error
+	SaveIntraday(context.Context, []domain.IntradayPoint) error
 	SaveRealtime(context.Context, domain.RealtimePoint) error
 	PruneRealtime(context.Context) error
-	LoadRealtime(context.Context) ([]domain.RealtimePoint, error)
 	SaveDaily(context.Context, []domain.DailyBar) error
-	LoadDaily(context.Context) ([]domain.DailyBar, error)
 }

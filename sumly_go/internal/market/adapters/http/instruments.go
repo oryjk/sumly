@@ -2,10 +2,11 @@ package markethttp
 
 import (
 	"context"
+	"time"
+
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 	shared "gitee.com/oryjk/sumly/sumly_go/internal/shared/adapters/httpapi"
 	"github.com/gin-gonic/gin"
-	"time"
 )
 
 type InstrumentsUseCase interface {
@@ -56,7 +57,7 @@ func (h *InstrumentsHandler) Quote(c *gin.Context) {
 	shared.WriteSuccess(c, struct {
 		Instrument InstrumentDTO `json:"instrument"`
 		GoldQuoteResponse
-	}{instrumentDTO(i), GoldQuoteResponse{Symbol: q.Symbol, Price: q.Price, Open: q.Open, High: q.High, Low: q.Low, PrevClose: q.PrevClose, Change: q.Change(), ChangePercent: q.ChangePercent(), USDCNY: q.USDCNY, CNYPerGram: q.CNYPerGram(), AsOf: q.AsOf.Format(time.RFC3339)}})
+	}{instrumentDTO(i), GoldQuoteResponse{Symbol: q.Symbol, Price: q.Price, Open: q.Open, High: q.High, Low: q.Low, PrevClose: q.PrevClose, Change: q.Change(), ChangePercent: q.ChangePercent(), USDCNY: q.USDCNY, CNYPerGram: q.CNYPerGram(), AsOf: q.AsOf.In(beijingZone).Format(time.RFC3339)}})
 }
 func (h *InstrumentsHandler) Daily(c *gin.Context) {
 	i, bars, e := h.service.Daily(c.Request.Context(), c.Param("instrument"))

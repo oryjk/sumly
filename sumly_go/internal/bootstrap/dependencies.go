@@ -13,6 +13,9 @@ import (
 	authpostgres "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/postgres"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/wechat"
 	authapplication "gitee.com/oryjk/sumly/sumly_go/internal/auth/application"
+	holdingshttp "gitee.com/oryjk/sumly/sumly_go/internal/holdings/adapters/http"
+	holdingspostgres "gitee.com/oryjk/sumly/sumly_go/internal/holdings/adapters/postgres"
+	holdingsapplication "gitee.com/oryjk/sumly/sumly_go/internal/holdings/application"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/feed"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/historical"
 	markethttp "gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/http"
@@ -34,6 +37,7 @@ const (
 )
 
 type Dependencies struct {
+	Holdings        *holdingshttp.Handler
 	NativeAuth      *authhttp.NativeHandler
 	TrustedProxies  []string
 	GoldInstruments *markethttp.InstrumentsHandler
@@ -83,40 +87,41 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 	userAuthHandler := authhttp.NewHandler(wechatLogin, devLogin)
 
 	sinaClient := sina.NewClient(&http.Client{Timeout: 10 * time.Second})
-	goldMarketService := marketapplication.NewGoldMarketService(sinaClient, marketpostgres.NewRepository(pool))
-	if err := goldMarketService.RestoreHistory(ctx); err != nil {
-		closePool()
-		return Dependencies{}, nil, fmt.Errorf("restore market history: %w", err)
-	}
-	goldMarketHandler := markethttp.NewHandler(goldMarketService)
+	goldReader := marketpostgres.NewReader(pool)
+	goldQuery := marketapplication.NewGoldQuery(goldReader)
+	goldWriter := marketpostgres.NewWriter(pool)
+	goldCollector := marketapplication.NewGoldCollector(sinaClient, goldWriter)
+	goldMarketHandler := markethttp.NewHandler(goldQuery)
+
 	annual, err := historical.AnnualGold()
 	if err != nil {
 		closePool()
 		return Dependencies{}, nil, err
 	}
-	historyStore := marketpostgres.NewRepository(pool)
-	if err := historyStore.SeedAnnual(ctx, annual); err != nil {
+	if err := goldWriter.SeedAnnual(ctx, annual); err != nil {
 		closePool()
 		return Dependencies{}, nil, fmt.Errorf("seed annual history: %w", err)
 	}
-	historyHandler := markethttp.NewHistoryHandler(marketapplication.NewStoredGoldHistory(goldMarketService, historyStore))
+	historyHandler := markethttp.NewHistoryHandler(marketapplication.NewStoredGoldHistory(goldQuery, goldReader))
 
 	domesticQuote := sina.NewInstrumentClient(sinaClient, "gds_AU9999", "AU9999", "CNY")
 	londonSource := sina.NewInstrumentClient(sinaClient, "hf_XAU", "XAUUSD", "USD")
 	domesticSource := feed.Source{Quote: domesticQuote, Daily: &sge.Client{HTTP: &http.Client{Timeout: 20 * time.Second}}}
 	comexSource := &yahoo.Client{HTTP: &http.Client{Timeout: 10 * time.Second}, Symbol: "GCZ26.CMX", FX: londonSource}
 	markets := []marketapplication.InstrumentMarket{
-		{Instrument: domain.Instrument{ID: "comex-gold", Name: "纽约黄金期货", Symbol: "GCZ26.CMX", Kind: "future", Currency: "USD", Unit: "USD/troy_oz", QuoteSource: "yahoo", DailySource: "yahoo", Exchange: "COMEX", Contract: "GCZ26", DelaySeconds: 1800}, Service: marketapplication.NewNativeGoldMarketService(comexSource, marketpostgres.NewNativeRepository(pool, "GCZ26.CMX"))},
-		{Instrument: domain.Instrument{ID: "au9999", Name: "国内黄金", Symbol: "AU9999", Kind: "spot", Currency: "CNY", Unit: "CNY/g", QuoteSource: "sina", DailySource: "sge", Exchange: "SGE"}, Service: marketapplication.NewNativeGoldMarketService(domesticSource, marketpostgres.NewNativeRepository(pool, "AU9999"))},
-		{Instrument: domain.Instrument{ID: "xauusd", Name: "伦敦现货黄金", Symbol: "XAUUSD", Kind: "spot", Currency: "USD", Unit: "USD/troy_oz", QuoteSource: "sina", DailySource: "sina"}, Service: marketapplication.NewNativeGoldMarketService(londonSource, marketpostgres.NewNativeRepository(pool, "XAUUSD"))},
+		{Instrument: domain.Instrument{ID: "comex-gold", Name: "纽约黄金期货", Symbol: "GCZ26.CMX", Kind: "future", Currency: "USD", Unit: "USD/troy_oz", QuoteSource: "yahoo", DailySource: "yahoo", Exchange: "COMEX", Contract: "GCZ26", DelaySeconds: 1800}, Service: marketapplication.NewNativeGoldQuery(marketpostgres.NewNativeReader(pool, "GCZ26.CMX"))},
+		{Instrument: domain.Instrument{ID: "au9999", Name: "国内黄金", Symbol: "AU9999", Kind: "spot", Currency: "CNY", Unit: "CNY/g", QuoteSource: "sina", DailySource: "sge", Exchange: "SGE"}, Service: marketapplication.NewNativeGoldQuery(marketpostgres.NewNativeReader(pool, "AU9999"))},
+		{Instrument: domain.Instrument{ID: "xauusd", Name: "伦敦现货黄金", Symbol: "XAUUSD", Kind: "spot", Currency: "USD", Unit: "USD/troy_oz", QuoteSource: "sina", DailySource: "sina"}, Service: marketapplication.NewNativeGoldQuery(marketpostgres.NewNativeReader(pool, "XAUUSD"))},
 	}
-	for _, m := range markets {
-		if err := m.Service.RestoreHistory(ctx); err != nil {
-			closePool()
-			return Dependencies{}, nil, fmt.Errorf("restore %s history: %w", m.Instrument.ID, err)
-		}
+	instruments := marketapplication.NewInstruments(markets)
+	instrumentsHandler := markethttp.NewInstrumentsHandler(instruments)
+	collectors := []*marketapplication.GoldCollector{
+		goldCollector,
+		marketapplication.NewNativeGoldCollector(comexSource, marketpostgres.NewNativeWriter(pool, "GCZ26.CMX")),
+		marketapplication.NewNativeGoldCollector(domesticSource, marketpostgres.NewNativeWriter(pool, "AU9999")),
+		marketapplication.NewNativeGoldCollector(londonSource, marketpostgres.NewNativeWriter(pool, "XAUUSD")),
 	}
-	instrumentsHandler := markethttp.NewInstrumentsHandler(marketapplication.NewInstruments(markets))
+
 	samplerCtx, stopSampler := context.WithCancel(ctx)
 	var workers sync.WaitGroup
 	if config.Native.Enabled {
@@ -140,18 +145,17 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		}()
 	}
 
-	services := []*marketapplication.GoldMarketService{goldMarketService}
-	for _, m := range markets {
-		services = append(services, m.Service)
+	for _, collector := range collectors {
+		workers.Add(3)
+		go func() { defer workers.Done(); collector.CollectRealtime(samplerCtx) }()
+		go func() { defer workers.Done(); collector.CollectDaily(samplerCtx) }()
+		go func() { defer workers.Done(); collector.CollectIntraday(samplerCtx) }()
 	}
-	for _, service := range services {
-		workers.Add(2)
-		go func() { defer workers.Done(); service.CollectRealtime(samplerCtx) }()
-		go func() { defer workers.Done(); service.CollectDaily(samplerCtx) }()
-	}
+
 	closeAll := func() { stopSampler(); workers.Wait(); closePool() }
 
 	return Dependencies{
+		Holdings:        holdingshttp.NewHandler(holdingsapplication.NewService(holdingspostgres.NewRepository(pool))),
 		NativeAuth:      nativeHandler,
 		TrustedProxies:  config.Native.TrustedProxies,
 		GoldInstruments: instrumentsHandler,
@@ -160,7 +164,7 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		AppUsers:        appUserHandler,
 		ActiveUsers:     appUserService,
 		GoldMarket:      goldMarketHandler,
-		GoldSync:        markethttp.NewSyncHandler(historyStore),
+		GoldSync:        markethttp.NewSyncHandler(marketapplication.NewHistorySync(goldReader, instruments.Catalog())),
 		GoldHistory:     historyHandler,
 	}, closeAll, nil
 }

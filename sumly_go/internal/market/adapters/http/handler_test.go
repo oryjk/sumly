@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"gitee.com/oryjk/sumly/sumly_go/internal/market/application"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 	"github.com/gin-gonic/gin"
 )
@@ -73,5 +74,34 @@ func TestRealtimeColdStartReturnsEmptyArrayAndExplicitUnits(t *testing.T) {
 	}
 	if response.Code != 200 || body.Data.Unit != "CNY/g" || body.Data.Interval != 5 || body.Data.Window != 1200 || body.Data.Points == nil || len(body.Data.Points) != 0 {
 		t.Fatalf("response: %s", response.Body)
+	}
+}
+
+type utcQuoteStub struct{ marketStub }
+
+func (utcQuoteStub) GetGoldQuote(context.Context) (domain.GoldQuote, error) {
+	return domain.GoldQuote{Symbol: "XAUUSD", Price: 4300, AsOf: time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)}, nil
+}
+func TestPersistedQuoteResponsesKeepBeijingTimezone(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	group := router.Group("/api/v1/app")
+	stub := utcQuoteStub{}
+	NewHandler(stub).RegisterPublicRoutes(group)
+	NewInstrumentsHandler(application.NewInstruments([]application.InstrumentMarket{{Instrument: domain.Instrument{ID: "xauusd"}, Service: stub}})).RegisterPublicRoutes(group)
+	for _, path := range []string{"/api/v1/app/market/gold/quote", "/api/v1/app/market/gold/instruments/xauusd/quote"} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest("GET", path, nil))
+		var payload struct {
+			Data struct {
+				AsOf string `json:"as_of"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if response.Code != 200 || payload.Data.AsOf != "2026-09-18T08:00:00+08:00" {
+			t.Errorf("%s: %d %s", path, response.Code, response.Body.String())
+		}
 	}
 }

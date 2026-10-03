@@ -7,10 +7,11 @@ sumly 小程序后端。Go 1.26.5 + Gin + PostgreSQL（pgx/v5 + goose 迁移 + s
 ## 当前能力
 
 - `POST /api/v1/app/auth/wechat/login`：微信登录（js_code 换 openid，用户不存在自动注册，签发 24h JWT）
+- `GET/PUT /api/v1/app/holdings`：账户持仓快照与版本 CAS（需迁移 00007，见 [持仓云文档](docs/holdings-cloud.md)）
 - `GET /api/v1/app/users/me`：获取当前用户（需 Bearer Token）
 - `PATCH /api/v1/app/users/me`：更新昵称 / 真实姓名（需 Bearer Token）
-- `GET /api/v1/app/market/gold/quote`：伦敦金实时报价（公开接口；服务端短 TTL 缓存，
-  上游故障时退回最近一次缓存）
+- `GET /api/v1/app/market/gold/quote`：伦敦金实时报价（公开接口；查询最后持久化报价，
+  上游故障时保留最后成功采集值）
 - `GET /api/v1/app/market/gold/daily`：伦敦金日 K 线（2006 年至今，公开接口）
 - `GET /health`：健康检查
 - `GET /api/docs`：内嵌 OpenAPI 文档（Swagger UI）
@@ -63,6 +64,7 @@ docs/               # 内嵌 OpenAPI 规范
 internal/bootstrap/ # 配置、依赖装配、路由、CORS、OpenAPI 挂载
 internal/shared/    # 跨模块共享：Actor、错误、响应 envelope、httpapi、configenv
 internal/auth/      # 微信登录用例 + JWT/微信/HTTP 适配器
+internal/holdings/  # 账户持仓文档校验、CAS、HTTP/Postgres 适配器
 internal/user/      # 用户领域、资料用例、HTTP/Postgres 适配器
 internal/testsupport/ # 集成测试独立 schema 支撑
 ```
@@ -71,7 +73,7 @@ internal/testsupport/ # 集成测试独立 schema 支撑
 
 `GET /api/v1/app/market/gold/intraday` 返回最新交易日分钟线：
 `{code:0,message:"ok",data:{symbol:"XAUUSD",points:[{time:"RFC3339",price:4350}]}}`。
-价格单位美元/盎司；服务端缓存 15 秒，失败返回原时间戳缓存，无缓存时报错。
+价格单位美元/盎司；后台每 15 秒采集并持久化，GET 只读最后成功快照；采集失败保留原时间戳，无快照时报错。
 客户端可结合 quote 的 usd_cny 折算，最新汇率折算值不代表历史人民币成交价。
 
 ### 黄金五秒采样
@@ -109,7 +111,20 @@ COMEX 数据源为延迟报价，标记 `delay_seconds:1800`，不是交易所�
 
 旧 `/market/gold/{quote,realtime,daily,intraday}` 仍表示伦敦黄金，旧实时图仍为 `CNY/g`，供现有 iOS 使用；本次未更改前端。旧报价开盘字段同时纠正为新浪第8项（第2项实际是买价）。
 
-六边形职责：`domain` 描述品种、报价与窗口；`application` 编排行情缓存、采样、窗口及历史；`ports` 描述报价、日线、分时与存储能力；`adapters/sina|sge|yahoo` 请求供应商，`adapters/feed` 组合不同来源，`adapters/postgres` 使用 sqlc，`adapters/http` 只处理协议与 DTO；`bootstrap` 完成注入及采集生命周期管理。
+六边形职责：`domain` 描述品种、报价与窗口规则；`application/GoldQuery` 与 `HistorySync` 负责查询，`GoldCollector` 负责采集写入；`ports/GoldReadStore` 与 `GoldWriteStore` 分别定义只读和写入能力；供应商适配器请求行情，`adapters/postgres/Reader` 与 `Writer` 分别实现读取与持久化，`adapters/http` 只处理协议与 DTO；`bootstrap` 分别装配查询 Handler 和后台采集器。
+
+### 行情读写分离
+
+启动前执行前向迁移 `00008_market_read_models.sql`，新增 `market_latest_quotes`（最后报价）和 `market_intraday_snapshots`（分时快照）。沿用既有秒级采样、日线、历史增量表；本次无需改写已有数据。
+
+- 写入链路：后台采集器 → 行情供应商 → 写入端口 → PostgreSQL Writer。报价/采样每 5 秒，分时每 15 秒，日线每分钟检查既有持久化日任务租约；无人访问也采集。日线幂等 upsert 由数据库判定变化，写用例不调用读取端口。
+- 读取链路：HTTP GET → 查询用例 → 读取端口 → PostgreSQL Reader。所有行情读取均不回源、不触发任务、不写入或清理数据；秒级缺失时从已存分钟快照生成响应，不写回采样表。
+- 读写服务及适配器彼此不引用、不共享进程缓存；通过持久化表衔接，可以各自演进。当前使用同一个 PostgreSQL 实例，数据在写入提交后可读，不需要双库或消息队列。
+- 供应商失败保留最后成功的报价/分时数据，休市与重启不会让最后窗口消失。新库在第一次后台采集成功前，报价/分时可能暂不可用；GET 不等待采集，也不会请求供应商补齐。数据库故障返回错误。
+- 同步查询用例统一校验品种、游标长度，并从品种目录解析 symbol/unit；HTTP 保持原有 400 和 JSON 响应契约。Reader 只处理一致性读取及增量游标。
+
+持仓领域模型不携带 JSON 标签；HTTP DTO 与 PostgreSQL JSONB 存储 DTO 分别维护既有字段并转换为领域模型。序列化大小校验在适配层执行，保持严格请求校验、4MiB 限额、CAS 与账户状态语义。
+
 
 ## Native account authentication
 

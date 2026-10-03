@@ -9,6 +9,7 @@ servers:
 tags:
   - name: System
   - name: App Auth
+  - name: App Holdings
   - name: App Users
   - name: App Market
 
@@ -51,6 +52,53 @@ x-native-errors: &nativeErrors
           $ref: "#/components/schemas/ErrorResponse"
 
 paths:
+  /api/v1/app/holdings:
+    get:
+      tags: [App Holdings]
+      summary: 获取当前账户的持仓快照
+      description: |
+        用户 ID 仅来自 Bearer 认证，原生 JWT 经过实时会话校验，账户必须 active。
+        首次返回 revision 0、默认账本和空 records，不写入数据库。响应上限 4 MiB，Cache-Control 为 no-store。
+      security: *bearerSecurity
+      responses:
+        "200":
+          description: Versioned account snapshot
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HoldingsResponse"}
+        <<: *standardErrors
+    put:
+      tags: [App Holdings]
+      summary: 按版本更新当前账户持仓
+      description: |
+        JSON 请求和响应最多 4 MiB。expectedRevision 必须等于现有 revision；首次为 0。
+        成功返回 revision + 1 与相同文档，409 时不覆盖任何云数据；客户端应 GET 最新快照并三方合并。
+        单次事务锁定账户行，校验 active 状态并原子更新版本，与账户删除串行化。
+        原生及 Apple 账户删除使用 users DELETE，外键级联原子删除持仓。冻结仅禁止访问，保留数据。
+        所有非可选字段必填，不接受 null 或未知字段。disposedAt/purchaseID/purchaseTotalOverride 可省略或 null。
+        UUID 大小写均接受，记录 id 按大小写无关去重；提醒 id 在每条记录内去重。
+        每条记录 bookName 须出现在 books，assetType 保留历史任意文本。
+        unitPriceCNY 为 0 时须有正数 purchaseTotalOverride。纯度为 (0,1]，折扣为 [0,1)。
+        日期使用 Unix 毫秒浮点数（允许小数），范围公历 0001–9999 年；disposedAt 不早于 timestamp，处置记录必须有 disposedAt。
+        数字须有限，克数为正，金额/提醒阈值非负；文本不得包含 NUL。运行基线、armed 和冷却属于设备状态。
+      security: *bearerSecurity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HoldingsPut"}
+      responses:
+        "200":
+          description: Saved snapshot with incremented revision
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HoldingsResponse"}
+        "413":
+          description: Request exceeds 4 MiB
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorResponse"}
+        <<: *standardErrors
   /api/v1/app/market/gold/sync:
     get:
       tags: [App Market]
@@ -834,7 +882,7 @@ paths:
       operationId: getGoldIntraday
       tags: [App Market]
       summary: 伦敦金最新交易日分钟行情
-      description: XAU/USD 美元/盎司，时间升序，RFC3339 北京时间。缓存 15 秒，上游失败返回缓存并保留原始时间戳。人民币折算需结合 quote 的 usd_cny，不能视作历史人民币成交价。
+      description: XAU/USD 美元/盎司，时间升序，RFC3339 北京时间。后台每 15 秒采集并持久化；读取最后成功快照，上游失败保留原始时间戳，GET 不回源或写入。人民币折算需结合 quote 的 usd_cny，不能视作历史人民币成交价。
       security: []
       responses:
         "200":
@@ -879,7 +927,7 @@ paths:
       operationId: getGoldDailyKLines
       tags: [App Market]
       summary: 伦敦金日 K 线
-      description: 2006 年至今的日线序列（北京时间交易日），升序；服务端缓存，最后一根为当日盘中实时值。公开接口，无需登录。
+      description: 2006 年至今的日线序列（北京时间交易日），升序；从持久化日线读取，仅包含已收盘的有效交易日；后台独立同步，GET 不回源或写入。公开接口，无需登录。
       security: []
       responses:
         "200":
@@ -941,6 +989,93 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
+    HoldingsPut:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, document]
+      properties:
+        expectedRevision: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775806}
+        document: {$ref: "#/components/schemas/HoldingsDocument"}
+    HoldingsResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, enum: [0]}
+        message: {type: string, enum: [ok]}
+        data:
+          type: object
+          required: [revision, document]
+          properties:
+            revision: {type: integer, format: int64, minimum: 0}
+            document: {$ref: "#/components/schemas/HoldingsDocument"}
+    HoldingsDocument:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, books, records]
+      properties:
+        schemaVersion: {type: integer, enum: [1]}
+        books:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 100}
+        records:
+          type: array
+          maxItems: 1000
+          items: {$ref: "#/components/schemas/HoldingRecord"}
+    HoldingRecord:
+      type: object
+      additionalProperties: false
+      required: [id, grams, unitPriceCNY, timestamp, note, createdAt, brand, bookName, disposition, disposalAmount, extraFee, purchaseChannel, counterparty, assetType, purity, laborFee, recoveryDeduction, recoveryDiscount, recoveryFixedFee, alerts]
+      properties:
+        id: {type: string, format: uuid}
+        grams: {type: number, format: double, minimum: 0, exclusiveMinimum: true}
+        unitPriceCNY: {type: number, format: double, minimum: 0}
+        timestamp: {$ref: "#/components/schemas/HoldingsDate"}
+        createdAt: {$ref: "#/components/schemas/HoldingsDate"}
+        note: {type: string, maxLength: 2000}
+        brand: {type: string, maxLength: 200}
+        bookName: {type: string, minLength: 1, maxLength: 100}
+        disposition: {type: string, enum: [holding, sold, gift]}
+        disposedAt:
+          type: number
+          format: double
+          nullable: true
+          minimum: -62135596800000
+          maximum: 253402300799999
+        disposalAmount: {type: number, format: double, minimum: 0}
+        purchaseID: {type: string, format: uuid, nullable: true}
+        extraFee: {type: number, format: double, minimum: 0}
+        purchaseChannel: {type: string, maxLength: 200}
+        counterparty: {type: string, maxLength: 200}
+        assetType: {type: string, maxLength: 200}
+        purity: {type: number, format: double, minimum: 0, exclusiveMinimum: true, maximum: 1}
+        laborFee: {type: number, format: double, minimum: 0}
+        purchaseTotalOverride: {type: number, format: double, minimum: 0, nullable: true}
+        recoveryDeduction: {type: number, format: double, minimum: 0}
+        recoveryDiscount: {type: number, format: double, minimum: 0, maximum: 1, exclusiveMaximum: true}
+        recoveryFixedFee: {type: number, format: double, minimum: 0}
+        alerts:
+          type: array
+          maxItems: 4
+          items: {$ref: "#/components/schemas/HoldingAlert"}
+    HoldingsDate:
+      type: number
+      format: double
+      description: Unix epoch milliseconds; fractional milliseconds are preserved
+      minimum: -62135596800000
+      maximum: 253402300799999
+    HoldingAlert:
+      type: object
+      additionalProperties: false
+      required: [id, kind, threshold, enabled, basis]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [breakEven, returnPercent, profitAmount, price]}
+        threshold: {type: number, format: double, minimum: 0}
+        enabled: {type: boolean}
+        basis: {type: string, enum: [domestic, international]}
     NativeUser:
       type: "object"
       properties:

@@ -18,3 +18,11 @@ sql:
         package: marketsqlc
         out: internal/market/adapters/postgres/sqlc
         sql_package: pgx/v5
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/holdings.sql
+    gen:
+      go:
+        package: holdingssqlc
+        out: internal/holdings/adapters/postgres/sqlc
+        sql_package: pgx/v5

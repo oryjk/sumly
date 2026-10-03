@@ -1,5 +1,12 @@
 package domain
 
+import "errors"
+
+var ErrInvalidSyncQuery = errors.New("invalid market sync query")
+
+// HistorySeries is resolved by the application catalog, independently of storage.
+type HistorySeries struct{ ID, Symbol, Unit string }
+
 // HistoryChange is a canonical market observation or a tombstone, never a live quote.
 type HistoryChange struct {
 	Date        string  `json:"date"`

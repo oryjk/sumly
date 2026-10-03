@@ -2,21 +2,23 @@ package markethttp
 
 import (
 	"context"
-	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
-	"github.com/gin-gonic/gin"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"gitee.com/oryjk/sumly/sumly_go/internal/market/application"
+	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
+	"github.com/gin-gonic/gin"
 )
 
 type syncStub struct{}
 
-func (syncStub) SyncHistory(_ context.Context, series, cursor string) (domain.HistorySync, error) {
-	return domain.HistorySync{Series: series, Unit: "USD/troy_oz", Cursor: "epoch:xauusd:1", Reset: cursor == "", Points: []domain.HistoryChange{}}, nil
+func (syncStub) SyncHistory(_ context.Context, series domain.HistorySeries, cursor string) (domain.HistorySync, error) {
+	return domain.HistorySync{Series: series.ID, Unit: "USD/troy_oz", Cursor: "epoch:xauusd:1", Reset: cursor == "", Points: []domain.HistoryChange{}}, nil
 }
 func TestSyncRouteValidatesSeriesAndPreservesEmptyDelta(t *testing.T) {
 	r := gin.New()
-	NewSyncHandler(syncStub{}).RegisterPublicRoutes(r.Group("/api/v1/app"))
+	NewSyncHandler(application.NewHistorySync(syncStub{}, nil)).RegisterPublicRoutes(r.Group("/api/v1/app"))
 	for _, tc := range []struct {
 		query  string
 		status int

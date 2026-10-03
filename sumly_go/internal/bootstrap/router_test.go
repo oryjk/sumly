@@ -11,6 +11,8 @@ import (
 	authhttp "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/http"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/jwt"
 	authapplication "gitee.com/oryjk/sumly/sumly_go/internal/auth/application"
+	holdingshttp "gitee.com/oryjk/sumly/sumly_go/internal/holdings/adapters/http"
+	holdingsdomain "gitee.com/oryjk/sumly/sumly_go/internal/holdings/domain"
 	sharedauth "gitee.com/oryjk/sumly/sumly_go/internal/shared/auth"
 	sharederror "gitee.com/oryjk/sumly/sumly_go/internal/shared/domain"
 	userhttp "gitee.com/oryjk/sumly/sumly_go/internal/user/adapters/http"
@@ -206,4 +208,53 @@ type routerDevLogin struct{}
 
 func (routerDevLogin) Execute(context.Context, string) (authapplication.DevLoginResult, error) {
 	return authapplication.DevLoginResult{}, nil
+}
+
+func TestHoldingsRoutesRequireJWTAndActiveUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tokens, err := jwt.NewService(routerTestSecret, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	middleware := authhttp.NewMiddleware(tokens)
+	token, err := tokens.IssueUser(context.Background(), 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, frozen := range []bool{false, true} {
+		checker := routerActiveUsers{}
+		if frozen {
+			checker.err = sharederror.ErrUnauthorized
+		}
+		router := NewRouter(Dependencies{AuthMiddleware: &middleware, ActiveUsers: checker, Holdings: holdingshttp.NewHandler(routerHoldings{})})
+		for _, method := range []string{http.MethodGet, http.MethodPut} {
+			for _, authorized := range []bool{false, true} {
+				req := httptest.NewRequest(method, "/api/v1/app/holdings", strings.NewReader(`{"expectedRevision":0,"document":{"schemaVersion":1,"books":["默认账本"],"records":[]}}`))
+				if authorized {
+					req.Header.Set("Authorization", "Bearer "+token)
+				}
+				out := httptest.NewRecorder()
+				router.ServeHTTP(out, req)
+				want := 200
+				if !authorized || frozen {
+					want = 401
+				}
+				if out.Code != want {
+					t.Fatalf("%s authorized=%v frozen=%v status=%d", method, authorized, frozen, out.Code)
+				}
+			}
+		}
+	}
+}
+
+type routerHoldings struct{}
+
+func (routerHoldings) Get(_ context.Context, a sharedauth.Actor) (holdingsdomain.Snapshot, error) {
+	if a.ID != 42 {
+		return holdingsdomain.Snapshot{}, sharederror.ErrUnauthorized
+	}
+	return holdingsdomain.Snapshot{Document: holdingsdomain.EmptyDocument()}, nil
+}
+func (routerHoldings) Put(ctx context.Context, a sharedauth.Actor, _ int64, _ holdingsdomain.Document) (holdingsdomain.Snapshot, error) {
+	return routerHoldings{}.Get(ctx, a)
 }

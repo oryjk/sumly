@@ -2,12 +2,13 @@ package ports
 
 import (
 	"context"
-	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 	"time"
+
+	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 )
 
-type HistorySyncStore interface {
-	SyncHistory(context.Context, string, string) (domain.HistorySync, error)
+type HistorySyncReader interface {
+	SyncHistory(context.Context, domain.HistorySeries, string) (domain.HistorySync, error)
 }
 type AnnualHistoryStore interface {
 	LoadAnnual(context.Context) ([]domain.GoldHistoryPoint, error)
