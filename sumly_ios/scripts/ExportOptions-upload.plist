@@ -2,26 +2,26 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>destination</key>
-    <string>upload</string>
-    <key>manageAppVersionAndBuildNumber</key>
-    <false/>
-    <key>method</key>
-    <string>app-store-connect</string>
-    <key>signingStyle</key>
-    <string>manual</string>
-    <key>signingCertificate</key>
-    <string>C149809716917E23E0EF02CFAFC9F9D1DD324F6B</string>
-    <key>provisioningProfiles</key>
-    <dict>
-        <key>com.oryjk.sumly</key>
-        <string>Sumly API App Store Distribution</string>
-    </dict>
-    <key>stripSwiftSymbols</key>
-    <true/>
-    <key>teamID</key>
-    <string>237PA3LEYJ</string>
-    <key>uploadSymbols</key>
-    <true/>
+	<key>destination</key>
+	<string>export</string>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>signingCertificate</key>
+	<string>C149809716917E23E0EF02CFAFC9F9D1DD324F6B</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.oryjk.sumly</key>
+		<string>Sumly API App Store Distribution</string>
+	</dict>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>teamID</key>
+	<string>237PA3LEYJ</string>
+	<key>uploadSymbols</key>
+	<true/>
 </dict>
 </plist>

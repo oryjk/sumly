@@ -3,9 +3,10 @@
 ## 项目定位
 
 sumly 的 iOS 原生端，`SwiftUI + Swift 6 + Swift Charts + XcodeGen`，iOS 17 起。
-当前功能：后端黄金行情、本地 SwiftData 持仓与记账、原生账户中心。
-Apple、+86 手机验证码、邮箱注册/密码登录接 `../sumly_go`；持仓仍只保存在本机，
-登录不代表云同步，不得在登录、切换或注销账户时清除/重新归属本地持仓。
+当前功能：后端黄金行情、账户持仓云存储与 SwiftData 离线缓存、原生账户中心。
+Apple、+86 手机验证码、邮箱注册/密码登录接 `../sumly_go`；登录账户使用独立缓存及按用户隔离的云文档。
+游客继续使用原 SwiftData 存储，只可显式导入账户；切换/退出不得重新归属记录。账户注销删除云端及该账户缓存，保留独立游客数据。
+同步必须使用版本 CAS 与持久化 base 做三方合并，冲突需用户明确选择；请求绑定账户及 sessionGeneration，过期响应不得写入缓存。
 
 ## 常用命令
 
@@ -15,7 +16,26 @@ make generate   # 改完 project.yml 后重新生成 .xcodeproj（不要手改�
 make build      # 模拟器编译
 make test       # 模拟器跑单测（Swift Testing）
 make open       # 生成并用 Xcode 打开
+make upload     # 本地归档/签名导出，再通过 JWT API 上传
 ```
+
+## iOS 发布与 TestFlight（必须遵守）
+
+发布前先读 [上传操作文档](docs/app-store-connect-api-upload.md)。用户已确认采用「本地签名 IPA + App Store Connect JWT API」流程；后续发布必须沿用。
+
+- 标准入口是 `make upload` → `scripts/upload_app_store.sh` → `scripts/upload_signed_ipa.py`。
+  Xcode / `xcodebuild` 仅用于编译、归档和本地导出（`destination=export`）。
+  除非用户明确要求换方式，禁止使用 Xcode Organizer 上传、`destination=upload`、`altool` 或 Transporter 上传；API 网络异常也不得自行切回这些方式。
+- 已有该版本的签名 IPA 时，使用 `bash scripts/upload_app_store.sh --ipa <IPA路径>`，复用对应的 `.asc-upload-state.json`。
+  不重复归档、不删除恢复状态、不因网络失败递增 build number。版本、包身份和校验和必须匹配；未知创建结果先对账，不能重复创建任务；Apple 处理中只查询状态，不再次传文件。
+- 上传默认沿用环境代理。代理异常时可用 `SUMLY_UPLOAD_DIRECT=1` 仅让该上传进程直连，保持 TLS 验证，不修改系统代理。
+  连接阻塞或超时要及时报告实际阶段和原因，不反复静默重试；详见操作文档中的超时说明。
+- 发布完成条件：目标构建 `processingState=VALID`、`internalBuildState=IN_BETA_TESTING`，且已进入预期内部测试组。
+  完成一次最终核实后，立即报告版本/build 和 TestFlight 可测试状态，并结束发布任务。
+  **成功后不得为了验证恢复脚本再次启动上传命令、重复联网核实或继续修上传工具。** 后续工具改进另行安排；必要的脚本验证在上传前使用离线测试完成。
+- 故障重试不重复已经通过且代码未变的完整测试。凭据、私钥、JWT 和临时签名 URL 不得写入日志或提交。
+
+2026-10-01 已验证该流程：0.1.1（23）通过签名 IPA / JWT API 上传，Apple 状态 VALID / IN_BETA_TESTING，已进入内部「测试」组。
 
 ## 关键目录
 
