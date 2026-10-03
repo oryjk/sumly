@@ -22,6 +22,12 @@ import SwiftData
         let first = HoldingRecord(grams: 2, unitPriceCNY: 6, timestamp: Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 19, hour: 12))!)
         let second = HoldingRecord(grams: 6, unitPriceCNY: 800.0 / 6, timestamp: Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 15, hour: 12))!)
         second.brand = "周生生"
+        if ProcessInfo.processInfo.arguments.contains("--profit-breakdown-preview") {
+            first.grams = 10; first.unitPriceCNY = 800; first.purity = 0.99
+            first.laborFee = 100; first.extraFee = 20; first.brand = "测试金条"
+            first.recoveryDeduction = 10; first.recoveryDiscount = 0.02; first.recoveryFixedFee = 20
+            second.grams = 10; second.purchaseTotalOverride = 9500
+        }
         result.mainContext.insert(first); result.mainContext.insert(second)
         try result.mainContext.save()
         #endif

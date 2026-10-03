@@ -145,7 +145,7 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
         return quote
     }
 
-    private struct IntradayDTO: Decodable {
+    struct IntradayDTO: Decodable {
         struct Point: Decodable { let time: String; let price: Double }
         let points: [Point]
     }
@@ -160,7 +160,7 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
         return points
     }
 
-    private struct RealtimeDTO: Decodable {
+    struct RealtimeDTO: Decodable {
         let unit: String
         let intervalSeconds: Int
         let windowSeconds: Int
@@ -178,6 +178,10 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
 
     func fetchRealtime() async throws -> [MarketChartPoint] {
         let dto: RealtimeDTO = try await get(Self.realtimePath(instrumentID: instrumentID))
+        return try Self.decodeRealtime(dto, instrumentID: instrumentID)
+    }
+
+    static func decodeRealtime(_ dto: RealtimeDTO, instrumentID: String?) throws -> [MarketChartPoint] {
         let expectedUnit = instrumentID == nil || instrumentID == "au9999" ? "CNY/g" : "USD/troy_oz"
         guard dto.unit == expectedUnit, [5, 60].contains(dto.intervalSeconds), dto.windowSeconds == 1200 else {
             throw ServiceError.malformedPayload
@@ -185,7 +189,7 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
         // 后端明确标记五秒采样或真实分钟回退；客户端不生成缺失点。
         return dto.points.compactMap { point -> MarketChartPoint? in
             guard let date = Self.parseRFC3339(point.time), point.price.isFinite, point.price > 0 else { return nil }
-            return MarketChartPoint(date: date, price: point.price)
+            return MarketChartPoint(date: date, price: point.price, intervalSeconds: dto.intervalSeconds)
         }.sorted { $0.date < $1.date }
     }
 

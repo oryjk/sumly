@@ -49,9 +49,10 @@ struct MarketHomeChartContent: View {
                 if let message = model.message {
                     Button(message) { Task { await model.refresh() } }
                         .font(.caption).foregroundStyle(GoldTheme.textSecondary)
-                        .lineLimit(1).minimumScaleFactor(0.8)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1).minimumScaleFactor(0.8)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }.frame(maxWidth: .infinity, minHeight: 18, maxHeight: 18)
+            }.frame(maxWidth: .infinity, minHeight: 18, maxHeight: dynamicTypeSize.isAccessibilitySize ? nil : 18)
         }
         .overlay(alignment: .topTrailing) {
             Button { showingNotice = true } label: {
@@ -134,10 +135,20 @@ struct MarketHomeChartContent: View {
 
     private var navigator: some View {
         VStack(spacing: 6) {
-            HStack(spacing: 4) {
-                if model.range == .realtime {
-                    Text(windowLabel).font(.caption.monospacedDigit()).foregroundStyle(GoldTheme.text)
-                } else {
+            if model.range == .realtime {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        realtimeWindowText.fixedSize()
+                        Spacer(minLength: 0)
+                        pointCount.fixedSize()
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        realtimeWindowText.fixedSize(horizontal: false, vertical: true)
+                        pointCount
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                HStack(spacing: 4) {
                     Button { showingDates = true } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "calendar")
@@ -146,10 +157,10 @@ struct MarketHomeChartContent: View {
                         }.font(.system(size: 12, weight: .medium)).foregroundStyle(GoldTheme.goldSoft)
                             .frame(minHeight: 44)
                     }.accessibilityIdentifier("chart.dates")
-                }
-                Spacer(minLength: 0)
-                Text("\(model.windowPoints.count) 个点").font(.caption).foregroundStyle(GoldTheme.textSecondary)
-            }.lineLimit(1).minimumScaleFactor(0.8)
+                    Spacer(minLength: 0)
+                    pointCount
+                }.lineLimit(1).minimumScaleFactor(0.8)
+            }
             ChartRangeNavigator(points: model.points, bounds: model.fullDomain, window: model.xDomain,
                                 scale: model.priceScale, daily: model.range != .realtime,
                                 begin: model.beginNavigatorGesture, move: model.moveNavigator, end: model.endChartGesture)
@@ -165,6 +176,14 @@ struct MarketHomeChartContent: View {
         }
     }
 
+    private var realtimeWindowText: some View {
+        Text(windowLabel).font(.caption.monospacedDigit()).foregroundStyle(GoldTheme.text)
+    }
+
+    private var pointCount: some View {
+        Text("\(model.windowPoints.count) 个点").font(.caption).foregroundStyle(GoldTheme.textSecondary)
+    }
+
     private func rangeTitle(_ range: MarketRange) -> String {
         if model.basis == .domestic, range == .history { return "全部历史" }
         return range.rawValue
@@ -173,21 +192,27 @@ struct MarketHomeChartContent: View {
     private var windowLabel: String {
         let window = model.xDomain
         if model.range == .realtime {
-            return window.lowerBound.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits)) + " — " + window.upperBound.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))
+            return model.realtimeTiming.windowLabel(window)
         }
         return window.lowerBound.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits)) + " — " + window.upperBound.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits))
     }
 
     private var chartCaption: some View {
         HStack(spacing: 8) {
-            Text(model.range == .realtime
-                 ? "元/克 · 最近 20 分钟"
-                 : (model.basis == .domestic ? "截至昨天 · 元/克 · Au99.99" : "截至昨天 · 元/克 · 按最新汇率折算"))
+            VStack(alignment: .leading, spacing: 4) {
+                if model.range == .realtime {
+                    Text(model.basis == .domestic ? "国内 Au99.99 · 元/克" : "国际伦敦金 · 人民币折算 / 克")
+                    Text(model.realtimeTiming.caption)
+                        .foregroundStyle(model.realtimeTiming.state == .paused ? GoldTheme.goldSoft : GoldTheme.textSecondary)
+                } else {
+                    Text(model.basis == .domestic ? "截至昨天 · 元/克 · Au99.99" : "截至昨天 · 元/克 · 按最新汇率折算")
+                }
+            }
             Button { showingHistorySources = true } label: {
                 Image(systemName: "info.circle").foregroundStyle(GoldTheme.goldSoft)
-            }.accessibilityLabel("历史数据说明")
+            }.accessibilityLabel("行情数据说明")
         }.font(.system(size: 11)).foregroundStyle(GoldTheme.textSecondary)
-            .fixedSize(horizontal: true, vertical: false)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var trendChart: some View {
@@ -325,7 +350,7 @@ struct MarketHomeChartContent: View {
         let span = model.xDomain.upperBound.timeIntervalSince(model.xDomain.lowerBound)
         if span > 730 * 86400 { return date.formatted(.dateTime.year()) }
         if model.range != .realtime { return date.formatted(.dateTime.year(.twoDigits).month(.twoDigits).day(.twoDigits)) }
-        return date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+        return model.realtimeTiming.axisLabel(date, window: model.xDomain)
     }
     private func pointLabel(_ point: MarketChartPoint) -> String {
         switch point.granularity {

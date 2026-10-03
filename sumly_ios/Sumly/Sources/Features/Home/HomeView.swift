@@ -59,6 +59,9 @@ struct HomeView: View {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        Text("实时走势如何比较").font(.headline)
+                        Text("国内为 Au99.99 人民币/克报价；国际为伦敦金按汇率折算的人民币/克参考价，两者分别来自各自市场。")
+                        Text("两种口径各自展示最后可用的 20 分钟。更新暂停时保留原数据与真实日期，不补造当前价格。比较短时走势前，请先核对日期和时间区间是否一致。")
                         if model.basis == .domestic {
                             Text("国内 · Au99.99").font(.headline)
                             Text("实时价格来自新浪 Au99.99 报价，历史日线来自上海黄金交易所。价格原始单位就是人民币/克，不做美元汇率换算。")
@@ -73,7 +76,7 @@ struct HomeView: View {
                         }
                     }.padding(24)
                 }.background(GoldTheme.background).foregroundStyle(GoldTheme.text)
-                    .navigationTitle("历史数据说明")
+                    .navigationTitle("行情数据说明")
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingHistorySources = false } } }
             }.preferredColorScheme(.dark).tint(GoldTheme.gold)
         }

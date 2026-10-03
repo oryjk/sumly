@@ -103,7 +103,7 @@ private let reviewRequest = AuthRequest.emailLogin(email: "test42@example.com", 
     #expect(session.user == nil)
 }
 
-@Test func authenticationPrivacyManifestDeclaresOnlyLinkedAccountData() throws {
+@Test func privacyManifestDeclaresLinkedAccountAndCloudHoldingsData() throws {
     // On iOS this reads the actual host app bundle, so packaging mistakes fail the parent suite.
     #if os(iOS)
     let url = try #require(Bundle.main.url(forResource: "PrivacyInfo", withExtension: "xcprivacy"))
@@ -115,7 +115,8 @@ private let reviewRequest = AuthRequest.emailLogin(email: "test42@example.com", 
     let collected = try #require(plist["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
     #expect(Set(collected.compactMap { $0["NSPrivacyCollectedDataType"] as? String }) == Set([
         "NSPrivacyCollectedDataTypeName", "NSPrivacyCollectedDataTypeEmailAddress",
-        "NSPrivacyCollectedDataTypePhoneNumber", "NSPrivacyCollectedDataTypeUserID"
+        "NSPrivacyCollectedDataTypePhoneNumber", "NSPrivacyCollectedDataTypeUserID",
+        "NSPrivacyCollectedDataTypeOtherFinancialInfo", "NSPrivacyCollectedDataTypeOtherUserContent"
     ]))
     for entry in collected {
         #expect(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool == true)

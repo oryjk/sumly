@@ -4,7 +4,7 @@ import AuthenticationServices
 
 @main
 struct SumlyApp: App {
-    /// 本地持仓存储；登录不迁移、上传或同步这些记录。
+    /// 旧游客持仓容器；登录账户另有隔离的离线缓存。
     private static let holdingsContainer: ModelContainer = {
         do {
             if HoldingsDesignPreview.isEnabled { return try HoldingsDesignPreview.container() }
@@ -16,7 +16,7 @@ struct SumlyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            GoldRootView()
+            GoldRootView(guestContainer: Self.holdingsContainer)
                 .tint(GoldTheme.gold)
                 .preferredColorScheme(.dark)
         }
@@ -26,9 +26,63 @@ struct SumlyApp: App {
 
 
 private struct GoldRootView: View {
+    let guestContainer: ModelContainer
+    @State private var session = AuthSession(service: NativeAuthService(baseURL: BackendGoldPriceService.defaultBaseURL), store: KeychainCredentialStore())
+    @Environment(\.scenePhase) private var scenePhase
+    var body: some View {
+        HoldingWorkspaceShell(session: session, guestContainer: guestContainer)
+            .id(session.user?.id ?? 0)
+            .task {
+                await session.restore()
+                await session.checkAppleCredential(using: SystemAppleCredentialChecker())
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task {
+                    await session.restore()
+                    await session.checkAppleCredential(using: SystemAppleCredentialChecker())
+                } }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: ASAuthorizationAppleIDProvider.credentialRevokedNotification)) { _ in
+                if session.stored?.appleUserID != nil {
+                    session.clearLocal()
+                    session.notice = "Apple 授权已撤销，请重新登录。"
+                }
+            }
+    }
+}
+
+private struct HoldingWorkspaceShell: View {
+    let session: AuthSession
+    let guestContainer: ModelContainer
+    @State private var cloud: HoldingsCloud?
+    @State private var storageError: String?
+    var body: some View {
+        Group {
+            if let cloud {
+                GoldWorkspaceView(session: session, cloud: cloud)
+                    .modelContainer(cloud.container)
+                    .defaultAppStorage(cloud.defaults)
+            } else if let storageError {
+                VStack(spacing: 16) {
+                    Text("无法打开持仓缓存").font(.headline)
+                    Text(storageError).font(.footnote)
+                    Button("重试") { openWorkspace() }
+                }.padding().foregroundStyle(GoldTheme.text)
+            } else { ProgressView("正在打开持仓…") }
+        }.frame(maxWidth: .infinity, maxHeight: .infinity).background(GoldTheme.background)
+            .task { openWorkspace() }
+    }
+    private func openWorkspace() {
+        do { cloud = try HoldingsCloud(session: session, guestContainer: guestContainer); storageError = nil }
+        catch { storageError = error.localizedDescription }
+    }
+}
+
+private struct GoldWorkspaceView: View {
+    @Bindable var session: AuthSession
+    let cloud: HoldingsCloud
     @State private var selectedTab = HoldingsDesignPreview.isEnabled ? 1 : 0
     @Environment(\.scenePhase) private var scenePhase
-    @State private var session = AuthSession(service: NativeAuthService(baseURL: BackendGoldPriceService.defaultBaseURL), store: KeychainCredentialStore())
     @AppStorage("market.basis") private var marketBasisRaw = GoldMarketBasis.domestic.rawValue
     @State private var showingAdd = false
     @State private var showingNotice = false
@@ -52,10 +106,10 @@ private struct GoldRootView: View {
                 if selectedTab == 0 {
                     HomeView(marketBasis: marketBasisBinding)
                 } else if selectedTab == 3 {
-                    AccountView(session: session)
+                    AccountView(session: session, cloud: cloud)
                         .padding(.bottom, 80 * scale)
                 } else {
-                    HoldingsView(marketBasis: marketBasis)
+                    HoldingsView(marketBasis: marketBasis, cloud: cloud)
                         .id(marketBasis.rawValue)
                         .padding(.bottom, 80 * scale)
                 }
@@ -72,22 +126,10 @@ private struct GoldRootView: View {
         } message: {
             Text("记账功能暂未开放。")
         }
-        .task {
-            await session.restore()
-            await session.checkAppleCredential(using: SystemAppleCredentialChecker())
+        .task(id: scenePhase) {
+            if scenePhase == .active { await cloud.run() }
         }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task {
-                await session.restore()
-                await session.checkAppleCredential(using: SystemAppleCredentialChecker())
-            } }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: ASAuthorizationAppleIDProvider.credentialRevokedNotification)) { _ in
-            if session.stored?.appleUserID != nil {
-                session.clearLocal()
-                session.notice = "Apple 授权已撤销，请重新登录。"
-            }
-        }
+        .modifier(HoldingAlertsLifecycle())
         .persistentSystemOverlays(.hidden)
     }
 

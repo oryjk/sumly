@@ -25,6 +25,28 @@ final class HoldingRecord {
     var purchaseChannel: String = ""
     var counterparty: String = ""
 
+    var assetType: String = "其他"
+    /// 旧记录未记纯度，以100%继续估算；新表单默认99.99%。
+    var purity: Double = 1
+    var laborFee: Double = 0
+    var purchaseTotalOverride: Double?
+    var recoveryDeduction: Double = 0
+    var recoveryDiscount: Double = 0
+    var recoveryFixedFee: Double = 0
+    var alertsJSON: String = "[]"
+
+    var totalPurchaseCost: Double { purchaseTotalOverride ?? (grams * unitPriceCNY + laborFee + extraFee) }
+    var returnInput: GoldReturnInput {
+        .init(grams: grams, purity: purity, unitPrice: unitPriceCNY, laborFee: laborFee, otherCost: extraFee,
+              totalCostOverride: purchaseTotalOverride,
+              rule: .init(perGramDeduction: recoveryDeduction, discountRate: recoveryDiscount, fixedFee: recoveryFixedFee))
+    }
+    var displayName: String {
+        if !brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return brand }
+        let type = assetType.trimmingCharacters(in: .whitespacesAndNewlines)
+        return type.isEmpty || type == "其他" ? "黄金记录" : type
+    }
+
     init(
         grams: Double,
         unitPriceCNY: Double,

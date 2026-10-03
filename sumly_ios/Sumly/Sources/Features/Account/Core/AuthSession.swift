@@ -146,6 +146,6 @@ import Observation
         _ = try await service.execute(.delete(current.result.token))
         guard stamp == generation else { throw AuthError.stale }
         clearLocal()
-        notice = "账户已注销。本机持仓仍保留在此设备。"
+        notice = "账户与云端持仓已注销。此设备的独立游客记录保留。"
     }
 }

@@ -2,6 +2,9 @@ import SwiftUI
 
 struct AccountView: View {
     @Bindable var session: AuthSession
+    var cloud: HoldingsCloud? = nil
+    @State private var confirmImport = false
+    @State private var confirmConflict = false
     @State private var showLogin = false
     @State private var reauthentication: AccountDeletionIntent?
     @State private var deletionConfirmation: AccountDeletionIntent?
@@ -40,10 +43,24 @@ struct AccountView: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).goldCard(padding: 24)
                 VStack(alignment: .leading, spacing: 12) {
-                    Label("持仓只保存在此设备", systemImage: "iphone")
+                    Label(session.user == nil ? "游客持仓" : "账户持仓云同步", systemImage: session.user == nil ? "iphone" : "icloud")
                         .font(.headline).foregroundStyle(GoldTheme.goldSoft)
-                    Text("登录暂不上传或同步持仓。行情、持仓和添加记录仍可匿名使用；切换或注销账户不会删除本机记录。")
+                    Text(cloud?.status ?? "登录后持仓与账本保存到服务端，本机保留离线缓存。")
                         .font(.subheadline).foregroundStyle(GoldTheme.textSecondary).lineSpacing(5)
+                    if let cloud, session.user != nil {
+                        Button { Task { await cloud.sync() } } label: {
+                            HStack { Text("立即同步"); if cloud.isSyncing { ProgressView() } }
+                        }.foregroundStyle(GoldTheme.gold).disabled(cloud.isSyncing)
+                        if cloud.conflictCount > 0 {
+                            Button("处理同步冲突") { confirmConflict = true }.foregroundStyle(GoldTheme.up)
+                        }
+                        if cloud.guestRecordCount > 0 {
+                            Button("导入此设备的游客记录（\(cloud.guestRecordCount) 条）") { confirmImport = true }
+                                .foregroundStyle(GoldTheme.gold).disabled(cloud.isSyncing)
+                            Text("游客记录不会自动归入账户；导入后原记录仍保留，重复导入会跳过相同记录。")
+                                .font(.footnote).foregroundStyle(GoldTheme.textSecondary)
+                        }
+                    }
                 }.goldCard(padding: 20)
                 VStack(alignment: .leading, spacing: 12) {
                     Button {
@@ -92,16 +109,23 @@ struct AccountView: View {
             deletionConfirmation = nil
             confirmDelete = false
         }
+        .confirmationDialog("将游客记录导入当前账户？", isPresented: $confirmImport, titleVisibility: .visible) {
+            Button("导入并同步") { Task { await cloud?.importGuestRecords() } }
+        } message: { Text("导入到 \(session.user?.maskedIdentifier ?? "")。记录使用原有 ID，重复导入跳过相同记录。游客原记录会保留。") }
+        .confirmationDialog("处理多设备修改冲突", isPresented: $confirmConflict, titleVisibility: .visible) {
+            Button("冲突记录保留本机版本") { Task { await cloud?.sync(choice: .local) } }
+            Button("冲突记录使用云端版本", role: .destructive) { Task { await cloud?.sync(choice: .remote) } }
+        } message: { Text("同一购入记录及其部分处置记录作为整体选择，其他记录自动合并。选择某一版本将放弃这些冲突记录在另一端的更改（包括删除）。") }
         .confirmationDialog("退出当前账户？", isPresented: $confirmLogout, titleVisibility: .visible) {
             Button("退出登录", role: .destructive) { Task { await session.logout() } }
-        } message: { Text("本机持仓会保留。你仍可匿名查看行情和记录持仓。") }
+        } message: { Text("未同步更改保留在此账户的设备缓存，重新登录可继续同步。退出后显示此设备的游客记录。") }
         .confirmationDialog("永久注销此账户？", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("永久注销账户", role: .destructive) {
                 if let intent = deletionConfirmation { Task { await deleteAccount(confirming: intent) } }
             }
         } message: {
             if let intent = deletionConfirmation {
-                Text("待注销账户：\(intent.provider.title) · \(intent.maskedIdentifier)\n\n账户身份与服务端登录会话将永久删除，无法恢复。需要最近 5 分钟内重新登录。本机游客持仓会保留，它们不是云端账户数据。")
+                Text("待注销账户：\(intent.provider.title) · \(intent.maskedIdentifier)\n\n账户身份、云端持仓与账本、服务端登录会话将永久删除，无法恢复。需要最近 5 分钟内重新登录。此账户在本机的缓存也会清除；独立的游客记录保留。")
             }
         }
     }
@@ -114,7 +138,11 @@ struct AccountView: View {
     private func deleteAccount(confirming intent: AccountDeletionIntent) async {
         deleting = true; error = nil
         defer { deleting = false }
-        do { try await session.deleteAccount(confirming: intent) }
+        do {
+            try await session.deleteAccount(confirming: intent)
+            do { try cloud?.eraseDeletedAccountCache() }
+            catch { session.notice = "账户与云端数据已删除，清除设备缓存失败：" + error.localizedDescription }
+        }
         catch AuthError.reauthenticate {
             error = AuthError.reauthenticate.localizedDescription
             reauthentication = intent

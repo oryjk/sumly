@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import SwiftData
 import UIKit
 import Testing
 @testable import Sumly
@@ -77,4 +78,28 @@ private struct AccountRenderService: AuthServicing {
 @MainActor @Test func renderEmailAndAppleLoginForVisualReview() async throws {
     let session = AuthSession(service: AccountRenderService(phoneEnabled: false), store: AccountRenderStore())
     try await captureAccountView(AuthenticationSheet(session: session), name: "login-email-apple")
+}
+
+private struct CloudAccountRenderAuth: AuthServicing {
+    let id: Int64
+    func execute(_ request: AuthRequest) async throws -> Data {
+        try JSONEncoder().encode(LoginResult(token: "render-only", refreshToken: "render-only-refresh", expiresIn: 3600,
+            user: .init(id: id, nickname: "记金用户", avatarURL: "", email: "render@example.invalid", phoneNumber: nil, status: "active", provider: .email)))
+    }
+}
+private struct CloudAccountRenderAPI: HoldingCloudServicing {
+    func fetch(token: String) async throws -> HoldingCloudSnapshot { .empty }
+    func put(_ document: HoldingDocument, revision: Int64, token: String) async throws -> HoldingCloudSnapshot { .init(revision: revision + 1, document: document) }
+}
+@MainActor @Test func renderCloudAccountForVisualReview() async throws {
+    let session = AuthSession(service: CloudAccountRenderAuth(id: Int64.random(in: 10_000_000_000...19_999_999_999)), store: AccountRenderStore())
+    try await session.login(.emailLogin(email: "render@example.invalid", password: "render-only-password"))
+    let guest = try ModelContainer(for: HoldingRecord.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    guest.mainContext.insert(HoldingRecord(grams: 10, unitPriceCNY: 800, timestamp: .now))
+    try guest.mainContext.save()
+    let cloud = try HoldingsCloud(session: session, guestContainer: guest, service: CloudAccountRenderAPI(),
+        directory: FileManager.default.temporaryDirectory.appendingPathComponent("cloud-render-" + UUID().uuidString))
+    await cloud.sync()
+    try await captureAccountView(AccountView(session: session, cloud: cloud), name: "account-cloud")
+    try cloud.eraseDeletedAccountCache()
 }

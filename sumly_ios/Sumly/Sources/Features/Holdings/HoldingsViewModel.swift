@@ -10,6 +10,7 @@ final class HoldingsViewModel {
     static let quotePollInterval: Duration = .seconds(3)
 
     private(set) var quote: GoldQuote?
+    private(set) var quoteFailed = false
 
     private let quoteService: (any GoldQuoteServicing)?
 
@@ -34,20 +35,29 @@ final class HoldingsViewModel {
 
     /// 拉一次实时报价；失败静默保留旧值。
     func pollQuote() async {
-        guard let quoteService, let fetched = try? await quoteService.fetchQuote() else { return }
-        quote = fetched
+        guard let quoteService else { return }
+        do {
+            let fetched = try await quoteService.fetchQuote()
+            guard GoldReturnCalculator.validPrice(fetched.cnyPerGram) != nil else { quoteFailed = true; return }
+            guard !Task.isCancelled else { return }
+            quote = fetched; quoteFailed = false
+        } catch { quoteFailed = true }
+    }
+
+    func returns(for records: [HoldingRecord]) -> GoldPortfolioReturn? {
+        let previous = quote.flatMap { q in
+            q.price > 0 && q.prevClose > 0 ? q.cnyPerGram * q.prevClose / q.price : nil
+        }
+        return GoldReturnCalculator.aggregate(records.filter { $0.disposition == "holding" }.map(\.returnInput),
+                                              referencePrice: quote?.cnyPerGram, previousPrice: previous)
     }
 
     func stats(for records: [HoldingRecord]) -> HoldingsStats {
-        HoldingsStats.compute(
-            records: records.filter { $0.disposition == "holding" }.map { (grams: $0.grams, unitPrice: $0.unitPriceCNY + ($0.grams > 0 ? $0.extraFee / $0.grams : 0)) },
-            cnyPerGram: quote?.cnyPerGram ?? 0
-        )
+        guard let result = returns(for: records) else { return .empty }
+        return .init(totalGrams: result.grams, totalCost: result.totalCost, totalValue: result.bookValue ?? 0,
+                     profit: result.profit ?? 0, profitPercent: result.profitPercent ?? 0, hasValuation: result.proceeds != nil)
     }
-
-    /// 单条记录的当前收益 = 克数 ×（当前元/克 − 买入元/克）；估值不可用时返回 nil。
     func recordProfit(_ record: HoldingRecord) -> Double? {
-        guard let quote, quote.cnyPerGram > 0 else { return nil }
-        return record.grams * (quote.cnyPerGram - record.unitPriceCNY) - record.extraFee
+        GoldReturnCalculator.calculate(record.returnInput, referencePrice: quote?.cnyPerGram)?.profit
     }
 }

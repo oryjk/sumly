@@ -3,6 +3,7 @@ import SwiftData
 
 struct HoldingsView: View {
     let marketBasis: GoldMarketBasis
+    let cloud: HoldingsCloud?
     @Query(sort: \HoldingRecord.timestamp, order: .reverse) private var records: [HoldingRecord]
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
@@ -22,10 +23,14 @@ struct HoldingsView: View {
     @State private var showingDelete = false
     @State private var transferTargets: [HoldingRecord] = []
     @State private var showingTransfer = false
+    @State private var detail: HoldingRecord?
+    @State private var explaining = false
+    @State private var profitBreakdown = false
     @State private var disposing: HoldingRecord?
     @State private var error: String?
 
-    init(marketBasis: GoldMarketBasis = .domestic) {
+    init(marketBasis: GoldMarketBasis = .domestic, cloud: HoldingsCloud? = nil) {
+        self.cloud = cloud
         self.marketBasis = marketBasis
         _model = State(initialValue: HoldingsDesignPreview.makeModel(basis: marketBasis))
     }
@@ -41,6 +46,11 @@ struct HoldingsView: View {
             VStack(spacing: 0) {
                 header.padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 12)
                 List {
+                    if let cloud {
+                        Text(cloud.status).font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+                            .listRowBackground(GoldTheme.background).listRowSeparator(.hidden)
+                    }
                     summary.listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
                     filters.listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
                     if visibleRecords.isEmpty {
@@ -53,7 +63,9 @@ struct HoldingsView: View {
                                     Image(systemName: selection.contains(record.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(GoldTheme.gold)
                                 }.buttonStyle(.plain).accessibilityLabel("选择持仓")
                             }
-                            HoldingRowView(record: record, profit: model.recordProfit(record), hideAmounts: hideAmounts)
+                            Button { if batch { if selection.contains(record.id) { selection.remove(record.id) } else { selection.insert(record.id) } } else { detail = record } } label: {
+                                HoldingRowView(record: record, result: GoldReturnCalculator.calculate(record.returnInput, referencePrice: model.quote?.cnyPerGram), hideAmounts: hideAmounts)
+                            }.buttonStyle(.plain)
                         }
                         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
                         .listRowBackground(GoldTheme.background)
@@ -77,9 +89,14 @@ struct HoldingsView: View {
             switch page {
             case .add: AddHoldingSheet(defaultUnitPrice: model.quote?.cnyPerGram, marketBasis: marketBasis)
             case .calendar: HoldingsCalendarSheet(initialBook: book, hideAmounts: hideAmounts, marketBasis: marketBasis)
+            case .calculator: GoldCalculatorSheet(model: model, marketBasis: marketBasis)
+            case .overview: HoldingPortfolioSheet(records: activeRecords, model: model, basis: marketBasis)
             case .history: HoldingsHistorySheet(records: bookRecords.filter { $0.disposition != "holding" }, hideAmounts: hideAmounts)
             }
         }
+        .sheet(item: $detail) { HoldingDetailView(record: $0, model: model, marketBasis: marketBasis) }
+        .sheet(isPresented: $profitBreakdown) { GoldProfitBreakdownSheet(records: activeRecords, quote: model.quote, basis: marketBasis, hidden: hideAmounts, quoteFailed: model.quoteFailed) }
+        .sheet(isPresented: $explaining) { GoldCalculationSheet(records: activeRecords, quote: model.quote, basis: marketBasis, hideAmounts: hideAmounts, quoteFailed: model.quoteFailed) }
         .sheet(item: $disposing) { record in DisposeHoldingSheet(record: record) }
         .alert("新建账本", isPresented: $showingNewBook) {
             TextField("账本名称", text: $newBook)
@@ -125,40 +142,67 @@ struct HoldingsView: View {
     }
 
     private var summary: some View {
-        let stats = model.stats(for: activeRecords)
-        return VStack(spacing: 0) {
-            HStack(spacing: 7) {
-                Text("总重量(克)").foregroundStyle(GoldTheme.textSecondary)
-                Button { hideAmounts.toggle() } label: { Image(systemName: hideAmounts ? "eye.slash" : "eye").foregroundStyle(GoldTheme.text) }
-                    .accessibilityLabel(hideAmounts ? "显示金额" : "隐藏金额")
-            }.font(.system(size: 13, weight: .medium)).padding(.top, 20)
-            Text(mask(stats.totalGrams.moneyText)).font(.system(size: 44, weight: .bold)).monospacedDigit()
-                .foregroundStyle(GoldTheme.gold).lineLimit(1).minimumScaleFactor(0.5).frame(height: 60)
-            HStack(spacing: 0) {
-                metric("购入总价(元)", stats.totalCost.moneyText)
-                metric("预估价值(元)", stats.hasValuation ? stats.totalValue.moneyText : "—")
-                metric("预估收益(元)", stats.hasValuation ? stats.profit.moneyText : "—", color: stats.profit >= 0 ? GoldTheme.up : GoldTheme.down)
-            }.padding(.top, 5)
-            HStack(spacing: 16) {
-                action("记金日历", filled: false) { sheet = .calendar }
-                action("添加黄金", filled: true) { sheet = .add }
-                action("赠卖记录", filled: false) { sheet = .history }
-            }.padding(.horizontal, 28).padding(.top, 17).padding(.bottom, 18)
-        }
-        .frame(maxWidth: .infinity)
-        .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-        .buttonStyle(.plain)
-        .listRowBackground(GoldTheme.background).listRowSeparator(.hidden)
+        let stats = model.returns(for: activeRecords)
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("现在卖预计到手").font(.subheadline)
+                Text("估算").font(.caption2).foregroundStyle(GoldTheme.textSecondary)
+                Spacer()
+                Button { hideAmounts.toggle() } label: { Image(systemName: hideAmounts ? "eye.slash" : "eye") }
+                    .accessibilityLabel(hideAmounts ? "显示金额" : "隐藏金额").frame(width: 44, height: 32)
+            }.foregroundStyle(GoldTheme.text)
+            Button { if !activeRecords.isEmpty { sheet = .overview } } label: {
+                Text(GoldReturnPresentation.money(stats?.proceeds, hidden: hideAmounts))
+                    .font(.system(size: 39, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(GoldTheme.gold)
+                    .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: .infinity, alignment: .leading)
+            }.buttonStyle(.plain)
+            Button { if !activeRecords.isEmpty { profitBreakdown = true } } label: {
+                HStack(spacing: 8) {
+                    Text("真实盈亏 " + GoldReturnPresentation.money(stats?.profit, hidden: hideAmounts, signed: true))
+                    Spacer(minLength: 4)
+                    Text(GoldReturnPresentation.percent(stats?.profitPercent, hidden: hideAmounts))
+                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(GoldTheme.textSecondary)
+                }.font(.subheadline).foregroundStyle(hideAmounts ? GoldTheme.text : (stats?.profit ?? 0) >= 0 ? GoldTheme.up : GoldTheme.down)
+                    .frame(minHeight: 44).contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityHint("查看盈亏来源拆解")
+            HStack {
+                Text(hideAmounts ? "总持有 •••• g" : "总持有 \((stats?.grams ?? 0).moneyText) g")
+                Spacer()
+                Text("总投入 " + GoldReturnPresentation.money(stats?.totalCost, hidden: hideAmounts))
+            }.font(.caption).foregroundStyle(GoldTheme.textSecondary)
+            if !activeRecords.isEmpty {
+                Button { explaining = true } label: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .top) {
+                            Text(GoldReturnPresentation.status(price: model.quote?.cnyPerGram, breakEven: stats?.breakEvenPrice, hidden: hideAmounts)).font(.subheadline.bold())
+                            Spacer(minLength: 4); Image(systemName: "info.circle")
+                        }.foregroundStyle(GoldTheme.gold)
+                        Text("当前参考 " + GoldReturnPresentation.money(model.quote?.cnyPerGram, hidden: hideAmounts) + " / g · 保本 " + GoldReturnPresentation.money(stats?.breakEvenPrice, hidden: hideAmounts) + " / g")
+                            .font(.caption2).foregroundStyle(GoldTheme.textSecondary)
+                    }
+                }.buttonStyle(.plain)
+                Text("今日价格变化带来的持仓变化 " + GoldReturnPresentation.money(stats?.todayChange, hidden: hideAmounts, signed: true))
+                    .font(.caption2).foregroundStyle(GoldTheme.textSecondary)
+            }
+            Text(GoldReturnPresentation.quoteStatus(model.quote, basis: marketBasis, failed: model.quoteFailed)).font(.caption2).foregroundStyle(GoldTheme.textSecondary)
+            HStack(spacing: 12) {
+                action(activeRecords.isEmpty ? "记第一笔黄金" : "记一笔", filled: true) { sheet = .add }
+                action("买前算一算", filled: false) { sheet = .calculator }
+            }
+            HStack {
+                Button("记金日历", systemImage: "calendar") { sheet = .calendar }
+                Spacer()
+                Button("赠卖记录", systemImage: "clock") { sheet = .history }
+            }.font(.caption).foregroundStyle(GoldTheme.textSecondary).frame(minHeight: 32)
+        }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
+            .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+            // Keep buttons independent within this List row.
+            .buttonStyle(.plain)
+            .listRowBackground(GoldTheme.background).listRowSeparator(.hidden)
     }
 
-    private func metric(_ title: String, _ value: String, color: Color = GoldTheme.text) -> some View {
-        VStack(spacing: 6) {
-            Text(title).font(.system(size: 12)).foregroundStyle(GoldTheme.textSecondary)
-            Text(mask(value)).font(.system(size: 17, weight: .medium)).monospacedDigit().foregroundStyle(color).lineLimit(1).minimumScaleFactor(0.5)
-        }.frame(maxWidth: .infinity)
-    }
     private func action(_ title: String, filled: Bool, perform: @escaping () -> Void) -> some View {
-        Button(action: perform) { Text(title).font(.system(size: 12, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity).frame(height: 36)
+        Button(action: perform) { Text(title).font(.system(size: 12, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity).frame(height: 44)
             .foregroundStyle(filled ? GoldTheme.onGold : GoldTheme.gold)
             .background(filled ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.capsuleShape)
             .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold, lineWidth: 1)) }.buttonStyle(.plain)
@@ -190,7 +234,10 @@ struct HoldingsView: View {
 
     private var batchToggle: some View {
         Button { batch.toggle(); selection = [] } label: {
-            Label(batch ? "完成" : "批量管理", systemImage: batch ? "checkmark" : "checklist")
+            HStack(spacing: 6) {
+                Image(systemName: batch ? "checkmark" : "checklist")
+                Text(batch ? "完成" : "批量管理").lineLimit(1)
+            }.fixedSize(horizontal: true, vertical: false)
                 .font(.system(.subheadline).weight(.semibold))
                 .padding(.horizontal, 12).frame(minWidth: 92, minHeight: 44)
                 .foregroundStyle(batch ? GoldTheme.onGold : GoldTheme.goldSoft)
@@ -228,35 +275,37 @@ struct HoldingsView: View {
         }.font(.subheadline).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
     }
     private func mutate(_ operation: () -> Void) { operation(); do { try context.save() } catch { context.rollback(); self.error = "未能保存修改，请重试。" } }
-    private func mask(_ text: String) -> String { hideAmounts ? "••••" : text }
 }
 
-enum HoldingPageSheet: String, Identifiable { case add, calendar, history; var id: String { rawValue } }
+enum HoldingPageSheet: String, Identifiable { case add, calendar, history, calculator, overview; var id: String { rawValue } }
 
 struct HoldingRowView: View {
     let record: HoldingRecord
-    let profit: Double?
+    let result: GoldReturnResult?
     let hideAmounts: Bool
     var body: some View {
-        VStack(spacing: 17) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(record.brand.isEmpty ? "未知" : record.brand).font(.system(size: 14, weight: .medium)).lineLimit(1)
+                Text(record.displayName).font(.subheadline.bold()).lineLimit(1)
                 Spacer()
-                Text(hideAmounts ? "收益：••••" : "收益：\(profit?.signedMoneyText ?? "—")")
-                    .font(.system(size: 15)).monospacedDigit().foregroundStyle((profit ?? 0) >= 0 ? GoldTheme.up : GoldTheme.down).lineLimit(1).minimumScaleFactor(0.7)
+                Text(HoldingsSelection.dateText(record.timestamp)).font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(GoldTheme.textSecondary)
             }
-            HStack(spacing: 5) {
-                Image(systemName: "tag.fill").foregroundStyle(GoldTheme.gold).font(.system(size: 13))
-                Text(hideAmounts ? "••••" : "\(record.grams.formatted(.number.precision(.fractionLength(0...2))))克 \((record.grams * record.unitPriceCNY + record.extraFee).formatted(.number.precision(.fractionLength(0...2))))元").lineLimit(1).minimumScaleFactor(0.7)
-                Spacer()
-                Text(HoldingsSelection.dateText(record.timestamp)).monospacedDigit()
-            }.font(.system(size: 13, weight: .medium))
-        }
-        .foregroundStyle(GoldTheme.text).padding(.horizontal, 17).padding(.top, 20).padding(.bottom, 17)
-        .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-        .overlay(alignment: .topLeading) {
-            Text(hideAmounts ? "••••元/克" : "\(record.unitPriceCNY.moneyText)元/克").font(.system(size: 11)).foregroundStyle(GoldTheme.onGold)
-                .padding(.horizontal, 11).frame(height: 14).background(GoldTheme.gold, in: GoldTheme.holdingPriceShape)
-        }
+            HStack {
+                Text(hideAmounts ? "•••• g · 总投入 ••••" : "\(record.grams.moneyText) g · 总投入 ¥\(record.totalPurchaseCost.moneyText)")
+                Spacer(minLength: 0)
+            }.font(.caption).foregroundStyle(GoldTheme.textSecondary)
+            HStack {
+                Text("现在卖预计到手").font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                Spacer(minLength: 4)
+                Text(GoldReturnPresentation.money(result?.proceeds, hidden: hideAmounts)).font(.subheadline.bold()).monospacedDigit()
+            }
+            HStack {
+                Text("真实盈亏 " + GoldReturnPresentation.money(result?.profit, hidden: hideAmounts, signed: true))
+                Spacer(minLength: 4)
+                Text(GoldReturnPresentation.percent(result?.profitPercent, hidden: hideAmounts))
+            }.font(.caption).foregroundStyle((result?.profit ?? 0) >= 0 ? GoldTheme.up : GoldTheme.down)
+        }.foregroundStyle(GoldTheme.text).padding(16)
+            .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
     }
 }

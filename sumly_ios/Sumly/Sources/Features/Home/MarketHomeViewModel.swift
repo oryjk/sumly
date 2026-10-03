@@ -5,6 +5,7 @@ struct MarketChartPoint: Sendable, Equatable {
     let date: Date
     let price: Double
     var granularity: GoldPointGranularity = .realtime
+    var intervalSeconds: Int = 5
 }
 
 protocol GoldIntradayServicing: Sendable {
@@ -177,6 +178,13 @@ final class MarketHomeViewModel {
 
     var showsInitialLoading: Bool { loading && price == nil && points.isEmpty }
 
+    var realtimeTiming: RealtimeChartTiming {
+        let now = Date.now
+        let latest = Self.realtimeWindow(realtime, now: now).last
+        return RealtimeChartTiming(latestSample: latest?.date, latestQuote: quote?.asOf,
+            intervalSeconds: latest?.intervalSeconds ?? 5, now: now)
+    }
+
     var message: String? {
         if loading { return "正在获取行情…" }
         if quoteFailed { return quote == nil ? "行情加载失败，点击重试" : "刷新失败，显示上次行情 · 点击重试" }
@@ -184,14 +192,15 @@ final class MarketHomeViewModel {
         if range == .history && historyLoading { return "正在加载百年走势…" }
         if range == .history && historyFailed { return "历史走势加载失败 · 点击重试" }
         if range == .realtime ? realtimeFailed : (range == .history ? historyFailed : dailyFailed) { return "走势刷新失败 · 点击重试" }
+        let timing = realtimeTiming
+        if range == .realtime, timing.state == .paused, let date = quote?.asOf ?? timing.latestSample {
+            return "更新暂停 · 最近报价 \(timing.timestamp(date))"
+        }
         if let quote, Date.now.timeIntervalSince(quote.asOf) > 180 {
             return "最近报价 \(quote.asOf.formatted(.dateTime.month().day().hour().minute()))"
         }
         if range == .realtime {
             if realtime.isEmpty { return "暂无最新走势，请稍后再试" }
-            if let last = realtime.last, Date.now.timeIntervalSince(last.date) > 20 {
-                return "行情更新暂停，最近更新 \(last.date.formatted(.dateTime.hour().minute().second()))"
-            }
         }
         return nil
     }
@@ -400,7 +409,8 @@ final class MarketHomeViewModel {
         let lower = max(0, first - 1)
         let upper = min(values.count, last + 2)
         guard lower < upper else { return [] }
-        return Array(values[lower..<upper])
+        let visible = Array(values[lower..<upper])
+        return range == .realtime ? RealtimeChartCompaction.points(visible) : visible
     }
     func resetViewport() { viewport = nil; gestureViewport = nil; selectedDate = nil }
     func beginChartGesture() { gestureViewport = xDomain; selectedDate = nil }

@@ -87,3 +87,26 @@ import Foundation
     #expect(BackendGoldPriceService.realtimePath(instrumentID: "au9999") == "app/market/gold/instruments/au9999/realtime")
     #expect(BackendGoldPriceService.realtimePath(instrumentID: nil) == "app/market/gold/realtime")
 }
+
+@Test func realtimeDecodePreservesCadenceAndValidatesContract() throws {
+    func dto(interval: Int, unit: String = "CNY/g", window: Int = 1200) throws -> BackendGoldPriceService.RealtimeDTO {
+        let json = """
+        {"unit":"\(unit)","interval_seconds":\(interval),"window_seconds":\(window),"points":[
+        {"time":"2026-10-01T15:05:00+08:00","price":907.61},
+        {"time":"invalid","price":100},
+        {"time":"2026-10-01T15:04:00+08:00","price":907.5}]}
+        """
+        return try JSONDecoder().decode(BackendGoldPriceService.RealtimeDTO.self, from: Data(json.utf8))
+    }
+    for cadence in [5, 60] {
+        let values = try BackendGoldPriceService.decodeRealtime(dto(interval: cadence), instrumentID: "au9999")
+        #expect(values.map(\.intervalSeconds) == [cadence, cadence])
+        #expect(values.map(\.price) == [907.5, 907.61])
+    }
+    for invalid in [try dto(interval: 10), try dto(interval: 5, unit: "USD/troy_oz"), try dto(interval: 5, window: 600)] {
+        #expect(throws: BackendGoldPriceService.ServiceError.malformedPayload) {
+            try BackendGoldPriceService.decodeRealtime(invalid, instrumentID: nil)
+        }
+    }
+    #expect(try BackendGoldPriceService.decodeRealtime(dto(interval: 5, unit: "USD/troy_oz"), instrumentID: "xauusd").count == 2)
+}

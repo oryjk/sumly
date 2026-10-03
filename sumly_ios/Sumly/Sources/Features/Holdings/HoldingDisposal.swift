@@ -15,6 +15,15 @@ enum HoldingDisposal {
             disposed.extraFee = record.extraFee * grams / record.grams
             disposed.purchaseChannel = record.purchaseChannel
             disposed.counterparty = record.counterparty
+            let fraction = grams / record.grams
+            disposed.assetType = record.assetType; disposed.purity = record.purity
+            disposed.laborFee = record.laborFee * fraction
+            disposed.purchaseTotalOverride = record.purchaseTotalOverride.map { $0 * fraction }
+            disposed.recoveryDeduction = record.recoveryDeduction
+            disposed.recoveryDiscount = record.recoveryDiscount
+            disposed.recoveryFixedFee = record.recoveryFixedFee
+            record.laborFee -= disposed.laborFee
+            if let total = record.purchaseTotalOverride { record.purchaseTotalOverride = total - (disposed.purchaseTotalOverride ?? 0) }
             record.extraFee -= disposed.extraFee
             record.grams -= grams
             context.insert(disposed)
@@ -23,6 +32,8 @@ enum HoldingDisposal {
         disposed.disposition = kind
         disposed.disposedAt = date
         disposed.disposalAmount = kind == "gift" ? 0 : proceeds
+        record.resetAlertBaselines()
+        try disposed.setAlerts([])
         try context.save()
     }
 }

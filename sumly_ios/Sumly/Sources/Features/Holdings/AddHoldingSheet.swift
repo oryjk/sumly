@@ -1,99 +1,91 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - 添加表单
-
 struct AddHoldingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-
     let marketBasis: GoldMarketBasis
-
-    @State private var gramsText = ""
+    @State private var draft: HoldingDraft
     @State private var purchasePrice: HoldingPurchasePriceModel
-    @State private var timestamp = Date.now
-    @State private var note = ""
-    @State private var brand = ""
-    @State private var feeText = ""
-    @State private var channel = ""
+    @State private var timestamp: Date
+    @State private var advanced = false
     private let targetBook: String?
+    private let editing: HoldingRecord?
+    private let onSaved: (() -> Void)?
     @AppStorage("holdings.currentBook") private var book = "默认账本"
     @State private var errorMessage: String?
-    @FocusState private var gramsFocused: Bool
 
-    init(defaultUnitPrice: Double?, date: Date = .now, book: String? = nil, marketBasis: GoldMarketBasis = .domestic) {
-        targetBook = book
-        _timestamp = State(initialValue: min(date, .now))
-        self.marketBasis = marketBasis
-        _purchasePrice = State(initialValue: HoldingPurchasePriceModel(
-            date: min(date, .now), basis: marketBasis, initialPrice: defaultUnitPrice,
-            service: BackendGoldPriceService(instrumentID: marketBasis.instrumentID)
-        ))
+    init(defaultUnitPrice: Double?, date: Date = .now, book: String? = nil, marketBasis: GoldMarketBasis = .domestic,
+         editing: HoldingRecord? = nil, seed: HoldingDraft? = nil, onSaved: (() -> Void)? = nil) {
+        targetBook = book; self.editing = editing; self.onSaved = onSaved; self.marketBasis = marketBasis
+        let day = editing?.timestamp ?? min(date, .now)
+        _timestamp = State(initialValue: day)
+        let values = editing.map(HoldingDraft.init(record:)) ?? seed ?? HoldingDraft()
+        _draft = State(initialValue: values)
+        let priceModel = HoldingPurchasePriceModel(date: day, basis: marketBasis, initialPrice: defaultUnitPrice,
+            service: BackendGoldPriceService(instrumentID: marketBasis.instrumentID))
+        if editing != nil || seed != nil { priceModel.editPrice(values.priceText) }
+        _purchasePrice = State(initialValue: priceModel)
     }
 
+    private var result: GoldReturnResult? {
+        draft.input.flatMap { GoldReturnCalculator.calculate($0, referencePrice: nil) }
+    }
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 14) {
-                    fieldRow(label: "克数") {
-                        TextField("例如 5.5", text: $gramsText)
-                            .keyboardType(.decimalPad)
-                            .focused($gramsFocused)
+                VStack(alignment: .leading, spacing: 16) {
+                    Picker("黄金类型", selection: $draft.assetType) {
+                        ForEach(GoldAssetType.allCases) { Text($0.rawValue).tag($0) }
+                    }.pickerStyle(.segmented)
+                    GoldInputField(title: "克重（g）", text: $draft.gramsText, placeholder: "例如 30")
+                    Picker("购入价格方式", selection: $draft.costMode) {
+                        ForEach(HoldingCostMode.allCases) { Text($0.rawValue).tag($0) }
+                    }.pickerStyle(.segmented)
+                    if draft.costMode == .total {
+                        GoldInputField(title: "购买总价（元）· 手动总投入", text: $draft.totalText, placeholder: "实际支付总额")
+                        Text("总价已包含工费与其他成本，不会重复计入。")
+                            .font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                        if let result { Text("综合单价 ¥\(result.comprehensiveUnitCost.moneyText) / g").font(.caption).foregroundStyle(GoldTheme.gold) }
+                    } else {
+                        GoldInputField(title: "裸金购入单价（元/克）", text: Binding(get: { purchasePrice.priceText }, set: {
+                            purchasePrice.editPrice($0); draft.priceText = $0
+                        }), placeholder: "实际购入单价")
+                        priceReferenceStatus
+                        if let result { Text("总投入 ¥\(result.totalCost.moneyText)").font(.caption).foregroundStyle(GoldTheme.gold) }
                     }
-                    fieldRow(label: "购入时间") {
-                        DatePicker(
-                            "购入时间",
-                            selection: Binding(get: { timestamp }, set: {
-                                timestamp = $0
-                                purchasePrice.selectDate($0)
-                            }),
-                            in: ...Date.now,
-                            displayedComponents: [.date, .hourAndMinute]
-                        )
-                        .labelsHidden()
-                        .environment(\.locale, Locale(identifier: "zh_CN"))
+                    DatePicker("购买日期", selection: Binding(get: { timestamp }, set: {
+                        timestamp = $0; purchasePrice.selectDate($0)
+                    }), in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
+                        .environment(\.locale, Locale(identifier: "zh_CN")).font(.subheadline).foregroundStyle(GoldTheme.text)
+                    DisclosureGroup("完善真实收益信息", isExpanded: $advanced) {
+                        GoldAdvancedFields(draft: $draft).padding(.top, 12)
+                    }.foregroundStyle(GoldTheme.gold)
+                    Text("默认纯度 \(draft.purityText)%，回收参数可在高级信息中修改。")
+                        .font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                    if let result {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("预计真实保本金价").font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                            Text("¥\(result.breakEvenPrice.moneyText) / g").font(.title2.bold()).monospacedDigit().foregroundStyle(GoldTheme.gold)
+                            Text("按当前回收规则估算，成交价以渠道实际报价为准。")
+                                .font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                        }.frame(maxWidth: .infinity, alignment: .leading).goldCard()
+                    } else {
+                        Text("填写有效克重和购入价格后，即时显示预计保本价。")
+                            .font(.footnote).foregroundStyle(GoldTheme.textSecondary)
                     }
-                    fieldRow(label: "购入单价（元/克）") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            TextField("请输入实际购入单价", text: Binding(get: { purchasePrice.priceText }, set: { purchasePrice.editPrice($0) }))
-                                .keyboardType(.decimalPad)
-                            priceReferenceStatus
-                        }
-                    }
-                    fieldRow(label: "品牌（可选）") { TextField("例如 周生生、周大福", text: $brand) }
-                    fieldRow(label: "额外费用（元，可选）") { TextField("0", text: $feeText).keyboardType(.decimalPad) }
-                    fieldRow(label: "购买渠道（可选）") { TextField("例如 门店、银行", text: $channel) }
-                    fieldRow(label: "备注（可选）") {
-                        TextField("例如 金条、周大福", text: $note)
-                    }
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(GoldTheme.up)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    if let errorMessage { Text(errorMessage).font(.footnote).foregroundStyle(GoldTheme.up) }
+                }.padding(16)
+            }.background(GoldTheme.background)
+                .safeAreaInset(edge: .bottom) {
+                    Button(editing == nil ? "保存持仓" : "保存修改") { save() }
+                        .buttonStyle(GoldPrimaryButtonStyle()).padding(16).background(GoldTheme.background)
                 }
-                .padding(16)
-            }
-            .background(GoldTheme.background)
-            .navigationTitle("添加黄金")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
-                        .foregroundStyle(GoldTheme.textSecondary)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("保存") { save() }
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundStyle(GoldTheme.gold)
-                }
-            }
-        }
-        .presentationBackground(GoldTheme.background)
-        .onAppear { gramsFocused = true }
-        .task(id: purchasePrice.selectedDay) { await purchasePrice.load() }
+                .navigationTitle(editing == nil ? "记一笔黄金" : "编辑持仓").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.foregroundStyle(GoldTheme.textSecondary) } }
+        }.presentationBackground(GoldTheme.background)
+            .task(id: purchasePrice.selectedDay) { await purchasePrice.load(); draft.priceText = purchasePrice.priceText }
+            .onChange(of: purchasePrice.priceText) { draft.priceText = purchasePrice.priceText }
     }
 
     private var priceReferenceStatus: some View {
@@ -146,52 +138,21 @@ struct AddHoldingSheet: View {
         }
     }
 
-    private func fieldRow<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.footnote)
-                .foregroundStyle(GoldTheme.textSecondary)
-            content()
-                .font(.system(.body, design: .rounded))
-                .foregroundStyle(GoldTheme.text)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(GoldTheme.card, in: GoldTheme.cardShape)
-                .overlay(GoldTheme.cardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
-        }
-    }
-
     private func save() {
-        let grams = Double(gramsText.trimmingCharacters(in: .whitespaces))
-        let price = purchasePrice.validPrice
-
-        guard let grams, grams > 0, grams <= 1_000_000 else {
-            errorMessage = "请输入有效的克数（大于 0）"
-            return
+        guard let input = draft.input, GoldReturnCalculator.calculate(input, referencePrice: nil) != nil else {
+            errorMessage = "请检查克重、价格、纯度和费用，折价应小于100%。"; return
         }
-        guard let price, price > 0, price <= 1_000_000 else {
-            errorMessage = "请输入有效的购入单价（元/克）"
-            return
-        }
-        guard timestamp <= .now else {
-            errorMessage = "持有时间不能晚于当前时间"
-            return
-        }
-
-        let record = HoldingRecord(grams: grams, unitPriceCNY: price, timestamp: timestamp, note: note.trimmingCharacters(in: .whitespacesAndNewlines))
-        record.brand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let fee = Double(feeText.isEmpty ? "0" : feeText), fee.isFinite, fee >= 0 else {
-            errorMessage = "请输入有效的额外费用"; return
-        }
-        record.extraFee = fee
-        record.purchaseChannel = channel.trimmingCharacters(in: .whitespacesAndNewlines)
-        record.bookName = targetBook ?? book
-        modelContext.insert(record)
+        guard timestamp <= .now else { errorMessage = "购买日期不能晚于当前时间"; return }
+        if let editing, editing.disposition != "holding" { errorMessage = "这笔黄金已处置，无法编辑。"; return }
+        let record = editing ?? HoldingRecord(grams: input.grams, unitPriceCNY: input.unitPrice, timestamp: timestamp)
+        draft.apply(to: record, input: input)
+        record.timestamp = timestamp
+        if editing != nil { record.resetAlertBaselines() }
+        if editing == nil { record.bookName = targetBook ?? book; modelContext.insert(record) }
         do { try modelContext.save() } catch {
-            modelContext.rollback()
-            errorMessage = "保存失败，请重试。"
-            return
+            modelContext.rollback(); errorMessage = "保存失败，请重试。"; return
         }
+        onSaved?()
         dismiss()
     }
 }

@@ -317,9 +317,9 @@ private enum CalendarStatisticsKind: Hashable {
     var icon: String { switch self { case .purchases: "tray.and.arrow.down"; case .sales: "banknote"; case .gifts: "gift" } }
     var explanation: String {
         switch self {
-        case .purchases: "按所选期间购入黄金和最新可用金价估算，包含已赠卖部分；购入总价包含额外费用，预估收益不代表已实现收益。"
-        case .sales: "按所选期间卖出日期统计。已实现收益 = 实收金额 − 购入成本，购入成本包含分摊的额外费用。"
-        case .gifts: "按所选期间赠送日期统计。购入成本包含额外费用；当前价值按最新可用金价估算，不计作投资收益。"
+        case .purchases: "按所选期间购入黄金和最新可用金价估算，包含已赠卖部分；购入总价包含工费与其他成本，预估收益不代表已实现收益。"
+        case .sales: "按所选期间卖出日期统计。已实现收益 = 实收金额 − 购入成本，购入成本包含分摊的工费与其他成本。"
+        case .gifts: "按所选期间赠送日期统计。购入成本包含工费与其他成本；当前价值按最新可用金价估算，不计作投资收益。"
         }
     }
 }

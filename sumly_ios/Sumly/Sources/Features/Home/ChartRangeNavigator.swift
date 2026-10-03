@@ -108,11 +108,9 @@ struct ChartRangeNavigator: View {
         let span = max(1, bounds.upperBound.timeIntervalSince(bounds.lowerBound))
         let vertical = domain.upperBound - domain.lowerBound
         // Display sampling only: cache and selectable main-chart records remain intact.
-        let step = max(1, points.count / 500)
-        let indices = Array(stride(from: 0, to: points.count, by: step))
+        let renderPoints = ChartOverviewSampling.points(points, daily: daily)
         return Path { path in
-            for (i, index) in indices.enumerated() {
-                let p = points[index]
+            for (i, p) in renderPoints.enumerated() {
                 guard let value = scale.value(p.price) else { continue }
                 let x = p.date.timeIntervalSince(bounds.lowerBound) / span * width
                 let y = (1 - (value - domain.lowerBound) / vertical) * max(1, height - 16)

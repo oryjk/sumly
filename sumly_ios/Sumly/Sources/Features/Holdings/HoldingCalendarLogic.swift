@@ -45,10 +45,10 @@ enum HoldingCalendarLogic {
             let purchase = r.purchaseID ?? r.id
             let title = r.brand.isEmpty ? "未知" : r.brand
             if filter.kind == "all" || (filter.kind == "holding" && r.disposition == "holding") {
-                result.append(.init(id: "buy-\(r.id)", purchaseID: purchase, date: r.timestamp, kind: "buy", grams: r.grams, cost: r.grams * r.unitPriceCNY + r.extraFee, fees: r.extraFee, proceeds: 0, title: title))
+                result.append(.init(id: "buy-\(r.id)", purchaseID: purchase, date: r.timestamp, kind: "buy", grams: r.grams, cost: r.totalPurchaseCost, fees: r.extraFee + r.laborFee, proceeds: 0, title: title))
             }
             if r.disposition != "holding", let date = r.disposedAt, filter.kind == "all" || filter.kind == r.disposition {
-                result.append(.init(id: "dispose-\(r.id)", purchaseID: purchase, date: date, kind: r.disposition, grams: r.grams, cost: r.grams * r.unitPriceCNY + r.extraFee, fees: r.extraFee, proceeds: r.disposalAmount, title: title))
+                result.append(.init(id: "dispose-\(r.id)", purchaseID: purchase, date: date, kind: r.disposition, grams: r.grams, cost: r.totalPurchaseCost, fees: r.extraFee + r.laborFee, proceeds: r.disposalAmount, title: title))
             }
         }
         return result.sorted { $0.date > $1.date }

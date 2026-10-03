@@ -1,6 +1,6 @@
 import Foundation
 
-enum GoldMarketBasis: String, CaseIterable, Identifiable, Sendable {
+enum GoldMarketBasis: String, CaseIterable, Identifiable, Sendable, Codable {
     case domestic
     case international
 
