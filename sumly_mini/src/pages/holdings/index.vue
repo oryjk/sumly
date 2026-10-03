@@ -354,7 +354,7 @@ onHide(() => {
       @submit="submitDisposal"
     />
 
-    <GoldTabBar active="holdings" />
+    <GoldTabBar active="holdings" add-enabled />
   </view>
 </template>
 

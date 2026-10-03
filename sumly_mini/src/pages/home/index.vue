@@ -220,7 +220,7 @@ onUnmounted(() => {
       <text class="gold-hint">金价订阅提醒暂未开放，请到持仓详情页设置持仓目标提醒。</text>
     </view>
 
-    <GoldTabBar active="market" />
+    <GoldTabBar active="market" add-enabled />
   </view>
 </template>
 

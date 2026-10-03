@@ -171,7 +171,7 @@ onShow(() => {
       </view>
     </template>
 
-    <GoldTabBar active="account" />
+    <GoldTabBar active="account" add-enabled />
   </view>
 </template>
 
