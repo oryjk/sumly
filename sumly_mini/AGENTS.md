@@ -36,8 +36,20 @@ src/
 
 - 页面逻辑、接口封装、通用工具保持分层，不要把所有请求直接散落在页面里。
 - 新增接口优先放入 `src/api/<domain>.ts`，并补充对应类型（`src/types/`）。
-- 登录态只通过 `src/stores/appSession.ts` 与 `src/utils/authStorage.ts` 读写，
-  页面不要直接操作 token 存储。
+- 登录态只通过 `src/stores/appSession.ts`（经 `src/utils/sessionBridge.ts` 取得单例）
+  与 `src/utils/authStorage.ts` 读写，页面不要直接操作 token 存储。
+  两者互相 import 会成环，故单例放在 sessionBridge。
+- **登录是显式操作**：无 token 时保持游客态，启动时不自动登录。
+  手动退出标记阻止静默重登。
+- **代际（generation）是异步安全的核心**：登录、退出、换号都自增代际，
+  过期或换号后返回的响应不得复活会话、清掉新凭据或改写其它账户缓存。
+  新增任何异步回调都要先比对代际。
+- **云端 revision 是 int64**，超过 2^53 的值无法用 JS number 精确表示。
+  `src/utils/holdingWire.ts` 用结构扫描从原始文本取词法值，PUT 也手工拼 JSON，
+  **不要改回 `JSON.parse` + `Number()`**。
+- **盈亏拆解必须精确对账**：分项之和要精确等于总盈亏分。因此分值以十进制
+  整数字符串保存、运算走 BigInt，并对**累计值**取整而非逐项独立舍入
+  （见 `src/domain/holdings/breakdown.ts`）。元→分换算不要用 `value * 100`。
 - 视觉规范：全站「深色 + 金」主题，视觉基准为 iOS 端
   `../sumly_ios/Sumly/Sources/DesignSystem/GoldTheme.swift`。颜色/描边/圆角/控件高度/间距
   只允许引用 `src/uni.css` 里的 `--gold-*` 令牌，禁止硬编码；桌面端适配通过在
@@ -49,11 +61,19 @@ src/
 - H5 开发测试登录：「我的」页在 `#ifdef H5` 下提供"标识 + 开发登录"入口
   （`loginWithDevIdentifier`），走后端 `/auth/dev/login`（需 `DEV_LOGIN_ENABLED=true`）；
   mock 模式下不渲染该入口。
+- **`.vue` 模板里不能写 TS 类型断言**（`$event as {...}` 会报语法错误），
+  把取值逻辑写成 `<script setup>` 里的函数再在模板调用。模板里也不能直接用
+  `uni.*`，同样提到脚本里。
+- 微信订阅消息：H5 无该能力，`requestSubscribeMessage` 只在 MP-WEIXIN 编译；
+  `success` 回调只代表弹窗结束，必须逐模板检查 accept/reject/ban；
+  授权只能由用户点击触发，不允许在轮询里自动弹。服务端未配置模板时
+  `capabilities.available=false`，此时不请求授权——如实呈现不可用。
 - 修改核心流程时，确认字段与后端真实 JSON 一致；后端契约见 `../sumly_go/docs/openapi.yaml`。
-- 小程序环境差异较多，避免随意引入仅适用于 Web 的 API。
+- 小程序环境差异较多，避免随意引入仅适用于 Web 的 API（如 `URL`、`URLSearchParams`）。
 - 页面 SFC 默认只承担页面编排：生命周期、加载状态、页面级表单状态、导航和组件事件 wiring。
 - 页面专属组件放在 `src/pages/<domain>/components/`；只有稳定跨页面复用的组件才放进 `src/components/`。
 - mock 模式必须“全有或全无”：新接口要么补 mock handler，要么明确关闭 `VITE_USE_MOCK`。
+  mock 不得谎报成功：订阅消息能力固定报不可用，发送结果不声称已送达。
 - `manifest.json` 的 `mp-weixin.appid` 需替换为真实小程序 appid（当前为占位 `touristappid`），
   且必须与后端 `WECHAT_APP_ID` 一致。
 

@@ -3,8 +3,9 @@
 ## 项目定位
 
 sumly 的 Go 后端，六边形架构：`internal/<module>/{domain,application,ports,adapters}`
-分层，具体约束见下「架构约束」。当前已实现认证（微信/开发登录，以及原生 Apple、
-+86 手机验证码、邮箱注册/密码登录/重置）、用户资料、黄金行情与账户持仓快照模块。
+分层，具体约束见下「架构约束」。当前已实现认证（微信统一会话/开发登录，以及原生
+Apple、+86 手机验证码、邮箱注册/密码登录/重置）、用户资料、黄金行情、账户持仓快照
+与持仓提醒订阅消息模块。
 
 本项目最低工具链为 Go 1.26.5。
 
@@ -43,6 +44,17 @@ sumly 的 Go 后端，六边形架构：`internal/<module>/{domain,application,p
 - 持仓账户快照为 `GET/PUT /api/v1/app/holdings`，迁移 `00007_holdings.sql`，契约见 `docs/holdings-cloud.md` 与 OpenAPI。
 - 持仓 repository 先锁 users 行，再检查 active 状态与 revision；不得绕过事务做盲覆盖。账户硬删除通过 FK CASCADE 原子清理快照；冻结必须保留数据。当前没有软注销，未来新增时须在注销事务内显式删除持仓。
 - 持仓文档仅保存提醒配置，不存设备 armed/基线/冷却；日期使用 Unix 毫秒 Double；处置枚举 `holding/sold/gift`。
+- 微信身份以 `appid + openid` 编码为 subject（`wechat:<appid>:<openid>`），
+  禁止跨 appid 误绑定。旧裸 openid 身份仅在 `WECHAT_LEGACY_APP_ID` 与
+  `WECHAT_APP_ID` 明确一致时迁移，复用原 user_id，不复制或重新归属持仓；
+  `LoginWechat` 在单事务内完成身份关联、迁移与会话插入。
+- 通知模块 `internal/notifications`：收件人 openid 由服务端掌握，客户端不能指定；
+  模板 ID 只能取服务端配置的那一个；授权令牌只存 hash、走专属 header
+  `X-Holding-Notification-Grant`（**不复用登录 token**）；游客提交只接受
+  UUID/数值/固定枚举（1000 条、每条 4 提醒、4MiB），不开放任意文本；
+  账户评估一律从云文档重读配置；相同 requestID 幂等；**成功前不消耗基线与冷却**，
+  超时记 unknown 并按 ID 查询恢复，不盲目重发。模板字段全部来自配置，
+  未配置时 `capabilities.available=false`，不用假模板顶替。
 - 响应统一使用 `{ code, message, data }` envelope（`shared/http/response.go`）。
 
 ## 开发约束

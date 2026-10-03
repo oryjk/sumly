@@ -212,3 +212,28 @@ Provider protocol references: [Apple identity verification](https://developer.ap
 Before downloading the Sign in with Apple `.p8` key, apply migrations through `00005`, set `NATIVE_AUTH_ENABLED=true` and `APPLE_CLIENT_ID=com.oryjk.sumly`, then deploy. Notifications verify Apple public signatures without a developer private key. Apple login capabilities remain disabled until Team ID, Key ID and the mounted private key are configured. Invalid notification signatures return 401; a browser GET is not an endpoint test.
 
 Notification processing is idempotent and records the latest verified Apple login issue time so delayed older events cannot invalidate a newer login. `consent-revoked` revokes server sessions; `account-deleted` deletes the associated server account. Local iOS holdings remain on the device.
+
+
+## 持仓提醒订阅消息
+
+后端提供四个接口（均在 `/api/v1/app` 下）：
+
+- `GET /notifications/holding/capabilities` —— 能力检测
+- `POST /notifications/holding/grants` —— 用 code 换取短期授权
+- `POST /notifications/holding/evaluate` —— 提交评估
+- `GET /notifications/holding/events/{id}` —— 查询单次发送结果
+
+需在 `.env` 配置真实模板：
+
+```
+HOLDING_NOTIFICATION_TEMPLATE_ID=
+HOLDING_NOTIFICATION_FIELD_PRICE=
+HOLDING_NOTIFICATION_FIELD_KIND=
+HOLDING_NOTIFICATION_FIELD_TARGET=
+```
+
+**未配置时 `capabilities.available` 为 false，小程序不会请求订阅授权**，
+提醒只在前台以本地提示呈现。这是预期行为，不是缺陷。
+
+字段名必须按微信公众平台申请到的真实模板填写，**不能猜**。接入前请核对官方
+发送接口文档。

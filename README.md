@@ -13,20 +13,32 @@
 
 ## 当前完成
 
-- 微信注册登录闭环：`uni.login` → `POST /api/v1/app/auth/wechat/login`（js_code 换 openid，
-  用户不存在自动注册）→ 24h JWT → 受保护接口 `GET/PATCH /api/v1/app/users/me`。
-- 会话管理：token 本地存储与自动恢复、手动退出阻止静默重登、H5 游客态降级。
-- 工程配套：goose 迁移、sqlc 生成、内嵌 OpenAPI 文档（`/api/docs`）、Makefile、Dockerfile、
-  单元测试 + 可跳过的 PostgreSQL 集成测试、mock 模式（`VITE_USE_MOCK=true`）。
-- 伦敦金行情服务：`GET /api/v1/app/market/gold/{quote,daily}`，六边形 `internal/market`
-  模块抓取新浪实时报价（含美元/人民币汇率与每克人民币价）与日线，短 TTL 缓存，
-  上游故障退回最近缓存。
-- iOS 首页：按参考图高保真还原深色金价界面，展示真实人民币/克报价；
-  实时五秒采样（最近二十分钟）/ 近一月 / 近三月均来自 Go 行情接口。
-  秒级样本按采样时汇率保存，历史日线按最新汇率折算。
-  新增公开分时接口 `GET /api/v1/app/market/gold/intraday`，缓存 15 秒并支持故障回退。
-- iOS 持仓页：添加持有的黄金克数与买入单价（精确到时间点，可补录），SwiftData 本地保存，
-  按实时「元/克」价自动计算购入总价 / 最新估值 / 预估收益（红涨绿跌），左滑删除。
+- 微信注册登录闭环：`uni.login` → `POST /api/v1/app/auth/wechat/session`
+  （js_code 换 openid，签发可刷新的 access/refresh 会话，用户不存在自动注册）。
+  身份以 `appid + openid` 编码，禁止跨 appid 误绑定；旧 `/auth/wechat/login`
+  契约保持不变。
+- 统一原生认证：+86 手机验证码、邮箱注册/密码登录/密码重置、
+  `capabilities` 能力检测、服务端退出与账户注销。
+- 会话管理：代际隔离异步响应、并发 401 只刷新一次、手动退出阻止静默重登、
+  退出/换号/注销后的旧响应不写入任何缓存。
+- 行情：国内 Au99.99 与国际伦敦金双口径、报价/实时/日线/增量同步、
+  十种时间范围、交互式图表（拖动缩放、查价、缩略导航、区间统计）、
+  短 TTL 缓存与故障回退、历史游标持久化。
+- 持仓：多账本、搜索筛选排序、批量迁移删除、部分卖出与赠送（成本守恒）、
+  日期参考价（历史日只用当日收盘价，手动输入不被异步覆盖）、盈亏拆解
+  （分项精确对账到分）、记金日历、买前计算器与情景测算。
+- 持仓云同步：按账户隔离的版本 CAS 与持久化 base 三方合并，购入族作为
+  同一合并单元，冲突需用户显式选择，int64 revision 保留完整精度。
+- 持仓目标提醒：保本/收益率/盈利金额/金价四类目标，穿越触发、24 小时冷却、
+  异常跳变过滤；微信订阅消息送达需服务端配置真实模板，未配置时
+  `capabilities.available=false` 并如实呈现不可用。
+- 工程配套：goose 迁移、sqlc 生成、内嵌 OpenAPI 文档（`/api/docs`）、
+  Makefile、Dockerfile、单元测试 + 可跳过的 PostgreSQL 集成测试、
+  mock 模式（`VITE_USE_MOCK=true`，全有或全无）。
+
+小程序与 iOS App 的逐项验收记录见
+[`docs/mini-app-parity-verification.md`](docs/mini-app-parity-verification.md)。
+其中 UI 与真机项、以及微信订阅消息的真实送达**尚未验证**，需人工执行。
 
 ## 数据库
 
