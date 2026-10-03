@@ -19,7 +19,15 @@ interface RequestOptions<TBody extends RequestPayload> {
   method?: RequestMethod;
   data?: TBody;
   auth?: boolean;
+  /**
+   * 订阅消息授权令牌。走专属 header，**不复用登录 token**——
+   * 它只允许发消息，不授予任何账户访问权。携带时按匿名请求处理。
+   */
+  grant?: string;
 }
+
+/** 授权 header 名，与后端保持一致。 */
+const GRANT_HEADER = "X-Holding-Notification-Grant";
 
 export class ApiRequestError extends Error {
   statusCode: number;
@@ -41,6 +49,7 @@ function send<TResponse, TBody extends RequestPayload>(
   method: RequestMethod,
   data: TBody | undefined,
   token: string,
+  grant?: string,
 ): Promise<TResponse> {
   return new Promise<TResponse>((resolve, reject) => {
     uni.request({
@@ -50,6 +59,7 @@ function send<TResponse, TBody extends RequestPayload>(
       header: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(grant ? { [GRANT_HEADER]: grant } : {}),
       },
       success: (response) => {
         const { statusCode, data: body } = response;
@@ -90,14 +100,14 @@ export async function requestRaw<TResponse, TBody extends RequestPayload = Recor
   }
 
   if (!options.auth) {
-    return send<TResponse, TBody>(requestUrl, method, options.data, "");
+    return send<TResponse, TBody>(requestUrl, method, options.data, "", options.grant);
   }
 
   // 受保护请求：绑定发起时的会话，换号后旧响应直接丢弃
   const capture = getSession().captureSession();
   const token = getSession().accessToken.value;
   try {
-    return await send<TResponse, TBody>(requestUrl, method, options.data, token);
+    return await send<TResponse, TBody>(requestUrl, method, options.data, token, options.grant);
   } catch (error) {
     if (!isUnauthorizedError(error)) {
       throw error;
@@ -108,7 +118,7 @@ export async function requestRaw<TResponse, TBody extends RequestPayload = Recor
     if (!getSession().isCurrentSession(capture)) {
       throw error;
     }
-    return send<TResponse, TBody>(requestUrl, method, options.data, getSession().accessToken.value);
+    return send<TResponse, TBody>(requestUrl, method, options.data, getSession().accessToken.value, options.grant);
   }
 }
 

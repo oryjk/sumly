@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/credentials"
 	authhttp "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/http"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/jwt"
 	authpostgres "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/postgres"
@@ -25,6 +26,10 @@ import (
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/yahoo"
 	marketapplication "gitee.com/oryjk/sumly/sumly_go/internal/market/application"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
+	notificationhttp "gitee.com/oryjk/sumly/sumly_go/internal/notifications/adapters/http"
+	notificationpostgres "gitee.com/oryjk/sumly/sumly_go/internal/notifications/adapters/postgres"
+	notificationwechat "gitee.com/oryjk/sumly/sumly_go/internal/notifications/adapters/wechat"
+	notificationapp "gitee.com/oryjk/sumly/sumly_go/internal/notifications/application"
 	userhttp "gitee.com/oryjk/sumly/sumly_go/internal/user/adapters/http"
 	userpostgres "gitee.com/oryjk/sumly/sumly_go/internal/user/adapters/postgres"
 	userapplication "gitee.com/oryjk/sumly/sumly_go/internal/user/application"
@@ -48,6 +53,7 @@ type Dependencies struct {
 	GoldMarket      *markethttp.Handler
 	GoldSync        *markethttp.SyncHandler
 	GoldHistory     *markethttp.HistoryHandler
+	Notifications   *notificationhttp.Handler
 }
 
 func BuildDependencies(ctx context.Context, config Config) (Dependencies, func(), error) {
@@ -154,6 +160,31 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 
 	closeAll := func() { stopSampler(); workers.Wait(); closePool() }
 
+	// 持仓提醒订阅消息：模板 ID 与字段全部来自配置，缺失时能力检测报不可用，
+	// 不会用假模板顶替。路由仍注册，让前端能明确知道「不可用」而非静默失败。
+	notificationCredentials, err := credentials.New(config.JWTSecret)
+	if err != nil {
+		closeAll()
+		return Dependencies{}, nil, fmt.Errorf("create notification credentials: %w", err)
+	}
+	notificationHandler := notificationhttp.NewHandler(notificationapp.HoldingAlerts{
+		Store:  notificationpostgres.NewStore(pool),
+		Quotes: marketQuoteReader{reader: goldReader},
+		Holdings: holdingsReader{
+			repository: holdingspostgres.NewRepository(pool),
+		},
+		Wechat: notificationwechat.New(nil, config.WechatAppID, config.WechatAppSecret),
+		Crypto: notificationCredentials,
+		Template: notificationapp.TemplateConfig{
+			TemplateID: config.HoldingNotificationTemplateID,
+			Fields: map[string]string{
+				"price":     config.HoldingNotificationFieldPrice,
+				"kind":      config.HoldingNotificationFieldKind,
+				"threshold": config.HoldingNotificationFieldTarget,
+			},
+		},
+	})
+
 	return Dependencies{
 		Holdings:        holdingshttp.NewHandler(holdingsapplication.NewService(holdingspostgres.NewRepository(pool))),
 		NativeAuth:      nativeHandler,
@@ -166,5 +197,6 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		GoldMarket:      goldMarketHandler,
 		GoldSync:        markethttp.NewSyncHandler(marketapplication.NewHistorySync(goldReader, instruments.Catalog())),
 		GoldHistory:     historyHandler,
+		Notifications:   notificationHandler,
 	}, closeAll, nil
 }

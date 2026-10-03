@@ -164,6 +164,28 @@ export function tryMockHandler(method: RequestMethod, url: string, data: unknown
     return success(getMockUser());
   }
 
+  // ---- 持仓提醒订阅消息 ----
+  if (path === "/notifications/holding/capabilities" && method === "GET") {
+    // mock 环境没有真实模板，如实报不可用——与生产未配置时行为一致
+    return success({ available: false, template_id: null });
+  }
+  if (path === "/notifications/holding/grants" && method === "POST") {
+    if (typeof body.js_code !== "string" || !body.js_code.trim()) {
+      return failure("code 无效", 422);
+    }
+    if (typeof body.device_id !== "string" || !body.device_id) {
+      return failure("设备标识无效", 422);
+    }
+    return success({ grant: "mock-notification-grant", expires_in: 900 });
+  }
+  if (path === "/notifications/holding/evaluate" && method === "POST") {
+    if (typeof body.device_id !== "string" || typeof body.request_id !== "string") {
+      return failure("参数无效", 422);
+    }
+    // mock 永远不声称已送达：状态未知，需按ID 查询恢复
+    return success({ events: [] });
+  }
+
   // ---- 持仓云同步 ----
   if (path === "/holdings" && method === "GET") {
     const key = `user:${mockUserId()}`;

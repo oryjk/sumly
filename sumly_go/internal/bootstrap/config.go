@@ -27,8 +27,14 @@ type Config struct {
 	// 仅当与 WechatAppID 相同时才允许把旧裸 openid 身份迁移到新身份；
 	// 留空表示不迁移，避免猜测归属造成错误关联。
 	WechatLegacyAppID string
-	AppEnvironment    AppEnvironment
-	DevLoginEnabled   bool
+	// 持仓提醒的微信订阅消息模板。TemplateID 与 Fields 必须由部署方按
+	// 真实模板填写；缺失时能力检测返回不可用，不会用假模板顶替。
+	HoldingNotificationTemplateID  string
+	HoldingNotificationFieldPrice  string
+	HoldingNotificationFieldKind   string
+	HoldingNotificationFieldTarget string
+	AppEnvironment                 AppEnvironment
+	DevLoginEnabled                bool
 }
 
 func LoadConfig() (Config, error) {
@@ -40,9 +46,13 @@ func LoadConfig() (Config, error) {
 		WechatAppID:     os.Getenv("WECHAT_APP_ID"),
 		WechatAppSecret: os.Getenv("WECHAT_APP_SECRET"),
 		// 可选项：留空表示不迁移旧裸 openid 身份
-		WechatLegacyAppID: os.Getenv("WECHAT_LEGACY_APP_ID"),
-		AppEnvironment:    parseAppEnvironment(os.Getenv("APP_ENV")),
-		DevLoginEnabled:   os.Getenv("DEV_LOGIN_ENABLED") == "true",
+		WechatLegacyAppID:              os.Getenv("WECHAT_LEGACY_APP_ID"),
+		HoldingNotificationTemplateID:  os.Getenv("HOLDING_NOTIFICATION_TEMPLATE_ID"),
+		HoldingNotificationFieldPrice:  os.Getenv("HOLDING_NOTIFICATION_FIELD_PRICE"),
+		HoldingNotificationFieldKind:   os.Getenv("HOLDING_NOTIFICATION_FIELD_KIND"),
+		HoldingNotificationFieldTarget: os.Getenv("HOLDING_NOTIFICATION_FIELD_TARGET"),
+		AppEnvironment:                 parseAppEnvironment(os.Getenv("APP_ENV")),
+		DevLoginEnabled:                os.Getenv("DEV_LOGIN_ENABLED") == "true",
 	}
 
 	for name, value := range map[string]string{

@@ -39,6 +39,9 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 	if dependencies.GoldMarket != nil {
 		dependencies.GoldMarket.RegisterPublicRoutes(app)
 	}
+	if dependencies.Notifications != nil {
+		dependencies.Notifications.RegisterRoutes(app)
+	}
 	if dependencies.AuthMiddleware != nil {
 		userRoutes := app.Group("")
 		userRoutes.Use(dependencies.AuthMiddleware.RequireUser())
