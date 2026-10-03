@@ -30,6 +30,24 @@
       "style": {
         "navigationBarTitleText": "添加黄金"
       }
+    },
+    {
+      "path": "pages/holdings/detail",
+      "style": {
+        "navigationBarTitleText": "持仓详情"
+      }
+    },
+    {
+      "path": "pages/holdings/calendar",
+      "style": {
+        "navigationBarTitleText": "记金日历"
+      }
+    },
+    {
+      "path": "pages/holdings/calculator",
+      "style": {
+        "navigationBarTitleText": "买前计算器"
+      }
     }
   ],
   "globalStyle": {

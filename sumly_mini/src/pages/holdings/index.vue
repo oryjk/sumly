@@ -93,11 +93,16 @@ function openDisposal(id: string) {
     holdings.document.value.records.find((record) => record.id === id) ?? null;
 }
 
-/** 详情页由 B4 提供；在此之前提示而不跳转到不存在的页面。 */
+function openCalendar() {
+  uni.navigateTo({ url: "/pages/holdings/calendar" });
+}
+
+function openCalculator() {
+  uni.navigateTo({ url: "/pages/holdings/calculator" });
+}
+
 function openDetail(id: string) {
-  const record = holdings.document.value.records.find((item) => item.id === id);
-  if (!record) return;
-  uni.showToast({ title: "详情页建设中", icon: "none" });
+  uni.navigateTo({ url: `/pages/holdings/detail?id=${id}` });
 }
 
 function isSelected(id: string): boolean {
@@ -316,6 +321,11 @@ onHide(() => {
       </view>
     </view>
 
+    <view class="holdings-entries">
+      <view class="gold-capsule" @tap="openCalendar">记金日历</view>
+      <view class="gold-capsule" @tap="openCalculator">买前计算器</view>
+    </view>
+
     <view v-if="holdings.saveError.value" class="holdings-error">
       <text class="gold-hint gold-error">{{ holdings.saveError.value }}</text>
     </view>
@@ -386,6 +396,12 @@ onHide(() => {
   font-size: 22rpx;
   font-weight: 400;
   margin-left: 10rpx;
+}
+
+.holdings-entries {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
 }
 
 .holdings-toolbar {
