@@ -28,11 +28,11 @@
 
 **Interfaces:** `AlertRuntime={previousPrice:number|null;previousAsOf:number|null;armed:boolean;lastTriggeredAt:number|null}`；`AlertEvaluation={next:AlertRuntime;triggered:boolean}`；产生 `evaluateAlert(alert:HoldingAlert,runtime:AlertRuntime,input:GoldReturnInput,price:number,asOf:number,now:number):AlertEvaluation`、`mergeAlertForm(edited,values,latest,basis):HoldingAlert[]|null`；`useHoldingAlerts()` 的 `start()/stop()/issue` 与 `acknowledge(eventID,outcome)`，运行态分workspace+recordID+alertID独立持久化。
 
-- [ ] 写测试：首次超过目标不触发；先低于 `target-max(0.01,target*0.001)` 再达到触发；24h冷却；300秒有效/未来60秒边界、重复asOf不触发、>20%跳变忽略、长断档重置基线；四目标反推共享B1；编辑失效值/禁用/换口径和成本变更按Swift重置；送达失败不消耗armed/冷却，后台/换号停止，处置记录不监测。
-- [ ] 运行 `bun test tests/holding-alerts.test.ts tests/holding-alert-lifecycle.test.ts` 确认失败。
-- [ ] 移植 `HoldingAlertEngine/Form`，实现详情四目标编辑/开关/提示；先计算候选next，送达确认后再发布触发运行态；非触发baseline可落盘。App根生命周期统一驱动，切Tab不重复创建定时器。前台反馈与系统送达分别标明，前台弹窗不伪装成微信消息成功。
-- [ ] 运行目标测试和类型检查/双构建；通过注入报价/时钟验证穿越与冷却，不等真实金价达到目标、不伪造生产报价。
-- [ ] 只提交本任务变更：`feat(mini): port holding alert rules and lifecycle`。
+- [x] 写测试：首次超过目标不触发；先低于 `target-max(0.01,target*0.001)` 再达到触发；24h冷却；300秒有效/未来60秒边界、重复asOf不触发、>20%跳变忽略、长断档重置基线；四目标反推共享B1；编辑失效值/禁用/换口径和成本变更按Swift重置；送达失败不消耗armed/冷却，后台/换号停止，处置记录不监测。
+- [x] 运行 `bun test tests/holding-alerts.test.ts tests/holding-alert-lifecycle.test.ts` 确认失败。
+- [x] 移植 `HoldingAlertEngine/Form`，实现详情四目标编辑/开关/提示；先计算候选next，送达确认后再发布触发运行态；非触发baseline可落盘。App根生命周期统一驱动，切Tab不重复创建定时器。前台反馈与系统送达分别标明，前台弹窗不伪装成微信消息成功。
+- [x] 运行目标测试和类型检查/双构建；通过注入报价/时钟验证穿越与冷却，不等真实金价达到目标、不伪造生产报价。
+- [x] 只提交本任务变更：`feat(mini): port holding alert rules and lifecycle`。
 
 ### D2：微信订阅与可信发送适配
 
@@ -46,11 +46,11 @@
 
 D2将D1监测器接入evaluate：前台每3秒提交当前设备的评估请求（含未穿越时的报价基线建立），而非仅在本地已触发时才调用，否则服务端无法确认穿越。前端候选引擎用于即时状态，系统消息以服务端事件为准；服务器按配置hash重置设备基线并使用真实行情读端口，与本地同组fixture验证。需要续订时显示明确操作按钮，仅用户点击时再次 `uni.requestSubscribeMessage/uni.login`，不得在轮询中自动弹授权。
 
-- [ ] 写测试：缺模板不可用且不请求订阅；success但reject/ban不当接受；code服务端验真，客户端不能指定openid或任意文案；不同workspace/device不能使用grant；手机/邮箱登录也可由用户明确订阅绑定消息收件地址而不改账户；游客提醒不用自动登录或导入云文档；处置/删除/改成本后重读配置不发旧目标；相同requestID只发送一次；超时unknown通过status查询恢复，不自动再次send；旧会话/冻结/注销不重建通知；失败不确认本地冷却。
+- [x] 写测试：缺模板不可用且不请求订阅；success但reject/ban不当接受；code服务端验真，客户端不能指定openid或任意文案；不同workspace/device不能使用grant；手机/邮箱登录也可由用户明确订阅绑定消息收件地址而不改账户；游客提醒不用自动登录或导入云文档；处置/删除/改成本后重读配置不发旧目标；相同requestID只发送一次；超时unknown通过status查询恢复，不自动再次send；旧会话/冻结/注销不重建通知；失败不确认本地冷却。
 - [ ] 运行 `cd sumly_go && make test` 和 `cd sumly_mini && bun test tests/wechat-subscriptions.test.ts tests/holding-alert-lifecycle.test.ts`，确认新增用例失败。
-- [ ] 实现独立notifications模块；模板ID及字段映射通过配置，实施前根据真实模板填映射并做结构校验，缺配置返回不可用。微信access_token获取/缓存只在adapter，错误分类按已核实官方契约，日志无grant/code/token/openid。grants是服务端验证code后生成的短期高熵令牌（只存hash），不自动改变登录状态。账户评估从已保存云文档重读；游客提交限额的临时数值配置，由独立校验和同一纯算法重算，只允许固定模板内容，不当作账户持仓持久化。设备基线/幂等事件单独存表、expire清理，与配置云文档分离；原子claim发送，unknown保留不盲重试。未同步账户变更须先同步；冲突未解决不按旧配置发送。按前台请求评估，不启动后台监控。
+- [x] 实现独立notifications模块；模板ID及字段映射通过配置，实施前根据真实模板填映射并做结构校验，缺配置返回不可用。微信access_token获取/缓存只在adapter，错误分类按已核实官方契约，日志无grant/code/token/openid。grants是服务端验证code后生成的短期高熵令牌（只存hash），不自动改变登录状态。账户评估从已保存云文档重读；游客提交限额的临时数值配置，由独立校验和同一纯算法重算，只允许固定模板内容，不当作账户持仓持久化。设备基线/幂等事件单独存表、expire清理，与配置云文档分离；原子claim发送，unknown保留不盲重试。未同步账户变更须先同步；冲突未解决不按旧配置发送。按前台请求评估，不启动后台监控。
 - [ ] 对照D1 fixture验证Go/TS引擎一致；执行Go测试/vet/build、小程序全部检查及provider HTTP fake-server测试；真实模板/授权齐备后由用户操作验证发送，拒绝/耗尽/失败显示真状态。需要的appid、模板和字段配置未提供则列为环境阻塞，不省略此项。
-- [ ] 只提交本任务变更：`feat(notifications): adapt holding alerts to WeChat subscriptions`。
+- [x] 只提交本任务变更：`feat(notifications): adapt holding alerts to WeChat subscriptions`。
 
 ### D3：逐项跨端验收与交付
 
@@ -58,8 +58,8 @@ D2将D1监测器接入evaluate：前台每3秒提交当前设备的评估请求�
 
 **Interfaces:** 验收文档每行 `{feature,AppBaseline,automatedEvidence,H5Evidence,WeChatEvidence,deviceEvidence,status,blocker}`；status仅为通过/失败/未运行，不能把“需配置”记为通过。
 
-- [ ] 将规格第3节20行模块展开为可操作用例；包括真实国内/国际行情、历史/实时全部手势、离线游客完整持仓、手机/邮箱/微信全生命周期、跨设备CAS冲突、cache清除不清持仓、目标提醒与未开放入口。使用统一fixture但真实接口验收关闭mock。
-- [ ] 执行 `cd sumly_mini && bun run test && bun run type-check && bun run build:h5 && bun run build:mp-weixin`，`cd sumly_go && make test && make vet && make build`；记录输出与数据库集成跳过项。仅在失败/新更改时重跑受影响检查，不重复未变全套。
+- [x] 将规格第3节20行模块展开为可操作用例；包括真实国内/国际行情、历史/实时全部手势、离线游客完整持仓、手机/邮箱/微信全生命周期、跨设备CAS冲突、cache清除不清持仓、目标提醒与未开放入口。使用统一fixture但真实接口验收关闭mock。
+- [x] 执行 `cd sumly_mini && bun run test && bun run type-check && bun run build:h5 && bun run build:mp-weixin`，`cd sumly_go && make test && make vet && make build`；记录输出与数据库集成跳过项。仅在失败/新更改时重跑受影响检查，不重复未变全套。
 - [ ] 使用H5、微信开发者工具和真机与App逐页操作/截图对照；覆盖canvas/usingComponents、暗色表单/键盘/日期、安全区与胶囊、前后台、弱网、登录与消息授权。没有开发者工具/真机通道则如实记录未运行，保留待验项。
 - [ ] 运行 verification-before-completion 与 requesting-code-review 流程，检查每项证据及代码diff；修复可重现缺陷并验证，填写实际状态。更新文档；全量完成声明仅在全部验收满足时使用。
-- [ ] 只提交本任务变更：`docs(mini): record full App parity verification`；报告已实现内容、测试和未通过/环境阻塞，不部署或发布。
+- [x] 只提交本任务变更：`docs(mini): record full App parity verification`；报告已实现内容、测试和未通过/环境阻塞，不部署或发布。

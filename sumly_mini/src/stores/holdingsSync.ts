@@ -12,10 +12,33 @@ import { getHoldings, putHoldings } from "@/api/holdings";
 import { mergeDocuments, type MergeChoice } from "@/domain/holdings/merge";
 import { emptyWorkspace, useHoldingStorage, type WorkspaceKey } from "@/utils/holdingStorage";
 import { getSession } from "@/utils/sessionBridge";
-import { emptyDocument, type HoldingDocument } from "@/types/holdings";
+import { emptyDocument, type HoldingDocument, type HoldingRecord } from "@/types/holdings";
 
 /** 同步状态。 */
 export type SyncStatus = "idle" | "syncing" | "conflict" | "error";
+
+/** 记录是否等价；用于判断推送期间本地是否又改了同一条记录。 */
+function sameRecord(a: HoldingRecord, b: HoldingRecord): boolean {
+  return (
+    a.id.toLowerCase() === b.id.toLowerCase() &&
+    a.grams === b.grams &&
+    a.unitPriceCNY === b.unitPriceCNY &&
+    a.disposition === b.disposition &&
+    a.disposedAt === b.disposedAt &&
+    a.disposalAmount === b.disposalAmount &&
+    a.note === b.note &&
+    a.bookName === b.bookName &&
+    a.laborFee === b.laborFee &&
+    a.extraFee === b.extraFee &&
+    a.purchaseTotalOverride === b.purchaseTotalOverride &&
+    a.purchaseID === b.purchaseID &&
+    a.recoveryDeduction === b.recoveryDeduction &&
+    a.recoveryDiscount === b.recoveryDiscount &&
+    a.recoveryFixedFee === b.recoveryFixedFee &&
+    a.alerts.length === b.alerts.length
+  );
+}
+
 
 export interface HoldingSyncDeps {
   fetchSnapshot: () => Promise<{ revision: string; document: HoldingDocument }>;
@@ -67,10 +90,50 @@ export function createHoldingsSync(deps: HoldingSyncDeps) {
     );
   }
 
-  /** 合并并落盘。 */
-  function commit(document: HoldingDocument, revision: string, key: WorkspaceKey): boolean {
+  /**
+   * 合并并落盘。
+   *
+   * 关键：PUT 在途期间用户可能又改了本地记录，若直接用推送前算好的
+   * document 覆盖存储，这些新编辑会被静默丢弃。
+   *
+   * 这里**不做三方合并**——那会把「推送内容里存在、当前存储里没有」的
+   * 记录误判成本地删除。正确做法是以推送结果为准，再并入期间新增的
+   * 记录（按 id 去重），期间对已有记录的编辑保留本地值。
+   */
+  function commit(
+    pushed: HoldingDocument,
+    saved: { revision: string; document: HoldingDocument },
+    key: WorkspaceKey,
+  ): boolean {
     const workspace = deps.loadWorkspace(key);
-    const candidate = { ...workspace, document, sync: { revision, base: document } };
+    const byID = new Map(saved.document.records.map((record) => [record.id.toLowerCase(), record]));
+
+    // 以推送结果为准，叠加「推送后才出现」的本地记录与本地编辑
+    for (const record of workspace.document.records) {
+      const key = record.id.toLowerCase();
+      const existing = byID.get(key);
+      if (!existing) {
+        // 推送期间新增：保留
+        byID.set(key, record);
+        continue;
+      }
+      // 已存在但本地被改过：以本地为准，并因此保持未同步
+      if (!sameRecord(existing, record)) {
+        byID.set(key, record);
+      }
+    }
+
+    const finalDocument: HoldingDocument = {
+      schemaVersion: 1,
+      books: [...new Set([...saved.document.books, ...workspace.document.books])],
+      records: [...byID.values()],
+    };
+    const candidate = {
+      ...workspace,
+      document: finalDocument,
+      // base 记为推送结果：与最终文档的差异即「尚未同步的本地改动」
+      sync: { revision: saved.revision, base: saved.document },
+    };
     try {
       deps.saveWorkspace(candidate);
     } catch (cause) {
@@ -131,7 +194,7 @@ export function createHoldingsSync(deps: HoldingSyncDeps) {
         try {
           const saved = await deps.pushSnapshot(revision, merged.document);
           if (!stillCurrent()) return;
-          if (!commit(saved.document, saved.revision, key)) {
+          if (!commit(merged.document, saved, key)) {
             status.value = "error";
             return;
           }

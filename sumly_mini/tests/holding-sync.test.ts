@@ -252,3 +252,41 @@ describe("游客导入", () => {
     expect(store.get("guest")?.document.records).toHaveLength(1);
   });
 });
+
+describe("推送期间的新编辑", () => {
+  it("PUT 在途期间的本地新编辑不丢失", async () => {
+    const UUID_D = "44444444-4444-4444-4444-444444444444";
+    const store = new Map<string, HoldingWorkspace>();
+    store.set("guest", emptyWorkspace("guest"));
+    store.set("user:1", emptyWorkspace("user:1"));
+
+    const sync = createHoldingsSync({
+      fetchSnapshot: async () => ({ revision: "1", document: emptyDocument() }),
+      pushSnapshot: async (revision, document) => {
+        // 推送在途：此时用户在本地又加了一条记录
+        const current = store.get("user:1")!;
+        store.set("user:1", {
+          ...current,
+          document: { schemaVersion: 1, books: ["默认账本"], records: [record({ id: UUID_D })] },
+        });
+        return { revision: "2", document };
+      },
+      loadWorkspace: (key) => store.get(key) ?? emptyWorkspace(key),
+      saveWorkspace: (workspace) => {
+        store.set(workspace.key, workspace);
+      },
+      removeWorkspace: (key) => {
+        store.delete(key);
+      },
+      sessionUserID: () => 1,
+      sessionGeneration: () => 1,
+      isCurrentSession: () => true,
+    });
+
+    await sync.sync();
+
+    // 推送期间新增的记录必须仍在，且状态为未同步
+    const saved = store.get("user:1")!;
+    expect(saved.document.records.map((r) => r.id)).toContain(UUID_D);
+  });
+});

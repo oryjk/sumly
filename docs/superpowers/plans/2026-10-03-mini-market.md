@@ -28,11 +28,11 @@
 
 A1 先创建/注册 `src/pages/holdings/index.vue` 的可导航空状态页面，B2 改为真实持仓编排；添加操作在B3前显示功能建设状态，不跳转不存在页面。最终验收不保留此过渡状态。
 
-- [ ] 写 `tests/navigation.test.ts`：`expect(tabPath('account')).toBe('/pages/user/index')`；三个 Tab 能映射到注册页面，添加操作复用同一表单。缺少 B3 时不注册不存在的页面链接。
+- [x] 写 `tests/navigation.test.ts`：`expect(tabPath('account')).toBe('/pages/user/index')`；三个 Tab 能映射到注册页面，添加操作复用同一表单。缺少 B3 时不注册不存在的页面链接。
 - [ ] 运行 `cd sumly_mini && bun test tests/navigation.test.ts`，确认因接口未实现失败。
-- [ ] 实现上述文件，统一 `--gold-*` 令牌、移除粗黑阴影；自定义导航/底栏处理安全区与微信胶囊；AGENTS 视觉规定改为批准主题，原登录入口移至“我的”。保持未开放记账提示，首页订阅入口由 A3 恢复。
+- [x] 实现上述文件，统一 `--gold-*` 令牌、移除粗黑阴影；自定义导航/底栏处理安全区与微信胶囊；AGENTS 视觉规定改为批准主题，原登录入口移至“我的”。保持未开放记账提示，首页订阅入口由 A3 恢复。
 - [ ] 运行目标测试、`bun run type-check` 和两个平台构建；H5 核对深色、安全区和底栏，微信编译产物检查 `usingComponents`。低风险视觉值不另写样式快照测试。
-- [ ] 只提交本任务变更：`feat(mini): align gold theme and navigation`。
+- [x] 只提交本任务变更：`feat(mini): align gold theme and navigation`。
 
 ### A2：真实行情契约、缓存和增量同步
 
@@ -42,11 +42,11 @@ A1 先创建/注册 `src/pages/holdings/index.vue` 的可导航空状态页面�
 
 `MarketCache={series:MarketSeries;unit:'CNY/g'|'USD/troy_oz';cursor:string;points:MarketSyncPoint[]}`，MarketSyncPoint字段复制 `MarketSyncService.swift`，缓存中不保留deleted tombstone。store lifecycle 明确为 `start(owner:'market'|'holdings'):void`、`stop(owner:'market'|'holdings'):void`、`clearCache():void`；市场报价/实时5秒、历史60秒，持仓报价3秒；每条流独立调度，慢历史不阻塞实时，没有活动owner则暂停。
 
-- [ ] 写契约/状态测试：reset 替换、增量删除与修正、空增量仍更新 cursor、品种/单位错配拒绝；`expect(realtimeState(now-21000, now, 5, now)).toBe('paused')`、分钟样本 119 秒 live/121 秒 paused、报价 181 秒 paused；国际按 `USD * usd_cny / 31.1034768`，无有效汇率为空值；慢国内请求不得覆盖已切换国际；缓存写失败不推进 cursor。
-- [ ] 运行 `bun test tests/market-sync.test.ts tests/market-store.test.ts tests/market-timing.test.ts` 确认失败。
-- [ ] 实现接口：国内 `/market/gold/instruments/au9999/{quote,realtime}`、国际 `/market/gold/{quote,realtime}`、历史 `/market/gold/sync?series=...&cursor=...`。cache 一次保存 points/cursor/unit/series；date 键严格解析，年度只允许国际 1900–2015。刷新周期从当前 `MarketHomeViewModel.start()`/HoldingsViewModel 实现提取并在测试固定，不按旧 README 猜测。生命周期只持有一个轮询器；切换等待目标数据后提交。补所有 mock 路径，去掉 mock 中依赖浏览器 `URL` 的解析。
+- [x] 写契约/状态测试：reset 替换、增量删除与修正、空增量仍更新 cursor、品种/单位错配拒绝；`expect(realtimeState(now-21000, now, 5, now)).toBe('paused')`、分钟样本 119 秒 live/121 秒 paused、报价 181 秒 paused；国际按 `USD * usd_cny / 31.1034768`，无有效汇率为空值；慢国内请求不得覆盖已切换国际；缓存写失败不推进 cursor。
+- [x] 运行 `bun test tests/market-sync.test.ts tests/market-store.test.ts tests/market-timing.test.ts` 确认失败。
+- [x] 实现接口：国内 `/market/gold/instruments/au9999/{quote,realtime}`、国际 `/market/gold/{quote,realtime}`、历史 `/market/gold/sync?series=...&cursor=...`。cache 一次保存 points/cursor/unit/series；date 键严格解析，年度只允许国际 1900–2015。刷新周期从当前 `MarketHomeViewModel.start()`/HoldingsViewModel 实现提取并在测试固定，不按旧 README 猜测。生命周期只持有一个轮询器；切换等待目标数据后提交。补所有 mock 路径，去掉 mock 中依赖浏览器 `URL` 的解析。
 - [ ] 运行目标测试与类型检查；关闭 mock 联调两种口径，核对字段、单位、来源、原时间及缓存恢复。记录网络验证证据，不把缓存标为实时。
-- [ ] 只提交本任务变更：`feat(mini): add gold market services and durable history`。
+- [x] 只提交本任务变更：`feat(mini): add gold market services and durable history`。
 
 ### A3：行情页面与交互图表
 
@@ -56,8 +56,8 @@ A1 先创建/注册 `src/pages/holdings/index.vue` 的可导航空状态页面�
 
 `ChartStatistics={first:ChartPoint|null;last:ChartPoint|null;high:ChartPoint|null;low:ChartPoint|null;change:number|null;percent:number|null}`；只有至少两个有效原始点才显示change/percent，最高/最低同价时取最早真实时间。
 
-- [ ] 写测试：拖缩不越界/不反转；窄窗口仍可操作；跨午夜标签含日期；休市不补点；稀疏数据最近点匹配原时间；抽样保留首尾/极值，查价/统计仍按原数据；固定微小波动不会放大整图，精确刻度沿用 Swift `ChartPriceScale`。按 Swift 测试迁移具体输出样例。
-- [ ] 运行三个目标测试文件确认失败。
-- [ ] 移植 Swift viewport/statistics/sampling/scale 算法，完成报价、暂停时间、十种范围、缩略导航、日期选择、加载/失败/重试/说明/订阅暂未开放等所有展示。canvas 绘制按 `uni` 能力封装，触摸逻辑不依赖 DOM；国内历史可用起点限制与国际年度标签沿用 App，不合成国内百年数据。
+- [x] 写测试：拖缩不越界/不反转；窄窗口仍可操作；跨午夜标签含日期；休市不补点；稀疏数据最近点匹配原时间；抽样保留首尾/极值，查价/统计仍按原数据；固定微小波动不会放大整图，精确刻度沿用 Swift `ChartPriceScale`。按 Swift 测试迁移具体输出样例。
+- [x] 运行三个目标测试文件确认失败。
+- [x] 移植 Swift viewport/statistics/sampling/scale 算法，完成报价、暂停时间、十种范围、缩略导航、日期选择、加载/失败/重试/说明/订阅暂未开放等所有展示。canvas 绘制按 `uni` 能力封装，触摸逻辑不依赖 DOM；国内历史可用起点限制与国际年度标签沿用 App，不合成国内百年数据。
 - [ ] 运行全部 market/chart 测试、类型检查与双平台构建；微信开发者工具/真机操作单指查价、双指缩放、范围手柄、口径切换与返回前台，核对 App 截图和时间统计。
-- [ ] 只提交本任务变更：`feat(mini): reproduce interactive market dashboard`。
+- [x] 只提交本任务变更：`feat(mini): reproduce interactive market dashboard`。

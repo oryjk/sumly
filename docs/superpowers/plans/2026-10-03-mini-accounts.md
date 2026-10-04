@@ -26,11 +26,11 @@
 
 **Interfaces:** 新 `WechatSessions.Login(ctx context.Context, code string) (domain.LoginResult,error)`；注入现有 `ports.WechatGateway`、NativeStore、Sessions、配置 appid 与已确认 legacy appid。domain.Capabilities 新增 `Wechat bool`。NativeStore 新增 `LoginWechat(ctx context.Context, appID, legacyAppID, openID string, session domain.Session) (domain.User,error)`，在一事务中关联身份/旧用户并插入会话。HTTP `POST /auth/wechat/session` body `{js_code:string}`，返回既有 NativeLoginResult envelope；`/auth/me` provider 支持 wechat。不返回 raw openid/session_key。
 
-- [ ] 写 Go 用例：有效 code => provider wechat/expires_in900；空code/配置关闭/上游拒绝无会话；同配置appid的legacy用户ID与快照不变；并发首次注册只一用户；不同appid同openid不碰已有身份；微信用户能刷新/服务端退出/最近5分钟重验注销，冻结/注销旧会话不能使用，旧 `/wechat/login` 响应字段与既有测试不变。
-- [ ] 运行 `cd sumly_go && make test`，确认新增用例失败；数据库用例只有 TEST_DATABASE_URL 已配置才运行，缺少时记录跳过。
-- [ ] 扩展 provider CHECK（只新增迁移），身份subject采用 appid+openid 的明确编码。设置显式 `WECHAT_LEGACY_APP_ID`，只有该值等于当前appid才允许旧 raw-openid 迁移；不确认归属时不猜测。新用户存储 scoped内部openid，旧接口使用相同身份解析但仍签旧JWT，避免两条登录链创建两账户。关联前锁身份及用户，旧账号已关联另一appid时拒绝复用；迁移不改持仓。接入capabilities、refresh/logout/delete现有会话，完善OpenAPI/配置说明，保留iOS协议兼容。
-- [ ] `make generate` 后执行 `make test`、`make vet`、`make build`；覆盖旧Apple/phone/email和legacy JWT regression；无数据库环境不声称真实迁移验证通过，不运行共享业务库迁移。
-- [ ] 只提交本任务变更：`feat(auth): add compatible WeChat account sessions`。
+- [x] 写 Go 用例：有效 code => provider wechat/expires_in900；空code/配置关闭/上游拒绝无会话；同配置appid的legacy用户ID与快照不变；并发首次注册只一用户；不同appid同openid不碰已有身份；微信用户能刷新/服务端退出/最近5分钟重验注销，冻结/注销旧会话不能使用，旧 `/wechat/login` 响应字段与既有测试不变。
+- [x] 运行 `cd sumly_go && make test`，确认新增用例失败；数据库用例只有 TEST_DATABASE_URL 已配置才运行，缺少时记录跳过。
+- [x] 扩展 provider CHECK（只新增迁移），身份subject采用 appid+openid 的明确编码。设置显式 `WECHAT_LEGACY_APP_ID`，只有该值等于当前appid才允许旧 raw-openid 迁移；不确认归属时不猜测。新用户存储 scoped内部openid，旧接口使用相同身份解析但仍签旧JWT，避免两条登录链创建两账户。关联前锁身份及用户，旧账号已关联另一appid时拒绝复用；迁移不改持仓。接入capabilities、refresh/logout/delete现有会话，完善OpenAPI/配置说明，保留iOS协议兼容。
+- [x] `make generate` 后执行 `make test`、`make vet`、`make build`；覆盖旧Apple/phone/email和legacy JWT regression；无数据库环境不声称真实迁移验证通过，不运行共享业务库迁移。
+- [x] 只提交本任务变更：`feat(auth): add compatible WeChat account sessions`。
 
 ### C2：前端认证与我的页面
 
@@ -42,11 +42,11 @@ store保留 `useAppSession/ensureSessionReady/applyCurrentUser/clearSession` 公
 
 所有登录/refresh API返回 `Promise<NativeLoginResult>`（原始token/refresh_token/expires_in/user）；`getCapabilities():Promise<{wechat:boolean;phone:boolean;email:boolean}>`（忽略兼容保留的apple字段）；发码返回 `Promise<{retry_after:60;expires_in:300}>`，重置/退出/注销返回 `Promise<void>`。发送参数是对应OpenAPI字段，email purpose仅 `'register'|'reset_password'`。原生 user.id 不安全整数则拒绝建立会话，避免舍入到其他用户；注销API固定confirmation `'DELETE'`，由store绑定intent执行。
 
-- [ ] 写测试：token恢复、并发401只刷新一次、最多重试一次；关闭/失败登录表单不抹掉已建立会话；退出/换号使旧bootstrap/login/refresh/profile失效且不清新凭据；微信session升级只保持同一用户缓存；强制重验成其他用户不能注销；手机+86格式/邮件normalize、密码12–128Unicode字符与512字节上限、验证码60秒冷却/300秒有效、服务不可用不假成功。
-- [ ] 运行 `bun test tests/auth-session.test.ts tests/auth-forms.test.ts tests/authenticated-request.test.ts` 确认失败。
-- [ ] 实现显式登录（无token默认游客，替换App启动自动微信登录），微信 `uni.login` 仅 MP-WEIXIN 编译；保留H5开发入口与手机/邮箱。凭据作为一个专属存储单元保存，manual logout防恢复；每条受保护请求在刷新后检查代际再重试，旧响应丢弃。我的页面复现身份、同步入口、资料编辑、清行情缓存、重验/退出/注销；注销绑定原intent和二次确认，成功后仅清对应账户缓存。mock 覆盖完整认证状态，能力关闭/错误/退出真实可测试。
+- [x] 写测试：token恢复、并发401只刷新一次、最多重试一次；关闭/失败登录表单不抹掉已建立会话；退出/换号使旧bootstrap/login/refresh/profile失效且不清新凭据；微信session升级只保持同一用户缓存；强制重验成其他用户不能注销；手机+86格式/邮件normalize、密码12–128Unicode字符与512字节上限、验证码60秒冷却/300秒有效、服务不可用不假成功。
+- [x] 运行 `bun test tests/auth-session.test.ts tests/auth-forms.test.ts tests/authenticated-request.test.ts` 确认失败。
+- [x] 实现显式登录（无token默认游客，替换App启动自动微信登录），微信 `uni.login` 仅 MP-WEIXIN 编译；保留H5开发入口与手机/邮箱。凭据作为一个专属存储单元保存，manual logout防恢复；每条受保护请求在刷新后检查代际再重试，旧响应丢弃。我的页面复现身份、同步入口、资料编辑、清行情缓存、重验/退出/注销；注销绑定原intent和二次确认，成功后仅清对应账户缓存。mock 覆盖完整认证状态，能力关闭/错误/退出真实可测试。
 - [ ] 运行目标测试、类型检查/双构建；mock与真实开发账户验证所有表单，H5无微信不挂起；在隔离测试账户验证注销，勿操作真实用户账户。
-- [ ] 只提交本任务变更：`feat(mini): add native-parity account flows`。
+- [x] 只提交本任务变更：`feat(mini): add native-parity account flows`。
 
 ### C3：精确版本与账户持仓同步
 
@@ -56,8 +56,8 @@ store保留 `useAppSession/ensureSessionReady/applyCurrentUser/clearSession` 公
 
 decode读取并校验完整 `{code,message,data:{revision,document}}` envelope；tokenizer按JSON结构定位 `data.revision`，不是文本正则替换，字符串中出现revision不得改变解码。GET和PUT成功响应都读取原始文本。C3修改 `src/utils/request.ts` 新增受同一认证刷新/代际保护的文本响应模式，不能绕过C2重新实现受保护请求。
 
-- [ ] 写测试：`decodeHoldingSnapshot`保持9007199254740993，PUT整数原样、fractional date原样；无diff/新增/编辑/删除/编辑对删除三方合并；UUID大小写去重，购入族跨版本链接形成一合并单元；409后重取/无冲突重试/真冲突停；游客重复导入不重复且原记录保留；晚响应换号/退出不写，存储写失败base/revision不变，本地未同步退出重登仍在。
-- [ ] 运行 `bun test tests/holding-wire.test.ts tests/holding-merge.test.ts tests/holding-sync.test.ts` 确认失败。
-- [ ] 按 Swift `HoldingCloudMerge` 合并（并查集覆盖base/local/remote所有关联，不只单记录）；base/revision/document同槽落盘，成功落盘后才发布synced。put期间本地新编辑保留dirty并接续同步；429/网络/冻结/413/422错误可见且保留本地。冲突选择绑定该版本，云再变更则重新合并。显式导入/退出/注销按完整规格实现。完整mock快照、revision、CAS与多账户隔离。
+- [x] 写测试：`decodeHoldingSnapshot`保持9007199254740993，PUT整数原样、fractional date原样；无diff/新增/编辑/删除/编辑对删除三方合并；UUID大小写去重，购入族跨版本链接形成一合并单元；409后重取/无冲突重试/真冲突停；游客重复导入不重复且原记录保留；晚响应换号/退出不写，存储写失败base/revision不变，本地未同步退出重登仍在。
+- [x] 运行 `bun test tests/holding-wire.test.ts tests/holding-merge.test.ts tests/holding-sync.test.ts` 确认失败。
+- [x] 按 Swift `HoldingCloudMerge` 合并（并查集覆盖base/local/remote所有关联，不只单记录）；base/revision/document同槽落盘，成功落盘后才发布synced。put期间本地新编辑保留dirty并接续同步；429/网络/冻结/413/422错误可见且保留本地。冲突选择绑定该版本，云再变更则重新合并。显式导入/退出/注销按完整规格实现。完整mock快照、revision、CAS与多账户隔离。
 - [ ] 运行目标测试和全小程序检查；用两个隔离测试客户端制造真实409、离线编辑/重登/冲突，验证App兼容同账户全字段，并填同步证据。
-- [ ] 只提交本任务变更：`feat(mini): add isolated durable holdings cloud sync`。
+- [x] 只提交本任务变更：`feat(mini): add isolated durable holdings cloud sync`。
