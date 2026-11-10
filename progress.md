@@ -24,3 +24,8 @@
 - Content rights declaration is unset; requested the owner's authorization/permitted-use basis for the third-party market data. No content-rights assertion or formal submission was made.
 - Final upload verification: build 1.0 (30), ID 88b12597-3ebd-4555-bc8e-8b7fae4172be, is VALID / IN_BETA_TESTING and in internal 测试 group. Selected it for the App Store 1.0 draft. Upload phase is complete; do not restart upload or repeat successful checks.
 - Formal review remains pending the privacy publication attestation and content-rights facts. Mainland filing remains pending provider / subject information.
+- User confirmed publication of the seven privacy types. Published in App Store Connect and verified the "几秒钟前由睿 王发布" status; saved privacy-published.png outside Git.
+- User identifies the filing/cloud provider as JD. Investigating the 京东云 filing route; legal subject remains unconfirmed.
+- User explained planned multi-source fusion/processing and no public provider naming. Store description already does not name providers; did not remove accurate source/basis labels or infer distribution rights from this explanation. Asked for explicit confirmation of rights or lawful basis for derived outputs.
+- All screenshot states are COMPLETE. Saved no-IDFA declaration. Created App Review draft c36abf74-a690-4ae9-9c7a-97329e3083ab but did not submit; adding version returned the required contentRightsDeclaration field as a validation blocker.
+- Found JD Cloud's official filing entry from its homepage. Browser interaction was interrupted by the user's active use; stopped and requested a logged-in filing page so the original legal subject can be inspected.

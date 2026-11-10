@@ -17,3 +17,9 @@
 - User answered: launch outside mainland China first.
 - Official Apple OpenAPI 4.6 contains no privacy-questionnaire API; browser access now works through native Edge accessibility and will be used only for those unsupported fields.
 - Tests were terminated by a test fixture with fixed 2026-09-28 data outside today's rolling month, followed by points[0] access. Replacing rolling-range fixture dates with five days ago and using optional first element assertions preserves test meaning without changing production market logic.
+- Privacy disclosure is now published after the user's explicit attestation confirmation; browser publication status and screenshot verified.
+- All four screenshots now report COMPLETE. No-IDFA declaration saved based on implementation.
+- Created an App Review draft (not submitted). Adding the version fails validation with ENTITY_ERROR.ATTRIBUTE.REQUIRED for contentRightsDeclaration; detailed private response is under ~/.config/sumly/release-tools/last-apple-api-error.json.
+- User explained planned source fusion/processing and no public provider naming. Requested explicit confirmation of the necessary rights or other lawful basis for distributed outputs; no rights assertion was inferred from transformation alone.
+- User identifies the hosting/filing provider as jd. Official JD Cloud homepage links to https://record-console.jdcloud.com/. Native browser access was interrupted by the user's active browsing; stopped interaction and requested a logged-in filing page.
+- Public DNS for the API domain matches the existing jd SSH alias; network candidates are saved only in the private filing technical material. Existing legal subject still needs verification in the filing account.

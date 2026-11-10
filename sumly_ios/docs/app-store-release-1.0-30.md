@@ -30,10 +30,11 @@ Date: 2026-11-10 (Asia/Shanghai)
 
 ## Pending
 - Apple completed processing: build 1.0 (30) is VALID / IN_BETA_TESTING and belongs to the internal 测试 group. The build is selected for App Store version 1.0. Preserve build/ipa-b30/Sumly.asc-upload-state.json; do not upload it twice.
-- All three iPad screenshots are COMPLETE; the iPhone screenshot is UPLOAD_COMPLETE with no asset error at the final check.
-- Privacy questionnaire has seven types prepared (functionality only, linked, no tracking), but publication attestation awaits the user's confirmation.
+- All four screenshots are now COMPLETE.
+- Privacy questionnaire has seven types published (functionality only, linked, no tracking), after explicit user confirmation. Browser publication status verified.
 - The contentRightsDeclaration field is unset. The app accesses third-party market data; the owner must establish authorization or other permitted use before making this declaration.
+- An App Review draft was created but not submitted. Apple's version-add validation currently returns a missing contentRightsDeclaration. No-IDFA declaration is saved.
 - Formal review and public availability have not yet been achieved.
 
 ## Mainland China follow-up
-The user separately requested app-filing assistance. Public technical materials are prepared outside Git at ~/.config/sumly/mainland-filing-20261110. Cloud provider, existing filing platform and legal subject still require input. No filing application has been submitted.
+The user separately requested app-filing assistance and identified the provider as jd (JD Cloud). Technical materials are prepared outside Git at ~/.config/sumly/mainland-filing-20261110. The official filing entry is https://record-console.jdcloud.com/. Account login and the existing filing subject still require verification; native browser interaction was interrupted by the user's active browsing. No filing application has been submitted.

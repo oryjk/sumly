@@ -21,5 +21,6 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - Existing build 29 is VALID; local signing and API authentication have been verified.
 - Version 1.0 (30) is VALID / IN_BETA_TESTING in the internal 测试 group, and is selected for App Store version 1.0.
 - User selected all territories outside mainland China; 174 enabled, China disabled, free price verified.
-- User confirmation is pending for Apple's privacy-publication attestation; third-party content rights facts are also pending. Do not submit an unsupported declaration.
-- Separate mainland filing assistance requested; technical material prepared, awaiting cloud provider / subject details.
+- User confirmed Apple's privacy-publication attestation; the seven-type privacy disclosure is now published and was verified in the browser.
+- User describes future multi-source fusion/processing; this does not by itself establish the content-use-rights declaration. Asked for confirmation of necessary rights or another lawful basis; do not infer it solely from processing or omitted provider names.
+- Separate mainland filing assistance requested; technical material prepared. User identifies the provider as JD; verifying 京东云 route and existing filing subject.
