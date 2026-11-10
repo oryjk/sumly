@@ -116,7 +116,8 @@ private let reviewRequest = AuthRequest.emailLogin(email: "test42@example.com", 
     #expect(Set(collected.compactMap { $0["NSPrivacyCollectedDataType"] as? String }) == Set([
         "NSPrivacyCollectedDataTypeName", "NSPrivacyCollectedDataTypeEmailAddress",
         "NSPrivacyCollectedDataTypePhoneNumber", "NSPrivacyCollectedDataTypeUserID",
-        "NSPrivacyCollectedDataTypeOtherFinancialInfo", "NSPrivacyCollectedDataTypeOtherUserContent"
+        "NSPrivacyCollectedDataTypeOtherFinancialInfo", "NSPrivacyCollectedDataTypeOtherUserContent",
+        "NSPrivacyCollectedDataTypePurchaseHistory", "NSPrivacyCollectedDataTypeOtherDiagnosticData"
     ]))
     for entry in collected {
         #expect(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool == true)

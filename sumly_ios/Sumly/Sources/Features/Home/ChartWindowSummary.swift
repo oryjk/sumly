@@ -17,6 +17,7 @@ struct ChartWindowSummary: View {
     }
     private func signed(_ value: Double) -> String {
         let rounded = (value * 100).rounded() / 100
-        return (rounded > 0 ? "+" : "") + String(format: "%.2f", rounded == 0 ? 0 : rounded)
+        let displayed: Double = rounded == 0 ? 0 : rounded
+        return (rounded > 0 ? "+" : "") + String(format: "%.2f", displayed)
     }
 }

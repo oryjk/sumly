@@ -104,7 +104,7 @@ private struct FlatRealtimeFixture: GoldPriceServicing, GoldQuoteServicing, Gold
         let window = UIWindow(windowScene: scene)
         let controller = UIHostingController(rootView: MarketHomeChartContent(model: model,
             availableHeight: window.bounds.height - 110,
-            showingNotice: .constant(false), showingHistorySources: .constant(false), showingDates: .constant(false))
+            showingHistorySources: .constant(false), showingDates: .constant(false))
             .padding(18).frame(maxWidth: .infinity, maxHeight: .infinity).background(GoldTheme.background)
             .preferredColorScheme(.dark).tint(GoldTheme.gold))
         window.rootViewController = controller

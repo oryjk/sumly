@@ -6,7 +6,6 @@ struct MarketHomeChartContent: View {
     @Bindable var model: MarketHomeViewModel
     let availableHeight: CGFloat
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Binding var showingNotice: Bool
     @Binding var showingHistorySources: Bool
     @Binding var showingDates: Bool
 
@@ -53,17 +52,6 @@ struct MarketHomeChartContent: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }.frame(maxWidth: .infinity, minHeight: 18, maxHeight: dynamicTypeSize.isAccessibilitySize ? nil : 18)
-        }
-        .overlay(alignment: .topTrailing) {
-            Button { showingNotice = true } label: {
-                Image(systemName: "bell.badge")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(GoldTheme.goldSoft)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }.buttonStyle(.plain)
-                .accessibilityLabel("订阅金价")
-                .accessibilityIdentifier("market.subscribe")
         }
     }
 

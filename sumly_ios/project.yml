@@ -20,6 +20,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.oryjk.sumly
         TARGETED_DEVICE_FAMILY: "1,2"
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+          PROVISIONING_PROFILE_SPECIFIER: "Sumly API App Store Distribution"
     entitlements:
       path: Sumly/Support/Sumly.entitlements
       properties:
@@ -30,8 +35,8 @@ targets:
       properties:
         CFBundleDisplayName: 记金
         CFBundleDevelopmentRegion: zh-Hans
-        CFBundleShortVersionString: "0.1.1"
-        CFBundleVersion: "29"
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "30"
         UILaunchScreen:
           UIColorName: NeoBackground
         UISupportedInterfaceOrientations:

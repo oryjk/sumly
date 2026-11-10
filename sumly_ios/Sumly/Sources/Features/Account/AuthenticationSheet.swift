@@ -14,7 +14,7 @@ struct AuthenticationSheet: View {
                 VStack(alignment: .leading, spacing: 22) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("欢迎来到记金").font(.largeTitle.bold())
-                        Text("账户属于你，持仓留在本机。")
+                        Text("登录后，账户持仓可在设备间同步。")
                             .font(.subheadline).foregroundStyle(GoldTheme.textSecondary)
                     }
                     if model.loadingCapabilities { ProgressView("正在获取登录方式…") }
@@ -23,19 +23,24 @@ struct AuthenticationSheet: View {
                             .font(.subheadline).foregroundStyle(GoldTheme.goldSoft)
                     }
                     if model.capabilities.apple && model.allowsProvider(.apple) { appleSection }
-                    if model.reauthentication?.provider != .apple {
+                    if model.reauthentication?.provider != .apple &&
+                        (model.capabilities.phone || model.capabilities.email || !model.capabilities.apple || model.reauthentication != nil) {
                         HStack(spacing: 12) {
-                            Button("手机号") { model.changeMode(.phone) }
-                                .buttonStyle(GoldCapsuleStyle(isSelected: model.mode == .phone)).disabled(!model.capabilities.phone || !model.allowsProvider(.phone))
-                            Button("邮箱") { model.changeMode(.email) }
-                                .buttonStyle(GoldCapsuleStyle(isSelected: model.mode != .phone)).disabled(!model.capabilities.email || !model.allowsProvider(.email))
+                            if model.capabilities.phone && model.allowsProvider(.phone) {
+                                Button("手机号") { model.changeMode(.phone) }
+                                    .buttonStyle(GoldCapsuleStyle(isSelected: model.mode == .phone))
+                            }
+                            if model.capabilities.email && model.allowsProvider(.email) {
+                                Button("邮箱") { model.changeMode(.email) }
+                                    .buttonStyle(GoldCapsuleStyle(isSelected: model.mode != .phone))
+                            }
                         }.disabled(model.busy)
                         if model.modeEnabled {
                             form
                         } else if !model.loadingCapabilities {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("此登录方式暂未开放").font(.headline)
-                                Text("服务配置完成后即可使用。你可以继续匿名记录持仓。")
+                                Text("当前没有可用的验证方式").font(.headline)
+                                Text("请稍后重试。你可以继续使用游客模式记录持仓。")
                                     .font(.subheadline).foregroundStyle(GoldTheme.textSecondary)
                                 Button("重新获取登录方式") { Task { await model.load() } }
                             }.goldCard()
@@ -51,7 +56,7 @@ struct AuthenticationSheet: View {
                             .accessibilityLabel("错误：" + error)
                     }
                     if let message = model.message { Text(message).font(.footnote).foregroundStyle(GoldTheme.goldSoft) }
-                    Text("登录暂不提供持仓云同步。Apple、手机号与邮箱分别创建账户，不会自动合并。")
+                    Text("账户持仓与账本会保存至服务端，本机保留离线缓存。游客记录仅在你明确导入后上传。不同登录方式的账户不会自动合并。")
                         .font(.caption).foregroundStyle(GoldTheme.textSecondary).lineSpacing(4)
                 }.padding(24)
             }

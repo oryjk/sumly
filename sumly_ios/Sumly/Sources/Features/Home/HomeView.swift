@@ -6,7 +6,6 @@ struct HomeView: View {
     @Binding private var marketBasis: GoldMarketBasis
     @State private var model: MarketHomeViewModel
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showingNotice = false
     @State private var showingHistorySources = false
     @State private var showingDates = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -80,11 +79,6 @@ struct HomeView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showingHistorySources = false } } }
             }.preferredColorScheme(.dark).tint(GoldTheme.gold)
         }
-        .alert("订阅金价", isPresented: $showingNotice) {
-            Button("知道了", role: .cancel) {}
-        } message: {
-            Text("订阅提醒暂未开放，敬请期待。")
-        }
     }
 
     private var dashboard: some View {
@@ -98,13 +92,13 @@ struct HomeView: View {
                         .padding(.top, 8)
 
                     MarketHomeChartContent(model: model, availableHeight: availableChartContentHeight,
-                        showingNotice: $showingNotice, showingHistorySources: $showingHistorySources, showingDates: $showingDates)
+                        showingHistorySources: $showingHistorySources, showingDates: $showingDates)
                         .transaction { $0.animation = nil }
                         .opacity(crossfadeProgress)
                         .overlay(alignment: .top) {
                             if let outgoing {
                                 MarketHomeChartContent(model: outgoing, availableHeight: availableChartContentHeight,
-                                    showingNotice: $showingNotice, showingHistorySources: $showingHistorySources, showingDates: $showingDates)
+                                    showingHistorySources: $showingHistorySources, showingDates: $showingDates)
                                     .transaction { $0.animation = nil }
                                     .opacity(1 - crossfadeProgress)
                                     .allowsHitTesting(false)

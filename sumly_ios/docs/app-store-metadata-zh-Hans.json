@@ -1,0 +1,11 @@
+{
+  "name": "记金",
+  "subtitle": "黄金持仓记录与回收盈亏测算",
+  "keywords": "黄金,金价,持仓,金条,金饰,账本,成本,工费,回收,盈亏,保本,日历",
+  "description": "记下每一克，算清每一笔。\n\n记金是一款黄金行情查看、个人持仓记录与回收盈亏估算工具。无须注册即可查看行情、记录本机持仓；选择使用 Apple 登录后，可将账户持仓和账本同步到服务端。\n\n【看清行情】\n查看国内 Au99.99 与国际伦敦金参考行情，按不同时间范围浏览走势、查价和区间统计。行情页面显示报价时间及数据口径；休市或停更时保留最后可用数据。\n\n【记下成本】\n记录克重、纯度、购入日期、金价、工费和其他费用；支持多账本、搜索筛选、部分卖出和赠送。用记金日历回看购入与处置记录。\n\n【估算回收】\n填写回收扣减、折价和固定费用，查看预计到手、盈亏、收益率及保本金价。盈亏来源拆解帮助理解成本和回收费用的影响，买前计算器与情景测算可用于比较自己的假设。\n\n【自己掌握数据】\n游客记录保存在设备中，只有主动导入后才会上传至登录账户。账户支持退出与注销；多设备修改发生冲突时，可明确选择保留的版本。\n\n说明：行情为参考数据，可能存在延迟或暂停，不代表品牌零售价或实际回收报价。所有测算均为估算，不提供黄金买卖、交易撮合或投资建议。目标提醒仅在 App 打开且位于前台、取得有效行情并获通知授权时检查，不保证锁屏或退出期间实时触发。",
+  "supportUrl": "https://oryjk.cn/sumly/privacy",
+  "privacyPolicyUrl": "https://oryjk.cn/sumly/privacy",
+  "copyright": "2026 RUI WANG",
+  "primaryCategory": "FINANCE",
+  "reviewNotes": "Jijin (记金) is a personal gold holdings journal and estimation tool. It does not execute trades, sell gold, provide brokerage services, or provide personalized investment advice.\n\nNo sign-in is required to review market data, create local guest holdings, use multiple books, view the calendar, calculate estimated recovery proceeds and profit, or use scenario calculations. Tap the central + button to add a holding; the Calendar tab opens the existing holdings calendar. Cost and recovery parameters are entered by the user.\n\nOptional account cloud sync uses Sign in with Apple. Phone and email authentication are not enabled on the production server and are not offered as available login methods. Reviewers may use Sign in with Apple to review cloud sync. Account deletion is available under My Account after signing in; a recent Apple reauthentication and a second explicit confirmation are required. Guest records remain separate from account records.\n\nMarket data and the HTTPS backend are live. Market closure or unavailable data is shown with the actual quote date/time; the app does not fabricate fresh prices. Holding alerts are checked only while the app is active in the foreground and notification permission is granted; background real-time monitoring is not offered.\n\nPrivacy Policy and support email are available on the My Account page, including while signed out."
+}

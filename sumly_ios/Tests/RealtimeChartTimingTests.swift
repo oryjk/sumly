@@ -91,7 +91,7 @@ private func timingDate(_ value: String) -> Date { BackendGoldPriceService.parse
         let window = UIWindow(windowScene: scene)
         let controller = UIHostingController(rootView: ScrollView {
             MarketHomeChartContent(model: model, availableHeight: window.bounds.height - 110,
-                showingNotice: .constant(false), showingHistorySources: .constant(false), showingDates: .constant(false)).padding(18)
+                showingHistorySources: .constant(false), showingDates: .constant(false)).padding(18)
         }.background(GoldTheme.background).environment(\.dynamicTypeSize, size).preferredColorScheme(.dark).tint(GoldTheme.gold))
         window.rootViewController = controller
         window.makeKeyAndVisible()

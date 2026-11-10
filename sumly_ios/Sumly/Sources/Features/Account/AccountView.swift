@@ -83,6 +83,21 @@ struct AccountView: View {
                     Text(cacheNotice ?? "清除已下载的行情数据，保留持仓记录和登录状态。")
                         .font(.footnote).foregroundStyle(GoldTheme.textSecondary)
                 }.goldCard(padding: 20)
+                VStack(alignment: .leading, spacing: 16) {
+                    Link(destination: URL(string: "https://oryjk.cn/sumly/privacy")!) {
+                        Label("隐私政策", systemImage: "hand.raised")
+                    }
+                    .accessibilityIdentifier("account.privacyPolicy")
+                    Link(destination: URL(string: "mailto:oryjk@qq.com")!) {
+                        Label("联系支持", systemImage: "envelope")
+                    }
+                    .accessibilityIdentifier("account.support")
+                    Text("记金用于个人记录与回收估算，不提供黄金交易或投资建议。")
+                        .font(.footnote).foregroundStyle(GoldTheme.textSecondary)
+                }
+                .foregroundStyle(GoldTheme.gold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .goldCard(padding: 20)
                 if let user = session.user {
                     VStack(spacing: 14) {
                         Button("重新验证 \(user.provider.title) 登录") { openLogin() }

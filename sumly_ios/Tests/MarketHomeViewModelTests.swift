@@ -2,6 +2,13 @@ import Foundation
 import Testing
 @testable import Sumly
 
+@MainActor private func waitForMarketCondition(_ condition: () -> Bool) async throws {
+    let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while !condition(), ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(25))
+    }
+}
+
 private struct HomeMarketFixture: GoldPriceServicing, GoldQuoteServicing, GoldRealtimeServicing {
     var failing = false
     var usdCNY = 7.0
@@ -33,8 +40,9 @@ private struct HomeMarketFixture: GoldPriceServicing, GoldQuoteServicing, GoldRe
 }
 
 private struct DomesticHistoryFixture: GoldHistoryServicing {
+    let date = ChartViewport.noon(Calendar.current.date(byAdding: .day, value: -5, to: .now)!)
     func fetchHistory() async throws -> [GoldHistoryPoint] {
-        [GoldHistoryPoint(date: GoldDailyPrice.parseDay("2026-09-28")!, price: 942.35, granularity: .daily, source: "sge-au9999")]
+        [GoldHistoryPoint(date: date, price: 942.35, granularity: .daily, source: "sge-au9999")]
     }
 }
 
@@ -47,14 +55,15 @@ private struct DomesticQuoteFixture: GoldQuoteServicing {
 
 @MainActor @Test func domesticHistoryStaysInNativeCNYPerGramWithoutFXConversion() async {
     let service = HomeMarketFixture()
-    let model = MarketHomeViewModel(basis: .domestic, dailyService: service, quoteService: DomesticQuoteFixture(), realtimeService: service, historyService: DomesticHistoryFixture())
+    let history = DomesticHistoryFixture()
+    let model = MarketHomeViewModel(basis: .domestic, dailyService: service, quoteService: DomesticQuoteFixture(), realtimeService: service, historyService: history)
     model.range = .month
     await model.refresh()
     #expect(model.price == 945.20)
     #expect(model.points.count == 1)
-    #expect(model.points[0].price == 942.35)
+    #expect(model.points.first?.price == 942.35)
     model.range = .history
-    #expect(model.fullDomain.lowerBound == GoldDailyPrice.parseDay("2026-09-28")!)
+    #expect(model.fullDomain.lowerBound == history.date)
 }
 
 private actor BasisSwitchGate {
@@ -89,7 +98,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 
     func fetchDailyPrices() async throws -> [GoldDailyPrice] {
         if let gate { await gate.wait() }
-        let date = GoldDailyPrice.parseDay("2026-09-28")!
+        let date = ChartViewport.noon(Calendar.current.date(byAdding: .day, value: -5, to: .now)!)
         return [GoldDailyPrice(date: date, open: historyPrice, high: historyPrice, low: historyPrice, close: historyPrice)]
     }
 
@@ -100,7 +109,8 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 
     func fetchHistory() async throws -> [GoldHistoryPoint] {
         if let gate { await gate.wait() }
-        return [GoldHistoryPoint(date: GoldDailyPrice.parseDay("2026-09-28")!, price: historyPrice, granularity: .daily, source: "fixture")]
+        let date = ChartViewport.noon(Calendar.current.date(byAdding: .day, value: -5, to: .now)!)
+        return [GoldHistoryPoint(date: date, price: historyPrice, granularity: .daily, source: "fixture")]
     }
 }
 
@@ -214,7 +224,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
     model.selectChart(at: 0.5)
     #expect(model.selectedPoint?.price == 675.25)
     let snapshot = model.makeDisplaySnapshot()
-    try await Task.sleep(for: .seconds(5.4))
+    try await waitForMarketCondition { model.selectedDate == nil }
     #expect(model.selectedDate == nil)
     #expect(model.selectedPoint == nil)
     #expect(model.windowStatistics.high?.price == 675.25)
@@ -533,6 +543,7 @@ private actor MutableHomeHistoryFixture: GoldHistoryServicing, GoldQuoteServicin
 
 private actor RecoveringHomeService: GoldPriceServicing, GoldQuoteServicing, GoldRealtimeServicing {
     var realtimeCalls = 0
+    private let retryGate = BasisSwitchGate()
     let slowDaily: Bool
     let emptyAfterFirst: Bool
     init(slowDaily: Bool = false, emptyAfterFirst: Bool = false) {
@@ -546,9 +557,11 @@ private actor RecoveringHomeService: GoldPriceServicing, GoldQuoteServicing, Gol
     func fetchRealtime() async throws -> [MarketChartPoint] {
         realtimeCalls += 1
         if slowDaily && realtimeCalls == 1 { throw URLError(.networkConnectionLost) }
+        if slowDaily { await retryGate.wait() }
         if emptyAfterFirst && realtimeCalls > 1 { return [] }
         return try await HomeMarketFixture().fetchRealtime()
     }
+    func releaseRetry() async { await retryGate.release() }
 }
 
 @MainActor @Test func slowDailySyncDoesNotHideRealtimeFailureOrBlockItsRetry() async throws {
@@ -557,10 +570,11 @@ private actor RecoveringHomeService: GoldPriceServicing, GoldQuoteServicing, Gol
     let task = Task { await model.start() }
     // Daily sync is still pending. A failed realtime request must leave loading,
     // then recover through its own five-second polling schedule.
-    try await Task.sleep(for: .milliseconds(300))
+    try await waitForMarketCondition { !model.loading }
     #expect(!model.loading)
     #expect(model.message?.contains("失败") == true)
-    try await Task.sleep(for: .seconds(6))
+    await service.releaseRetry()
+    try await waitForMarketCondition { !model.points.isEmpty }
     #expect(await service.realtimeCalls >= 2)
     #expect(!model.points.isEmpty)
     task.cancel()
