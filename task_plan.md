@@ -19,7 +19,7 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 ## Known state
 - Local source 0.1.1 (29); store version 1.0 is PREPARE_FOR_SUBMISSION.
 - Existing build 29 is VALID; local signing and API authentication have been verified.
-- Version 1.0 (30) has been archived, exported and accepted by Apple; processing is in progress.
+- Version 1.0 (30) is VALID / IN_BETA_TESTING in the internal 测试 group, and is selected for App Store version 1.0.
 - User selected all territories outside mainland China; 174 enabled, China disabled, free price verified.
 - User confirmation is pending for Apple's privacy-publication attestation; third-party content rights facts are also pending. Do not submit an unsupported declaration.
 - Separate mainland filing assistance requested; technical material prepared, awaiting cloud provider / subject details.

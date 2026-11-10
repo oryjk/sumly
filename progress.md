@@ -22,3 +22,5 @@
 - Manual distribution archive/export succeeded. Strict archive signature verified; exported IPA metadata and privacy manifest checked. Apple accepted the IPA and is processing it.
 - Live pricing verified free; live availability verified 174 enabled / mainland China disabled. Four screenshot uploads accepted, no asset errors reported.
 - Content rights declaration is unset; requested the owner's authorization/permitted-use basis for the third-party market data. No content-rights assertion or formal submission was made.
+- Final upload verification: build 1.0 (30), ID 88b12597-3ebd-4555-bc8e-8b7fae4172be, is VALID / IN_BETA_TESTING and in internal 测试 group. Selected it for the App Store 1.0 draft. Upload phase is complete; do not restart upload or repeat successful checks.
+- Formal review remains pending the privacy publication attestation and content-rights facts. Mainland filing remains pending provider / subject information.

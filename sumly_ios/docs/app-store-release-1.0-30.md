@@ -29,7 +29,8 @@ Date: 2026-11-10 (Asia/Shanghai)
 - Existing automatic release-after-approval setting preserved.
 
 ## Pending
-- Apple is processing the uploaded 1.0 (30) IPA. Preserve build/ipa-b30/Sumly.asc-upload-state.json; do not upload it twice.
+- Apple completed processing: build 1.0 (30) is VALID / IN_BETA_TESTING and belongs to the internal 测试 group. The build is selected for App Store version 1.0. Preserve build/ipa-b30/Sumly.asc-upload-state.json; do not upload it twice.
+- All three iPad screenshots are COMPLETE; the iPhone screenshot is UPLOAD_COMPLETE with no asset error at the final check.
 - Privacy questionnaire has seven types prepared (functionality only, linked, no tracking), but publication attestation awaits the user's confirmation.
 - The contentRightsDeclaration field is unset. The app accesses third-party market data; the owner must establish authorization or other permitted use before making this declaration.
 - Formal review and public availability have not yet been achieved.
