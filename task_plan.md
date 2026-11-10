@@ -6,7 +6,7 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - [x] Audit live App Store metadata, distribution regions, privacy, review access and backend health.
 - [x] Make necessary iOS release fixes and align version with the App Store version.
 - [x] Run meaningful tests, simulator verification and local Release signing.
-- [ ] Complete store materials, upload one release build, and submit for review when all required facts are available.
+- [x] Complete store materials, upload one release build, and submit for review when all required facts are available.
 - [ ] Report actual Apple state and any specific external blockers.
 
 ## Constraints
@@ -17,10 +17,10 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - No duplicate upload, no redundant post-success checks.
 
 ## Known state
-- Local source 0.1.1 (29); store version 1.0 is PREPARE_FOR_SUBMISSION.
-- Existing build 29 is VALID; local signing and API authentication have been verified.
+- Initial source was 0.1.1 (29); the release source is now 1.0 (30).
+- Local signing and API authentication have been verified.
 - Version 1.0 (30) is VALID / IN_BETA_TESTING in the internal 测试 group, and is selected for App Store version 1.0.
 - User selected all territories outside mainland China; 174 enabled, China disabled, free price verified.
 - User confirmed Apple's privacy-publication attestation; the seven-type privacy disclosure is now published and was verified in the browser.
-- User describes future multi-source fusion/processing; this does not by itself establish the content-use-rights declaration. Asked for confirmation of necessary rights or another lawful basis; do not infer it solely from processing or omitted provider names.
-- Separate mainland filing assistance requested; technical material prepared. User identifies the provider as JD; verifying 京东云 route and existing filing subject.
+- User explicitly confirmed the necessary rights or lawful basis for displayed derived outputs. Saved USES_THIRD_PARTY_CONTENT; added version 1.0 to review submission and submitted it. Actual state is WAITING_FOR_REVIEW, with release AFTER_APPROVAL.
+- Separate mainland filing assistance requested; technical material prepared. User logged in and explicitly requested reuse of the original website filing subject. Verified the JD Cloud server, generated one new authorization code and selected it for APP / 记金. Awaiting the user's direct entry of the original subject identity and privacy-policy acknowledgement; no filing application submitted.

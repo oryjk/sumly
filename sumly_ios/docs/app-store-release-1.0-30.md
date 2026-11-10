@@ -28,13 +28,13 @@ Date: 2026-11-10 (Asia/Shanghai)
 - Four actual simulator screenshots uploaded: iPhone market; iPad market, holdings and calendar.
 - Existing automatic release-after-approval setting preserved.
 
-## Pending
+## App Store review
 - Apple completed processing: build 1.0 (30) is VALID / IN_BETA_TESTING and belongs to the internal 测试 group. The build is selected for App Store version 1.0. Preserve build/ipa-b30/Sumly.asc-upload-state.json; do not upload it twice.
 - All four screenshots are now COMPLETE.
 - Privacy questionnaire has seven types published (functionality only, linked, no tracking), after explicit user confirmation. Browser publication status verified.
-- The contentRightsDeclaration field is unset. The app accesses third-party market data; the owner must establish authorization or other permitted use before making this declaration.
-- An App Review draft was created but not submitted. Apple's version-add validation currently returns a missing contentRightsDeclaration. No-IDFA declaration is saved.
-- Formal review and public availability have not yet been achieved.
+- The owner explicitly confirmed the necessary rights or lawful basis for the app's distributed fusion/processed outputs. Saved USES_THIRD_PARTY_CONTENT based on that confirmation. No-IDFA declaration is saved.
+- Added version 1.0 / build 30 to the App Review submission and submitted it. Verified actual App Store state WAITING_FOR_REVIEW and release type AFTER_APPROVAL.
+- App Store formal submission is complete. Public availability awaits Apple's review and release processing; it is not yet live.
 
 ## Mainland China follow-up
-The user separately requested app-filing assistance and identified the provider as jd (JD Cloud). Technical materials are prepared outside Git at ~/.config/sumly/mainland-filing-20261110. The official filing entry is https://record-console.jdcloud.com/. Account login and the existing filing subject still require verification; native browser interaction was interrupted by the user's active browsing. No filing application has been submitted.
+The user separately requested app-filing assistance and identified the provider as jd (JD Cloud). Technical materials are prepared outside Git at ~/.config/sumly/mainland-filing-20261110. The official filing entry is https://record-console.jdcloud.com/. The user has logged in and authorized reuse of the original website subject. The production lightweight server was verified; one new authorization code was generated, saved privately and selected for APP / 记金. The older code already in progress was preserved. The portal did not auto-populate the original subject, so the user must enter the original location, subject type and identity details directly on the official form and acknowledge its privacy policy. No filing application has been submitted.
