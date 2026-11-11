@@ -24,3 +24,10 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - User confirmed Apple's privacy-publication attestation; the seven-type privacy disclosure is now published and was verified in the browser.
 - User explicitly confirmed the necessary rights or lawful basis for displayed derived outputs. Saved USES_THIRD_PARTY_CONTENT; added version 1.0 to review submission and submitted it. Actual state is WAITING_FOR_REVIEW, with release AFTER_APPROVAL.
 - Mainland filing application is submitted. After the user's explicit acceptance of both final agreements and authorization, the user supplied the submission-success screenshot; the live JD Cloud audit page confirmed 您的资料已提交等待审核 / 京东云初审, estimated 1–3 working days. Preserve the existing order; do not resubmit. Approval, later SMS verification and filing completion remain external follow-up steps. Mainland App Store availability remains disabled until a valid APP filing number is obtained and configured.
+
+## 2026-11-11 — Account settings follow-up
+- [x] Move synchronization, guest import/conflicts and market-cache clearing into a dedicated settings page.
+- [x] Add an accessible gear at the top right of 我的, navigating to settings.
+- [x] Compile and run targeted rendering/cache checks; inspect actual generated screenshots.
+- [ ] Verify gear navigation and return manually after the Mac is unlocked.
+- [ ] Commit and push the related code and verification record.

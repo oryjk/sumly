@@ -68,6 +68,9 @@ private struct AccountRenderService: AuthServicing {
 @MainActor @Test func renderGuestAccountForVisualReview() async throws {
     let session = AuthSession(service: AccountRenderService(phoneEnabled: true), store: AccountRenderStore())
     try await captureAccountView(AccountView(session: session), name: "account-guest")
+    try await captureAccountView(NavigationStack {
+        AccountSettingsView(session: session)
+    }, name: "settings-guest")
 }
 
 @MainActor @Test func renderPhoneAndAppleLoginForVisualReview() async throws {
@@ -101,5 +104,8 @@ private struct CloudAccountRenderAPI: HoldingCloudServicing {
         directory: FileManager.default.temporaryDirectory.appendingPathComponent("cloud-render-" + UUID().uuidString))
     await cloud.sync()
     try await captureAccountView(AccountView(session: session, cloud: cloud), name: "account-cloud")
+    try await captureAccountView(NavigationStack {
+        AccountSettingsView(session: session, cloud: cloud)
+    }, name: "settings-cloud")
     try cloud.eraseDeletedAccountCache()
 }
