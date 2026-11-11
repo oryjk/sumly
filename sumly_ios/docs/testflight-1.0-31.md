@@ -3,7 +3,7 @@
 Date: 2026-11-11 (Asia/Shanghai)
 
 - Source branch: `codex/app-store-1-0`.
-- Source commit: `f2f14291768ea2954064c0447257940a9127e08f`.
+- Source commit: `1d2d10f214969dcecdee14cc4f77b7aef682b5af`.
 - Bundle ID: `com.oryjk.sumly`; version 1.0; build 31.
 - Change: 我的 has a top-right settings gear. Account synchronization, guest import/conflict controls and market-cache clearing now live on the settings page.
 - Validation: the unchanged feature code passed simulator compilation and three targeted rendering/cache tests in `build/SettingsNavigation-20261111-verified.xcresult`. Guest account and signed-in settings images were inspected. The upload script's 12 offline tests passed before this upload. Manual navigation remains unverified because the home Mac is locked; the user requested a TestFlight build for device testing.
