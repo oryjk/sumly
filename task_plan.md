@@ -31,3 +31,9 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - [x] Compile and run targeted rendering/cache checks; inspect actual generated screenshots.
 - [ ] Verify gear navigation and return manually on the office computer; the home Mac is locked and the user is taking over this check.
 - [x] Commit and push the related code and verification record (code: 55ef770, origin/codex/app-store-1-0).
+
+## 2026-11-11 — TestFlight build 31
+- [x] Confirm build 31 is not already uploaded; increment build number and run offline upload checks.
+- [ ] Commit/push source and provenance record; verify the remote commit before upload.
+- [ ] Archive, export and upload one signed IPA using the established JWT API route.
+- [ ] Configure internal/external test distribution and report the actual usable/review state.
