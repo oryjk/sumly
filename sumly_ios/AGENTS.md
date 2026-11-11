@@ -23,6 +23,7 @@ make upload     # 本地归档/签名导出，再通过 JWT API 上传
 
 发布前先读 [上传操作文档](docs/app-store-connect-api-upload.md)。用户已确认采用「本地签名 IPA + App Store Connect JWT API」流程；后续发布必须沿用。
 
+- 每轮完成用户要求的 iOS 应用代码、界面或功能修改并通过必要验证后，默认自动递增 build number，打包上传新的 TestFlight 构建并加入内部「测试」组，无需再次询问是否上传。将同一轮修改合并到一个新构建；纯文档、说明或发布记录更新不重复打包。除非用户另有要求，不自动分发给外部测试员，也不替换 App Store 待审核构建或提交正式发布。
 - 每次上传 IPA、分发 TestFlight 构建、提交 App Store 审核或发布前，必须遵守[根目录发布规则](../AGENTS.md)：先将本次版本涉及的最新代码提交并成功推送到 `origin` 对应分支，确认远端包含该提交后再继续。推送失败就暂停上传、提审或发布。
 - 发布记录必须包含源码分支、提交 SHA、版本号和 build number；复用已有 IPA 时保留其原始源码提交对应关系。发布过程中新增的相关修复和记录也须提交、推送。
 - 标准入口是 `make upload` → `scripts/upload_app_store.sh` → `scripts/upload_signed_ipa.py`。
