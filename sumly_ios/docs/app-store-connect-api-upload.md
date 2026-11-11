@@ -6,7 +6,18 @@
 
 发布约定见 [AGENTS.md](../AGENTS.md#ios-发布与-testflight必须遵守)。默认使用本地签名 IPA + JWT API 上传；Xcode 仅负责编译、归档和本地导出。除非用户明确要求更换，不使用 Xcode Organizer、`destination=upload`、`altool` 或 Transporter 上传，也不在网络失败时自动回退到这些工具。
 
-发布前完成必要的代码、签名与离线脚本验证。上传后只核实目标构建：`processingState=VALID`、`internalBuildState=IN_BETA_TESTING`，并确认属于预期内部测试组。达到这些条件后立即向用户报告版本/build，结束发布；不得为了测试恢复流程再次执行上传命令，也不重复联网检查或在成功后继续改上传工具。
+发布前完成必要的代码、签名与离线脚本验证。上传后核实目标构建：`processingState=VALID`、`internalBuildState=IN_BETA_TESTING`，并确认所有现有测试组均包含目标构建；有外部组时还须 `externalBuildState=IN_BETA_TESTING`。达到这些条件后立即向用户报告版本/build，结束发布；不得为了测试恢复流程再次执行上传命令，也不重复联网检查或在成功后继续改上传工具。
+
+## 所有测试组必须获取最新构建（2026-11-11 用户要求）
+
+- 每次发布从 Apple 的 builds / preReleaseVersion 查询实际最新的有效构建。Git 已 push、本地 project.yml 的 build number、Apple 上传处理成功，均不能代替测试组分发验证。
+- 内部「测试」组保持 `hasAccessToAllBuilds=true`，允许自动接收后续有效构建。
+- 公开链接使用的「外部测试」组必须同样添加最新构建；核对已有测试说明和审核信息，完成所需 Beta App Review，保持该构建 `autoNotifyEnabled=true`，审核通过后自动通知测试者。
+- 上传脚本只处理 IPA 上传与 Apple 二进制处理；操作者还须通过 App Store Connect API 完成测试组关联和外部审核步骤，不能把脚本成功退出当作外部分发已完成。
+- 外部组没有与内部组等价的免审核自动接收机制；未来每次发布都必须执行上述外部组步骤。Apple 审核等待期间保留已提交状态，不重复提交或上传，不将内部可测试误报成外部可下载。
+- 最终报告分别列出内部、外部状态；外部仍在审核时明确说明尚不能通过公开测试链接下载新构建。不要删除旧构建、测试者或更换公开链接来掩盖分发问题。
+
+Apple 操作依据：[内部测试组自动分发](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers)、[外部测试审核与自动通知](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers)。
 
 ## 本机私有配置
 
