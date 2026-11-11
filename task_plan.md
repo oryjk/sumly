@@ -41,6 +41,6 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 
 ## 2026-11-11 — Internal TestFlight build 32
 - [x] Record automatic internal-test release workflow; prepare build 32 with existing passing feature validation.
-- [ ] Push source/provenance and verify the remote commit before upload.
-- [ ] Archive/export/upload one signed IPA using the established JWT API workflow.
-- [ ] Save testing notes, configure internal 测试 group and verify final TestFlight readiness once. External testing is paused; do not alter the App Store review.
+- [x] Push source/provenance and verify the remote commit before upload.
+- [x] Archive/export/upload one signed IPA using the established JWT API workflow.
+- [x] Save testing notes, configure internal 测试 group and verify final TestFlight readiness once: 1.0 (32), VALID / IN_BETA_TESTING, internal group confirmed. External testing remains paused; App Store review unchanged.
