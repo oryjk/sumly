@@ -34,6 +34,7 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 
 ## 2026-11-11 — TestFlight build 31
 - [x] Confirm build 31 is not already uploaded; increment build number and run offline upload checks.
-- [ ] Commit/push source and provenance record; verify the remote commit before upload.
-- [ ] Archive, export and upload one signed IPA using the established JWT API route.
-- [ ] Configure internal/external test distribution and report the actual usable/review state.
+- [x] Commit/push source and provenance record; verify the remote commit before upload.
+- [x] Archive, export and upload one signed IPA using the established JWT API route.
+- [x] Configure internal/external test distribution and report the actual usable/review state: internal ready; external Beta submission blocked by build 30's existing review.
+- External follow-up: submit build 31 for Beta review after Apple's existing same-version review is completed. Do not upload the IPA again or replace the App Store build for this testing task.
