@@ -29,5 +29,5 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - [x] Move synchronization, guest import/conflicts and market-cache clearing into a dedicated settings page.
 - [x] Add an accessible gear at the top right of 我的, navigating to settings.
 - [x] Compile and run targeted rendering/cache checks; inspect actual generated screenshots.
-- [ ] Verify gear navigation and return manually after the Mac is unlocked.
-- [ ] Commit and push the related code and verification record.
+- [ ] Verify gear navigation and return manually on the office computer; the home Mac is locked and the user is taking over this check.
+- [x] Commit and push the related code and verification record (code: 55ef770, origin/codex/app-store-1-0).
