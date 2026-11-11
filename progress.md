@@ -56,3 +56,7 @@
 - User requested removing the always-visible 重新验证 Apple 登录 action from 我的. Removed the provider-specific manual login button for signed-in accounts and kept normal sign-in plus the account-deletion reauthentication flow.
 - Simulator compilation and the signed-in account rendering test passed; inspected the rendered account page with only 退出登录 / 注销账户 in its action card. Two existing authentication regression tests also passed: rejecting another account during deletion reauthentication, and requiring explicit deletion confirmation after matching reauthentication.
 - This is a source change after TestFlight build 31. No new binary upload was requested or performed in this step; a subsequent build is needed for this removal to appear on devices.
+
+## 2026-11-11 — Internal TestFlight build 32
+- User requested uploading the updated test package, then instructed that every completed iOS application-code/UI change should automatically receive a new internal TestFlight build. Recorded the standing workflow in sumly_ios/AGENTS.md; documentation-only changes are excluded from redundant builds. External testing is paused at the user's request.
+- Initial checks found no Apple build 32 or existing local archive/IPA directory. Bumped project.yml and generated Info.plist to 1.0 (32); source commit 8f27df562b4279b930bab97a1da2a6873d0e3eec. The feature code is identical to the already-verified button-removal commit; reuse its passing compile, rendering and authentication checks.

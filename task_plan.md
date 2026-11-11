@@ -38,3 +38,9 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - [x] Archive, export and upload one signed IPA using the established JWT API route.
 - [x] Configure internal/external test distribution and report the actual usable/review state: internal ready; external Beta submission blocked by build 30's existing review.
 - External follow-up: submit build 31 for Beta review after Apple's existing same-version review is completed. Do not upload the IPA again or replace the App Store build for this testing task.
+
+## 2026-11-11 — Internal TestFlight build 32
+- [x] Record automatic internal-test release workflow; prepare build 32 with existing passing feature validation.
+- [ ] Push source/provenance and verify the remote commit before upload.
+- [ ] Archive/export/upload one signed IPA using the established JWT API workflow.
+- [ ] Save testing notes, configure internal 测试 group and verify final TestFlight readiness once. External testing is paused; do not alter the App Store review.
