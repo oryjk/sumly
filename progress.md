@@ -51,3 +51,8 @@
 - Source and release records were pushed and the remote ref verified before archive/upload. Local archive/export and signature/IPA identity validation succeeded. Uploaded one IPA through the existing JWT uploader; Apple completed processing.
 - Final TestFlight verification: 1.0 (31), ID ae7d1886-35bf-4a75-86eb-8c26b0a9527c, VALID / IN_BETA_TESTING and present in internal 测试 group. Testing notes and automatic notification are saved. The new settings UI is now available to internal testers. Do not rerun upload or repeat successful Apple verification.
 - Build 31 is also in 外部测试, but Apple rejected its Beta review submission with ANOTHER_BUILD_IN_REVIEW because build 30 is still under review. Actual external state is READY_FOR_BETA_SUBMISSION; external installation is not yet available. Reported this limitation immediately. Did not cancel any review or replace the App Store build.
+
+## 2026-11-11 — Remove persistent reauthentication button
+- User requested removing the always-visible 重新验证 Apple 登录 action from 我的. Removed the provider-specific manual login button for signed-in accounts and kept normal sign-in plus the account-deletion reauthentication flow.
+- Simulator compilation and the signed-in account rendering test passed; inspected the rendered account page with only 退出登录 / 注销账户 in its action card. Two existing authentication regression tests also passed: rejecting another account during deletion reauthentication, and requiring explicit deletion confirmation after matching reauthentication.
+- This is a source change after TestFlight build 31. No new binary upload was requested or performed in this step; a subsequent build is needed for this removal to appear on devices.

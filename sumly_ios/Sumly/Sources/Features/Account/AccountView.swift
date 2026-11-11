@@ -78,10 +78,8 @@ struct AccountView: View {
                 .foregroundStyle(GoldTheme.gold)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .goldCard(padding: 20)
-                if let user = session.user {
+                if session.user != nil {
                     VStack(spacing: 14) {
-                        Button("重新验证 \(user.provider.title) 登录") { openLogin() }
-                            .foregroundStyle(GoldTheme.gold)
                         Button("退出登录") { confirmLogout = true }
                             .foregroundStyle(GoldTheme.text)
                         Divider().overlay(GoldTheme.cardStroke)
