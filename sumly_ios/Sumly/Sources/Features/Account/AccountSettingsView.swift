@@ -52,6 +52,16 @@ struct AccountSettingsView: View {
                     Text(cacheNotice ?? "清除已下载的行情数据，保留持仓记录和登录状态。")
                         .font(.footnote).foregroundStyle(GoldTheme.textSecondary)
                 }.goldCard(padding: 20)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("App 备案号")
+                        .font(.headline)
+                        .foregroundStyle(GoldTheme.text)
+                    Link("蜀ICP备2020035100号-3A", destination: URL(string: "https://beian.miit.gov.cn/")!)
+                        .foregroundStyle(GoldTheme.gold)
+                        .accessibilityHint("打开工信部备案查询系统")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .goldCard(padding: 20)
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 24)
