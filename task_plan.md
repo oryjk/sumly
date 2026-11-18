@@ -44,3 +44,11 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - [x] Push source/provenance and verify the remote commit before upload.
 - [x] Archive/export/upload one signed IPA using the established JWT API workflow.
 - [x] Save testing notes, configure internal 测试 group and verify final TestFlight readiness once: 1.0 (32), VALID / IN_BETA_TESTING, internal group confirmed. External testing remains paused; App Store review unchanged.
+
+## 2026-11-18 — 1.0.1 中国大陆上架
+
+- [x] 设置页显示 App 备案号及工信部查询链接，验证游客和登录态。
+- [x] 推送 1.0.1（33）源码和版本记录，核对远端提交。
+- [x] 在 Apple 后台保存备案号及两项中国大陆合规声明。
+- [ ] 确认 Apple 构建处理完成，分发至内部「测试」并提交正式审核。
+- [ ] 审核通过后开放中国大陆店面，核对公开产品页。

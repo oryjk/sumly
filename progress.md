@@ -62,3 +62,10 @@
 - Initial checks found no Apple build 32 or existing local archive/IPA directory. Bumped project.yml and generated Info.plist to 1.0 (32); source commit 8f27df562b4279b930bab97a1da2a6873d0e3eec. The feature code is identical to the already-verified button-removal commit; reuse its passing compile, rendering and authentication checks.
 - Source/provenance were pushed and the remote ref verified before archive/upload. Local archive/export, strict signature and IPA identity validation succeeded. Uploaded one signed IPA using the established JWT workflow; Apple processing completed.
 - Final verification: 1.0 (32), ID f3e44ffa-0f76-4d09-8aa9-d0dafd26bc53, VALID / IN_BETA_TESTING and present in internal 测试 only. Testing notes and automatic notification saved. Reported internal availability immediately; no external distribution or App Store review changes. Upload phase complete; do not re-upload or repeat successful Apple checks.
+
+## 2026-11-18 — App Store 1.0.1（33）
+
+- 游客和登录态的设置页渲染测试均通过。签名归档通过严格校验，IPA 标识、版本和构建号正确。
+- 源码提交 `fb947b1710fbc1436bb6167e6347730034250d9b` 已推送。Apple 已接收签名 IPA，正在处理。
+- Apple 后台已显示 `蜀ICP备2020035100号-3A`。按当前功能填写的生成式内容及安全评估声明均显示有效。
+- 草稿继承了 1.0 的商店截图和审核联系方式。已保存 1.0.1 的更新说明及审核操作路径。

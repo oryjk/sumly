@@ -28,3 +28,9 @@
 - The user later explicitly chose personal operation for 记金, confirmed selecting 个人, and completed the subject-information step. This supersedes the earlier plan to reuse the individual-business website subject. Original website and APP are separate service filings; reuse of subject identity is a convenience, not a requirement to select that same business for a separately operated APP.
 - iOS filing fingerprint must be the certificate SHA-1, despite JD's generic MD5签名 field label. Reference: https://help.aliyun.com/zh/icp-filing/basic-icp-service/user-guide/fill-in-app-feature-information . Public key was extracted as DER PKCS#1 RSAPublicKey hexadecimal (270 bytes), separate from the earlier SPKI representation. Only public certificate material is entered; no private key uploaded.
 - JD accepted the completed service information, including the existing 记金 name, iOS technical fields, JPG icon, 工具 classification and full actual feature description. The draft is now at 上传资料 with a generated personal undertaking. Next accepts a legal declaration, so explicit user confirmation is pending. Domain entry passing this step does not independently establish domain real-name ownership.
+
+## 2026-11-18 — App Store 地区实查
+
+- 1.0（30）为线上版本。后台 147 个店面显示可用，27 个显示缺少交易商状态，中国大陆店面关闭。
+- Apple 土耳其公开目录按 App ID 可查到 1.0，按「记金」搜索返回该 App，按「Sumly」未返回该 App。
+- Apple 2026-11-16 将备案号及新增的中国大陆声明移至「App 合规」。两项声明的填写依据为实际提供的 App 功能。参见 [Apple 合规说明](https://developer.apple.com/help/app-store-connect/manage-compliance-information/view-china-mainland-compliance-information)。
