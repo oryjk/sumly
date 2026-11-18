@@ -10,3 +10,7 @@
 - App Store Connect 已保存 ICP 备案号。按 App 现有功能填写的生成式内容和安全评估声明均显示有效。
 - Apple 已接收签名 IPA。上传任务 `e36832f8-91a7-44d6-9a28-112c7b2f1cc8`，恢复记录位于本机 `build/ipa-b33/Sumly.asc-upload-state.json`。
 - App Store 版本记录 `26713c4c-0234-47e0-b441-16303bb8ea84`。已核对继承的 4 张截图，已保存更新说明和审核操作路径。
+- Apple 构建 `e36832f8-91a7-44d6-9a28-112c7b2f1cc8` 为 `VALID`，仅在内部「测试」组，内部状态 `IN_BETA_TESTING`。
+- App Review 提交 `f76c74f0-4c43-4973-8e1f-75c5f017a237` 已进入 `WAITING_FOR_REVIEW`。版本构建关联为 33，发布选项为审核通过后自动发布到已选地区。
+- 已核对签名包 `MinimumOSVersion=17.0`。Apple 邮件 `ITMS-90725` 提醒 2027 年 4 月起采用 iOS 27 或更高版本 SDK，当前版本已成功提审。
+- Apple 已清除中国大陆店面的缺少备案号提示。该店面当前仍关闭，待 1.0.1 获准后开启。
