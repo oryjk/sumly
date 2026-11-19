@@ -14,3 +14,9 @@
 - App Review 提交 `f76c74f0-4c43-4973-8e1f-75c5f017a237` 已进入 `WAITING_FOR_REVIEW`。版本构建关联为 33，发布选项为审核通过后自动发布到已选地区。
 - 已核对签名包 `MinimumOSVersion=17.0`。Apple 邮件 `ITMS-90725` 提醒 2027 年 4 月起采用 iOS 27 或更高版本 SDK，当前版本已成功提审。
 - Apple 已清除中国大陆店面的缺少备案号提示。该店面当前仍关闭，待 1.0.1 获准后开启。
+
+## 2026-11-19 中国大陆分发
+
+- App Review 提交状态 `COMPLETE`。1.0.1（33）已通过审核并进入 `READY_FOR_DISTRIBUTION`。
+- 开放前已核对 `origin/codex/app-store-1-0` 的 `90d1af73afb5bb179ba626255da1d4834cbf05dc` 包含源码提交 `fb947b1710fbc1436bb6167e6347730034250d9b`。
+- 已将中国大陆店面设为可分发。08:35（北京时间）复查时，Apple 正在处理地区变更，国区公开目录尚无记录，商品页仍返回 404。

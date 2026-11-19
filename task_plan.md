@@ -51,4 +51,5 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - [x] 推送 1.0.1（33）源码和版本记录，核对远端提交。
 - [x] 在 Apple 后台保存备案号及两项中国大陆合规声明。
 - [x] 确认 Apple 构建处理完成，分发至内部「测试」并提交正式审核。
-- [ ] 审核通过后开放中国大陆店面，核对公开产品页。
+- [x] 1.0.1 审核通过后开放中国大陆店面。
+- [ ] 核对中国大陆店面的公开产品页和可下载状态。
