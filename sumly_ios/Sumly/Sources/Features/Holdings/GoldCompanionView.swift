@@ -43,7 +43,7 @@ struct GoldCompanionView: View {
         }
         .tint(GoldTheme.gold)
         .sheet(isPresented: $showLogin) { AuthenticationSheet(session: session) }
-        .sheet(isPresented: $showChanlun) {
+        .fullScreenCover(isPresented: $showChanlun) {
             if let configuration = ChanlunWebConfiguration.current {
                 ChanlunWebPage(configuration: configuration, session: session)
             }

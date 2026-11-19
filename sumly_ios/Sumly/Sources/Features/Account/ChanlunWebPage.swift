@@ -65,6 +65,8 @@ private final class ChanlunExchangeDelegate: NSObject, URLSessionTaskDelegate {
         webView = WKWebView(frame: .zero, configuration: webConfiguration)
         super.init()
         webView.navigationDelegate = self
+        // The H5 tab bar handles the bottom safe area through viewport-fit=cover.
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
     }
 
     func open(using session: AuthSession) async throws {
@@ -152,6 +154,7 @@ struct ChanlunWebPage: View {
         NavigationStack {
             ZStack {
                 ChanlunWebContent(webView: webSession.webView)
+                    .ignoresSafeArea(.container, edges: .bottom)
                     .opacity(webSession.loading || webSession.failed ? 0 : 1)
                 if webSession.loading {
                     ProgressView("正在打开禅观…")
@@ -166,7 +169,16 @@ struct ChanlunWebPage: View {
             .foregroundStyle(GoldTheme.text)
             .navigationTitle("禅观")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+            .toolbarBackground(GoldTheme.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: {
+                        Label("返回", systemImage: "chevron.left")
+                    }
+                    .accessibilityIdentifier("chanlun.back")
+                }
+            }
         }
         .task(id: attempt) {
             do { try await webSession.open(using: session) }
