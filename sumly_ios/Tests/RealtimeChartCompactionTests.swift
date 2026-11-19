@@ -19,6 +19,7 @@ private struct FlatRealtimeFixture: GoldPriceServicing, GoldQuoteServicing, Gold
     let samples = (0...240).map { MarketChartPoint(date: start.addingTimeInterval(Double($0) * 5), price: 900) }
     let service = FlatRealtimeFixture(samples: samples)
     let model = MarketHomeViewModel(basis: .domestic, dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     #expect(model.visiblePoints == [samples[0], samples[240]])
     #expect(model.points == samples)
@@ -97,6 +98,7 @@ private struct FlatRealtimeFixture: GoldPriceServicing, GoldQuoteServicing, Gold
         let samples = values.enumerated().map { MarketChartPoint(date: start.addingTimeInterval(Double($0.offset) * 5), price: $0.element) }
         let service = FlatRealtimeFixture(samples: samples)
         let model = MarketHomeViewModel(basis: .domestic, dailyService: service, quoteService: service, realtimeService: service)
+        model.range = .realtime
         await model.refresh()
         if name == "zoomed" { model.accessibleZoom(4) }
         if name == "selected" { model.selectChart(at: 0.5) }

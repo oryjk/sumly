@@ -8,14 +8,17 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/credentials"
+	"gitee.com/oryjk/sumly/sumly_go/internal/auth/domain"
 	jwt "github.com/golang-jwt/jwt/v5"
 )
 
@@ -86,6 +89,49 @@ func TestProviderMissingConfiguration(t *testing.T) {
 	}
 	if (SMTP{}).Enabled() {
 		t.Fatal("SMTP enabled")
+	}
+}
+
+func TestAppleTestCredentialExchangesCodeButCannotRevokeAuthorization(t *testing.T) {
+	signer, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crypto, _ := credentials.New(strings.Repeat("s", 32))
+	secretFor := func(subject string, expiry time.Time) string {
+		t.Helper()
+		token := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.RegisteredClaims{
+			Subject: subject, Audience: jwt.ClaimStrings{appleIssuer}, ExpiresAt: jwt.NewNumericDate(expiry),
+		})
+		secret, err := token.SignedString(signer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return secret
+	}
+	secret := secretFor("app.id", time.Now().Add(time.Hour))
+	client := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		if err := r.ParseForm(); err != nil || r.URL.Path != "/auth/token" || r.Form.Get("client_secret") != secret {
+			t.Fatal("unexpected Apple request")
+		}
+		return response(200, "{}"), nil
+	})}
+	a := NewApple(AppleConfig{ClientID: "app.id", TestClientSecret: secret}, client, crypto)
+	if !a.Enabled() {
+		t.Fatal("test client disabled")
+	}
+	res, err := a.post(context.Background(), "/auth/token", url.Values{"code": {"authorization-code"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if err := a.Revoke(context.Background(), "apple-refresh"); !errors.Is(err, domain.ErrUnavailable) {
+		t.Fatal("test authorization must not be revoked", err)
+	}
+	for _, invalid := range []string{secretFor("app.id", time.Now().Add(-time.Minute)), secretFor("another.app", time.Now().Add(time.Hour)), "invalid"} {
+		if NewApple(AppleConfig{ClientID: "app.id", TestClientSecret: invalid}, client, crypto).Enabled() {
+			t.Fatal("invalid test credential enabled Apple login")
+		}
 	}
 }
 

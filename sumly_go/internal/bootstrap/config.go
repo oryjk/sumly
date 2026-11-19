@@ -66,7 +66,7 @@ func LoadConfig() (Config, error) {
 		}
 	}
 	var err error
-	config.Native, err = loadNativeConfig()
+	config.Native, err = loadNativeConfig(config.AppEnvironment)
 	if err != nil {
 		return Config{}, err
 	}

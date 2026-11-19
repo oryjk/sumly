@@ -142,6 +142,7 @@ struct AuthenticationSheet: View {
                 .clipShape(GoldTheme.rangeShape)
                 .disabled(!ready || model.busy)
                 .opacity(ready && !model.busy ? 1 : 0.5)
+                .accessibilityIdentifier("auth.appleSignIn")
                 if !ready && !model.appleInProgress {
                     Button("准备 Apple 安全登录") { Task { await model.prepareApple() } }
                         .font(.footnote).foregroundStyle(GoldTheme.gold)

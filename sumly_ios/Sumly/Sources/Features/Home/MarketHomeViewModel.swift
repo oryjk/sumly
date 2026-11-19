@@ -61,7 +61,7 @@ enum MarketRange: String, CaseIterable {
 
 @MainActor @Observable
 final class MarketHomeViewModel {
-    var range: MarketRange = .realtime { didSet { resetViewport() } }
+    var range: MarketRange = .quarter { didSet { resetViewport() } }
     var selectedDate: Date? {
         didSet {
             selectionExpiryTask?.cancel()

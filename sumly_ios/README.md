@@ -127,11 +127,13 @@ SIMCTL_CHILD_SUMLY_CHANLUN_WEB_URL=http://127.0.0.1:18173/chanlun/ \
   xcrun simctl launch booted com.oryjk.sumly
 ```
 
-登录隔离实例的测试账号后，从「我的 → 打开禅观」进入。测试账号密码和服务间专用密钥留在 local233 的私有测试环境文件中。15 分钟网页会话到期后，关闭并重新打开禅观即可重新认证。
+登录隔离实例的测试账号后，从「金伴 → 禅观」进入。测试账号密码和服务间专用密钥留在 local233 的私有测试环境文件中。15 分钟网页会话到期后，关闭并重新打开禅观即可重新认证。
 
 正式版入口需在公网 HTTPS、后台会员权益校验和授权规则确认后启用。反代保留 `/chanlun/` 子路径，网页与浏览器 API 使用同源，签发票据的服务端接口走私网。
 
-公网联调使用 `https://ai.oryjk.cn:82/sumly-chanlun-dev/`。`InternalTest` 配置连接同一地址下的隔离记金 API，并使用独立的凭据、持仓和行情缓存。安装内部 TestFlight 包后，用测试账号登录，再点击「我的 → 打开禅观」。此测试入口只核验记金身份，正式版的会员授权仍需单独接入。
+公网联调使用 `https://ai.oryjk.cn:82/sumly-chanlun-dev/`。`InternalTest` 配置连接同一地址下的隔离记金 API，并使用独立的凭据、持仓和行情缓存。安装内部 TestFlight 包后，可在「我的」使用 Apple 或联调邮箱账号登录，再点击「金伴 → 禅观」。金伴的「记金」入口打开原账本和持仓页。此测试入口只核验记金身份，正式版的会员授权仍需单独接入。
+
+联调后端可在 `APP_ENV=test` 时通过 `APPLE_TEST_CLIENT_SECRET_FILE` 读取专用限时 Apple client secret。正式签名私钥留在京东云，联调服务继续使用隔离的数据库和会话。联调服务禁用 Apple 授权撤销，避免通过共享 App ID 影响正式账号。凭证过期前在私有环境更新文件并重启联调 API。
 
 ### 记金日历
 

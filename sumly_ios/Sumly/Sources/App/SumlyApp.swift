@@ -31,9 +31,10 @@ struct SumlyApp: App {
 private struct GoldRootView: View {
     let guestContainer: ModelContainer
     @State private var session = AuthSession(service: NativeAuthService(baseURL: BackendGoldPriceService.defaultBaseURL), store: KeychainCredentialStore())
+    @State private var selectedTab = HoldingsDesignPreview.isEnabled ? 1 : 0
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
-        HoldingWorkspaceShell(session: session, guestContainer: guestContainer)
+        HoldingWorkspaceShell(session: session, guestContainer: guestContainer, selectedTab: $selectedTab)
             .id(session.user?.id ?? 0)
             .task {
                 await session.restore()
@@ -57,12 +58,13 @@ private struct GoldRootView: View {
 private struct HoldingWorkspaceShell: View {
     let session: AuthSession
     let guestContainer: ModelContainer
+    @Binding var selectedTab: Int
     @State private var cloud: HoldingsCloud?
     @State private var storageError: String?
     var body: some View {
         Group {
             if let cloud {
-                GoldWorkspaceView(session: session, cloud: cloud)
+                GoldWorkspaceView(session: session, cloud: cloud, selectedTab: $selectedTab)
                     .modelContainer(cloud.container)
                     .defaultAppStorage(cloud.defaults)
             } else if let storageError {
@@ -84,7 +86,7 @@ private struct HoldingWorkspaceShell: View {
 private struct GoldWorkspaceView: View {
     @Bindable var session: AuthSession
     let cloud: HoldingsCloud
-    @State private var selectedTab = HoldingsDesignPreview.isEnabled ? 1 : 0
+    @Binding var selectedTab: Int
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("market.basis") private var marketBasisRaw = GoldMarketBasis.domestic.rawValue
     @AppStorage("holdings.currentBook") private var currentBook = "默认账本"
@@ -114,8 +116,7 @@ private struct GoldWorkspaceView: View {
                     AccountView(session: session, cloud: cloud)
                         .padding(.bottom, 80 * scale)
                 } else {
-                    HoldingsView(marketBasis: marketBasis, cloud: cloud)
-                        .id(marketBasis.rawValue)
+                    GoldCompanionView(marketBasis: marketBasis, cloud: cloud, session: session)
                         .padding(.bottom, 80 * scale)
                 }
                 tabBar(scale: scale)
@@ -143,7 +144,7 @@ private struct GoldWorkspaceView: View {
                 GoldTabBarShape().fill(GoldTheme.card)
                 tabItem("动态", symbol: "house.fill", index: 0, scale: scale)
                     .position(x: width * 0.1, y: 42 * scale)
-                tabItem("记金", symbol: "bag.fill", index: 1, scale: scale)
+                tabItem("金伴", symbol: "bag.fill", index: 1, scale: scale)
                     .position(x: width * 0.3, y: 42 * scale)
                 tabItem("日历", symbol: "calendar", index: 2, scale: scale)
                     .position(x: width * 0.7, y: 42 * scale)
