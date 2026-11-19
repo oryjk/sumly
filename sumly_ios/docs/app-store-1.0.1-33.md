@@ -19,4 +19,5 @@
 
 - App Review 提交状态 `COMPLETE`。1.0.1（33）已通过审核并进入 `READY_FOR_DISTRIBUTION`。
 - 开放前已核对 `origin/codex/app-store-1-0` 的 `90d1af73afb5bb179ba626255da1d4834cbf05dc` 包含源码提交 `fb947b1710fbc1436bb6167e6347730034250d9b`。
-- 已将中国大陆店面设为可分发。08:35（北京时间）复查时，Apple 正在处理地区变更，国区公开目录尚无记录，商品页仍返回 404。
+- 已开放中国大陆店面。08:37（北京时间）App Store Connect 状态变为 `AVAILABLE`。
+- 08:41（北京时间）国区公开目录仍无记录，商品页返回 404，实际下载待确认。
