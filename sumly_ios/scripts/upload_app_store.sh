@@ -75,12 +75,25 @@ if [[ -f "$EXPORT_PATH/Sumly.asc-upload-state.json" ]]; then
 fi
 rm -rf "$ARCHIVE_PATH" "$EXPORT_PATH"
 
+ARCHIVE_CONFIGURATION=Release
+EXPORT_OPTIONS="$SCRIPT_DIR/ExportOptions-upload.plist"
+if [[ "${SUMLY_UPLOAD_INTERNAL_ONLY:-0}" == "1" ]]; then
+  ARCHIVE_CONFIGURATION=InternalTest
+  EXPORT_OPTIONS="$(mktemp -t sumly-export-internal)"
+  trap 'rm -f "$EXPORT_OPTIONS"' EXIT
+  cp "$SCRIPT_DIR/ExportOptions-upload.plist" "$EXPORT_OPTIONS"
+  /usr/libexec/PlistBuddy -c 'Add :testFlightInternalTestingOnly bool true' "$EXPORT_OPTIONS"
+fi
+
 echo "Archiving Sumly ${VERSION} (${BUILD})..."
-xcodebuild   -project Sumly.xcodeproj   -scheme Sumly   -configuration Release   -destination 'generic/platform=iOS'   -archivePath "$ARCHIVE_PATH"   -allowProvisioningUpdates   -authenticationKeyPath "$ASC_KEY_PATH"   -authenticationKeyID "$ASC_KEY_ID"   -authenticationKeyIssuerID "$ASC_ISSUER_ID"   archive
+xcodebuild -project Sumly.xcodeproj -scheme Sumly -configuration "$ARCHIVE_CONFIGURATION" \
+  -destination 'generic/platform=iOS' -archivePath "$ARCHIVE_PATH" -allowProvisioningUpdates \
+  -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" \
+  -authenticationKeyIssuerID "$ASC_ISSUER_ID" archive
 
 echo "Exporting locally signed Sumly ${VERSION} (${BUILD})..."
 xcodebuild -exportArchive -archivePath "$ARCHIVE_PATH" -exportPath "$EXPORT_PATH" \
-  -exportOptionsPlist "$SCRIPT_DIR/ExportOptions-upload.plist"
+  -exportOptionsPlist "$EXPORT_OPTIONS"
 
 upload_ipa "$EXPORT_PATH/Sumly.ipa" "$VERSION" "$BUILD"
 echo "Upload and processing completed for Sumly ${VERSION} (${BUILD})."

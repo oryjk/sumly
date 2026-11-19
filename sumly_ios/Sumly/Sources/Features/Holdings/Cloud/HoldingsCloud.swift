@@ -27,11 +27,11 @@ import SwiftData
         self.session = session; self.guestContainer = guestContainer; self.service = service
         userID = session.user?.id
         if let userID {
-            let root = try directory ?? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("AccountHoldings", isDirectory: true)
+            let root = try directory ?? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("AccountHoldings" + SumlyInternalTestEnvironment.storageSuffix, isDirectory: true)
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             let file = root.appendingPathComponent("user-\(userID).store")
             container = try ModelContainer(for: HoldingRecord.self, configurations: ModelConfiguration(url: file))
-            guard let scoped = UserDefaults(suiteName: "com.oryjk.sumly.holdings.user-\(userID)") else { throw HoldingCloudError.malformed }
+            guard let scoped = UserDefaults(suiteName: "com.oryjk.sumly.holdings.user-\(userID)" + SumlyInternalTestEnvironment.storageSuffix) else { throw HoldingCloudError.malformed }
             defaults = scoped
             let metadata = root.appendingPathComponent("user-\(userID)-base.json")
             metadataURL = metadata
@@ -40,7 +40,7 @@ import SwiftData
                 guard base.isValid else { throw HoldingCloudError.malformed }
             } else { base = .empty }
         } else {
-            container = guestContainer; defaults = .standard; metadataURL = nil; base = .empty
+            container = guestContainer; defaults = SumlyInternalTestEnvironment.defaults; metadataURL = nil; base = .empty
         }
     }
     var status: String {
@@ -170,7 +170,7 @@ import SwiftData
             let guest = try guestContainer.mainContext.fetch(FetchDescriptor<HoldingRecord>())
             for record in guest where !existing.contains(record.id) { context.insert(HoldingCloudRecord(record).makeRecord()) }
             try context.save()
-            let books = (UserDefaults.standard.string(forKey: "holdings.books") ?? "默认账本").components(separatedBy: "\n")
+            let books = (SumlyInternalTestEnvironment.defaults.string(forKey: "holdings.books") ?? "默认账本").components(separatedBy: "\n")
             defaults.set(Array(Set(try document().books + books)).sorted().joined(separator: "\n"), forKey: "holdings.books")
             await sync()
         } catch { container.mainContext.rollback(); notice = error.localizedDescription }

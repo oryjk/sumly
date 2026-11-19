@@ -19,7 +19,7 @@ import Security
     // Only a non-secret logout tombstone lives in defaults, never tokens or user data.
     private let logoutMarker = "native-auth-local-logout"
 
-    init(defaults: UserDefaults = .standard, keychain: any KeychainDataStoring = SystemKeychainDataStore()) {
+    init(defaults: UserDefaults = SumlyInternalTestEnvironment.defaults, keychain: any KeychainDataStoring = SystemKeychainDataStore()) {
         self.defaults = defaults
         self.keychain = keychain
     }
@@ -44,7 +44,8 @@ import Security
 @MainActor final class SystemKeychainDataStore: KeychainDataStoring {
     private var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: "com.oryjk.sumly.native-auth", kSecAttrAccount as String: "session-v1"]
+         kSecAttrService as String: "com.oryjk.sumly.native-auth" + SumlyInternalTestEnvironment.storageSuffix,
+         kSecAttrAccount as String: "session-v1"]
     }
     func read() throws -> Data? {
         var query = query

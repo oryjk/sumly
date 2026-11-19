@@ -10,6 +10,7 @@ import (
 
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/application"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/domain"
+	"gitee.com/oryjk/sumly/sumly_go/internal/auth/ports"
 	sharedhttp "gitee.com/oryjk/sumly/sumly_go/internal/shared/http"
 	"github.com/gin-gonic/gin"
 )
@@ -18,11 +19,16 @@ type NativeHandler struct {
 	accounts application.Accounts
 	sessions application.Sessions
 	wechat   *application.WechatSessions
+	chanlun  *ChanlunHandler
 }
 
 // NewNativeHandler 构造原生认证 handler。wechat 为 nil 时不注册微信会话路由。
 func NewNativeHandler(a application.Accounts, s application.Sessions, wechat *application.WechatSessions) *NativeHandler {
 	return &NativeHandler{accounts: a, sessions: s, wechat: wechat}
+}
+
+func (h *NativeHandler) EnableChanlunBridge(tickets ports.ChanlunTicketIssuer) {
+	h.chanlun = NewChanlunHandler(h.sessions, tickets)
 }
 
 type nativeRequest struct {
@@ -69,6 +75,9 @@ func nativeError(c *gin.Context, e error) {
 	c.JSON(status, sharedhttp.Response[any]{Code: status, Message: message})
 }
 func (h *NativeHandler) RegisterRoutes(g *gin.RouterGroup) {
+	if h.chanlun != nil {
+		h.chanlun.RegisterRoutes(g)
+	}
 	g.GET("/auth/capabilities", func(c *gin.Context) { c.JSON(200, sharedhttp.Success(h.accounts.Capabilities())) })
 	g.POST("/auth/apple/notifications", h.appleNotification)
 	for _, path := range []string{"apple/challenge", "apple/login", "phone/code", "phone/login", "email/code", "email/register", "email/login", "email/reset-password", "refresh", "logout"} {

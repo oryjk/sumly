@@ -74,3 +74,16 @@
 ## 2026-11-19 — 中国大陆店面
 
 - Apple 已通过 1.0.1（33）的正式审核。核对远端源码后，已打开中国大陆地区分发。08:37（北京时间）Apple 后台显示可用。08:41 国区公开商品页尚未出现。
+
+## 2026-11-19 — 禅观 WebView 本地联调
+
+- 记金 Go 后端按实时会话查询用户，直连禅观申请 60 秒单次票据。禅观签发短期 HttpOnly Cookie，跟踪数据使用 `sumly:<user_id>`。iOS Debug 在独立 WebKit 会话中兑换并加载 H5。
+- 两个隔离测试账户通过真实记金邮箱登录、票据兑换、禅观身份和跟踪接口检验。访客和已撤销的会话无法领票，重复兑换被拒绝。iPhone 17 Pro 模拟器已通过真实 WebKit 端到端测试。
+- 禅观源码在 local233 的 `/home/betalpha/projects/chanlun-sumly-webview` 工作树，基于 `676d881`。私有联调实例的 Go API 和 H5 都仅监听回环，通过 SSH 测试。
+- 本次交付为本地联调。生产入口需配置 HTTPS，若面向付费会员需接入服务端权益核验。
+
+## 2026-11-19 — 禅观公网免登测试
+
+- `ai.oryjk.cn:82/sumly-chanlun-dev/` 已通过 local109 和 local233 两级 Nginx。配置比对确认旧规则逐字保留，Android 登录和更新入口实测 HTTP 200。
+- HTTPS 实测通过记金测试账户登录、短期票据签发、兑换与重复兑换拒绝。Cookie 为 `Secure`、`HttpOnly`，路径限定为 `/sumly-chanlun-dev/`，签发接口公网返回 404。
+- `InternalTest` 连接独立测试后端，隔离 Keychain、持仓文件、用户设置和行情缓存。iPhone 17 Pro 模拟器通过公网真实 WebView 及同源限制测试。禅观依赖源码 `2cafc966a255de04c170807e1ba6c6f4e24b68ae` 已推送。

@@ -20,11 +20,13 @@ import (
 )
 
 type NativeConfig struct {
-	Enabled        bool
-	Apple          providers.AppleConfig
-	SMS            providers.SMS
-	SMTP           providers.SMTP
-	TrustedProxies []string
+	Enabled         bool
+	Apple           providers.AppleConfig
+	SMS             providers.SMS
+	SMTP            providers.SMTP
+	TrustedProxies  []string
+	ChanlunEndpoint string
+	ChanlunSecret   string
 }
 
 func loadNativeConfig() (NativeConfig, error) {
@@ -41,6 +43,8 @@ func loadNativeConfig() (NativeConfig, error) {
 	if !c.Enabled {
 		return c, nil
 	}
+	c.ChanlunEndpoint = os.Getenv("CHANLUN_TICKET_URL")
+	c.ChanlunSecret = os.Getenv("CHANLUN_BRIDGE_SECRET")
 	c.Apple = providers.AppleConfig{ClientID: os.Getenv("APPLE_CLIENT_ID"), TeamID: os.Getenv("APPLE_TEAM_ID"), KeyID: os.Getenv("APPLE_KEY_ID")}
 	if path := os.Getenv("APPLE_PRIVATE_KEY_FILE"); path != "" {
 		b, e := os.ReadFile(path)
@@ -98,5 +102,13 @@ func buildNative(config Config, pool *pgxpool.Pool, tokens *jwt.Service) (*authh
 		}
 	}
 	accounts := application.Accounts{Store: store, Crypto: crypto, Codes: codes, Sessions: sessions, Apple: apple, Wechat: wechat, DummyHash: dummy}
-	return authhttp.NewNativeHandler(accounts, sessions, wechat), authhttp.NewMiddleware(jwt.LiveTokens{Service: tokens, Store: store}), nil
+	handler := authhttp.NewNativeHandler(accounts, sessions, wechat)
+	if config.AppEnvironment != EnvironmentProduction && (config.Native.ChanlunEndpoint != "" || config.Native.ChanlunSecret != "") {
+		bridge, err := providers.NewChanlunBridge(config.Native.ChanlunEndpoint, config.Native.ChanlunSecret)
+		if err != nil {
+			return nil, middleware, err
+		}
+		handler.EnableChanlunBridge(bridge)
+	}
+	return handler, authhttp.NewMiddleware(jwt.LiveTokens{Service: tokens, Store: store}), nil
 }

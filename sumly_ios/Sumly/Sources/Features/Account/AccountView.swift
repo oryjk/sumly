@@ -5,6 +5,7 @@ struct AccountView: View {
     var cloud: HoldingsCloud? = nil
     @State private var showSettings = false
     @State private var showLogin = false
+    @State private var showChanlun = false
     @State private var reauthentication: AccountDeletionIntent?
     @State private var deletionConfirmation: AccountDeletionIntent?
     @State private var confirmLogout = false
@@ -21,6 +22,11 @@ struct AccountView: View {
                 }
         }
         .tint(GoldTheme.gold)
+        .sheet(isPresented: $showChanlun) {
+            if let configuration = ChanlunWebConfiguration.current {
+                ChanlunWebPage(configuration: configuration, session: session)
+            }
+        }
     }
 
     private var accountContent: some View {
@@ -29,6 +35,9 @@ struct AccountView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("我的").font(.largeTitle.bold()).foregroundStyle(GoldTheme.text)
+                        if SumlyInternalTestEnvironment.chanlunURL != nil {
+                            Text("禅观联调 · 请使用测试账号").font(.caption).foregroundStyle(GoldTheme.goldSoft)
+                        }
                         Text("记下每一克，积累每一天。")
                             .font(.subheadline).foregroundStyle(GoldTheme.textSecondary)
                     }
@@ -64,6 +73,12 @@ struct AccountView: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).goldCard(padding: 24)
                 VStack(alignment: .leading, spacing: 16) {
+                    if session.user != nil, ChanlunWebConfiguration.current != nil {
+                        Button { showChanlun = true } label: {
+                            Label("打开禅观", systemImage: "chart.line.uptrend.xyaxis")
+                        }
+                        .accessibilityIdentifier("account.chanlun")
+                    }
                     Link(destination: URL(string: "https://oryjk.cn/sumly/privacy")!) {
                         Label("隐私政策", systemImage: "hand.raised")
                     }

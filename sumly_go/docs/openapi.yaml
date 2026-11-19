@@ -595,6 +595,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/NativeUserResponse"
 
+  /api/v1/app/auth/chanlun/session:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeChanlunSession"
+      summary: "Issue a one-time Chanlun WebView ticket for a live native session. Development and test only."
+      security: [{"bearerAuth": []}]
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Single-use ticket valid for 60 seconds"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+                required: ["code", "message", "data"]
+                properties:
+                  code: {type: "integer", enum: [0]}
+                  message: {type: "string"}
+                  data:
+                    type: "object"
+                    required: ["code"]
+                    properties:
+                      code: {type: "string", minLength: 43, maxLength: 43}
+
   /api/v1/app/auth/account:
     delete:
       tags: ["App Auth"]

@@ -1,4 +1,8 @@
 name: Sumly
+configs:
+  Debug: debug
+  Release: release
+  InternalTest: release
 options:
   bundleIdPrefix: com.oryjk
   createIntermediateGroups: true
@@ -25,6 +29,11 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "Apple Distribution"
           PROVISIONING_PROFILE_SPECIFIER: "Sumly API App Store Distribution"
+        InternalTest:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+          PROVISIONING_PROFILE_SPECIFIER: "Sumly API App Store Distribution"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) SUMLY_CHANLUN_INTERNAL_TEST"
     entitlements:
       path: Sumly/Support/Sumly.entitlements
       properties:
@@ -35,8 +44,8 @@ targets:
       properties:
         CFBundleDisplayName: 记金
         CFBundleDevelopmentRegion: zh-Hans
-        CFBundleShortVersionString: "1.0.1"
-        CFBundleVersion: "33"
+        CFBundleShortVersionString: "1.0.2"
+        CFBundleVersion: "34"
         UILaunchScreen:
           UIColorName: NeoBackground
         UISupportedInterfaceOrientations:
