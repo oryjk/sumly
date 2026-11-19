@@ -66,3 +66,11 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - [x] 通过 local109 和 local233 增加独立 HTTPS 测试路由，保护服务端签发接口，复查 Android。
 - [x] 用 iPhone 模拟器在公网 HTTPS 上验证内部构建。
 - [x] 推送源码，上传 1.0.2（34），确认 App Store Connect 显示内部「测试」可安装。
+
+## 2026-11-19 — 禅观正式入口和记金 App Store 版本
+
+- [x] 核对正式网页、免登接口及部署拓扑。网页由京东云提供，生产禅观 API 在 peiqian，现有兑换接口返回 404。
+- [ ] 基于现网版本接入正式禅观免登，为记金生产后端配置私有签发，保留正式账号和现有网页功能。
+- [ ] 切换 iOS 入口与贵州茅台 30 分钟参数，通过正式域名核对免登、行情页和两端登录回归。
+- [ ] 提交并推送软件源码和版本记录，上传可正式提审的构建，验证内部 TestFlight 可用。
+- [ ] 下线 local233 专用 iOS 联调环境并复查 Android 通道。提交 App Store 审核并配置通过后自动发布。

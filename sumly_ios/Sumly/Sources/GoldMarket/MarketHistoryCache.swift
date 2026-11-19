@@ -8,7 +8,7 @@ extension Notification.Name {
 /// Dedicated public market cache. Neither SwiftData holdings nor authentication
 /// storage are opened here. A generation prevents pre-clear requests resurrecting data.
 actor MarketHistoryCache {
-    static let shared = MarketHistoryCache(directory: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "SumlyMarketHistory" + SumlyInternalTestEnvironment.storageSuffix))
+    static let shared = MarketHistoryCache(directory: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "SumlyMarketHistory"))
     private struct Snapshot: Codable {
         let schema: Int
         let scope: String

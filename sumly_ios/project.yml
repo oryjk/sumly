@@ -33,7 +33,6 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "Apple Distribution"
           PROVISIONING_PROFILE_SPECIFIER: "Sumly API App Store Distribution"
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) SUMLY_CHANLUN_INTERNAL_TEST"
     entitlements:
       path: Sumly/Support/Sumly.entitlements
       properties:
@@ -45,7 +44,7 @@ targets:
         CFBundleDisplayName: 记金
         CFBundleDevelopmentRegion: zh-Hans
         CFBundleShortVersionString: "1.0.2"
-        CFBundleVersion: "36"
+        CFBundleVersion: "37"
         UILaunchScreen:
           UIColorName: NeoBackground
         UISupportedInterfaceOrientations:

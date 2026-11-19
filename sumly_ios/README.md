@@ -113,27 +113,11 @@ Tests/                      # Swift Testing 单测
 
 Debug 可通过启动参数 `--holdings-design-preview` 对照参考图：只使用独立的内存数据库和示例报价，不写入真实持仓。正常启动不加载示例。
 
-## 禅观 WebView 本地联调
+## 禅观 WebView
 
-local233 的隔离实例将记金 Go API 绑定在 `127.0.0.1:18190`，禅观 H5 及 API 绑定在 `127.0.0.1:18173`。禅观联调源码位于 `/home/betalpha/projects/chanlun-sumly-webview`。用 SSH 将两端口转到 Mac，然后在专用模拟器安装并启动 Debug 构建：
+登录记金后，从「金伴 → 禅观」进入正式网站 `https://match.oryjk.cn/chanlun/?secid=600519.SH&timeframe=30m&view=market`。网页复用记金登录身份，15 分钟网页会话到期后可返回金伴重新打开。金伴的「记金」入口打开原账本和持仓页。
 
-```bash
-ssh -N -L 18190:127.0.0.1:18190 -L 18173:127.0.0.1:18173 local233
-```
-
-```bash
-SIMCTL_CHILD_SUMLY_LOCAL_API_BASE_URL=http://127.0.0.1:18190/api/v1 \
-SIMCTL_CHILD_SUMLY_CHANLUN_WEB_URL=http://127.0.0.1:18173/chanlun/ \
-  xcrun simctl launch booted com.oryjk.sumly
-```
-
-登录隔离实例的测试账号后，从「金伴 → 禅观」进入。测试账号密码和服务间专用密钥留在 local233 的私有测试环境文件中。15 分钟网页会话到期后，关闭并重新打开禅观即可重新认证。
-
-正式版入口需在公网 HTTPS、后台会员权益校验和授权规则确认后启用。反代保留 `/chanlun/` 子路径，网页与浏览器 API 使用同源，签发票据的服务端接口走私网。
-
-公网联调使用 `https://ai.oryjk.cn:82/sumly-chanlun-dev/`。`InternalTest` 配置连接同一地址下的隔离记金 API，并使用独立的凭据、持仓和行情缓存。安装内部 TestFlight 包后，可在「我的」使用 Apple 或联调邮箱账号登录，再点击「金伴 → 禅观」。金伴的「记金」入口打开原账本和持仓页。此测试入口只核验记金身份，正式版的会员授权仍需单独接入。
-
-联调后端可在 `APP_ENV=test` 时通过 `APPLE_TEST_CLIENT_SECRET_FILE` 读取专用限时 Apple client secret。正式签名私钥留在京东云，联调服务继续使用隔离的数据库和会话。联调服务禁用 Apple 授权撤销，避免通过共享 App ID 影响正式账号。凭证过期前在私有环境更新文件并重启联调 API。
+行情参数只用于加载网页。兑换请求发送到同源的 `/chanlun/api/auth/sumly/session`，票据由生产后端经私有链路签发。Debug 构建仍可使用 `SUMLY_LOCAL_API_BASE_URL` 和 `SUMLY_CHANLUN_WEB_URL` 指向手动启动的本机服务。
 
 ### 记金日历
 

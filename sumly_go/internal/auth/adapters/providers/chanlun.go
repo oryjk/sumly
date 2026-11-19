@@ -27,10 +27,13 @@ func NewChanlunBridge(endpoint, secret string) (*ChanlunBridge, error) {
 		return nil, errors.New("invalid Chanlun bridge configuration")
 	}
 	ip := net.ParseIP(u.Hostname())
-	if u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || ip.IsLoopback())) {
-		return nil, errors.New("Chanlun bridge requires HTTPS or loopback HTTP")
+	if u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || ip.IsLoopback() || ip.IsPrivate())) {
+		return nil, errors.New("Chanlun bridge requires HTTPS or an explicit private HTTP address")
 	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil // Ticket minting stays on the configured direct connection.
 	return &ChanlunBridge{endpoint: u.String(), secret: secret, client: http.Client{
+		Transport:     transport,
 		Timeout:       6 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}, nil

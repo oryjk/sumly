@@ -29,9 +29,6 @@ struct AccountView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("我的").font(.largeTitle.bold()).foregroundStyle(GoldTheme.text)
-                        if SumlyInternalTestEnvironment.chanlunURL != nil {
-                            Text("禅观联调环境").font(.caption).foregroundStyle(GoldTheme.goldSoft)
-                        }
                         Text("记下每一克，积累每一天。")
                             .font(.subheadline).foregroundStyle(GoldTheme.textSecondary)
                     }

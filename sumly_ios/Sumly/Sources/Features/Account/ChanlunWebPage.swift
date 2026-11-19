@@ -3,44 +3,68 @@ import WebKit
 
 struct ChanlunWebConfiguration: Equatable, Sendable {
     let pageURL: URL
+    private let baseURL: URL
 
     static let current: Self? = {
-        if let url = SumlyInternalTestEnvironment.chanlunURL { return Self(rawURL: url.absoluteString) }
         #if DEBUG
         if let raw = ProcessInfo.processInfo.environment["SUMLY_CHANLUN_WEB_URL"] {
             return Self(rawURL: raw)
         }
         #endif
-        return nil
+        return Self(rawURL: "https://match.oryjk.cn/chanlun/?secid=600519.SH&timeframe=30m&view=market")
     }()
 
     init?(rawURL: String) {
         guard var components = URLComponents(string: rawURL),
-              let host = components.host, !host.isEmpty,
+              let scheme = components.scheme?.lowercased(),
+              let host = components.host?.lowercased(), !host.isEmpty,
               components.user == nil, components.password == nil,
-              components.query == nil, components.fragment == nil else { return nil }
-        if components.scheme != "https" {
+              components.fragment == nil, Self.hasValidPath(components) else { return nil }
+        if scheme != "https" {
             #if DEBUG
-            guard components.scheme == "http", ["localhost", "127.0.0.1"].contains(host) else { return nil }
+            guard scheme == "http", ["localhost", "127.0.0.1"].contains(host) else { return nil }
             #else
             return nil
             #endif
         }
-        if !components.path.hasSuffix("/") { components.path += "/" }
-        guard let url = components.url else { return nil }
-        pageURL = url
+        if components.percentEncodedQuery != nil {
+            let allowedKeys: Set = ["secid", "timeframe", "view"]
+            guard let items = components.queryItems, !items.isEmpty else { return nil }
+            let keys = Set(items.map(\.name))
+            guard keys.count == items.count, keys.isSubset(of: allowedKeys),
+                  items.allSatisfy({ $0.value?.isEmpty == false }) else { return nil }
+        }
+        components.scheme = scheme
+        components.host = host
+        if !components.percentEncodedPath.hasSuffix("/") { components.percentEncodedPath += "/" }
+        guard let pageURL = components.url else { return nil }
+        components.percentEncodedQuery = nil
+        guard let baseURL = components.url else { return nil }
+        self.pageURL = pageURL
+        self.baseURL = baseURL
     }
 
-    var exchangeURL: URL { pageURL.appendingPathComponent("api/auth/sumly/session") }
+    var exchangeURL: URL { baseURL.appendingPathComponent("api/auth/sumly/session") }
 
     func allows(_ url: URL) -> Bool {
-        let defaultPort = pageURL.scheme == "https" ? 443 : 80
-        guard url.scheme == pageURL.scheme, url.host == pageURL.host,
-              (url.port ?? defaultPort) == (pageURL.port ?? defaultPort),
-              url.user == nil, url.password == nil else { return false }
-        guard !url.pathComponents.contains(".."), !url.pathComponents.contains(".") else { return false }
-        let base = pageURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return base.isEmpty || url.path == "/" + base || url.path.hasPrefix("/" + base + "/")
+        let defaultPort = baseURL.scheme == "https" ? 443 : 80
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+              components.scheme?.lowercased() == baseURL.scheme,
+              components.host?.lowercased() == baseURL.host,
+              (components.port ?? defaultPort) == (baseURL.port ?? defaultPort),
+              components.user == nil, components.password == nil,
+              Self.hasValidPath(components) else { return false }
+        let basePath = baseURL.path(percentEncoded: true)
+        let path = components.percentEncodedPath
+        return path == String(basePath.dropLast()) || path.hasPrefix(basePath)
+    }
+
+    private static func hasValidPath(_ components: URLComponents) -> Bool {
+        // Proxies can decode encoded separators before checking the route.
+        let path = components.percentEncodedPath.lowercased()
+        let segments = components.path.split(separator: "/")
+        return !path.contains("%2f") && !path.contains("%5c") && !path.contains("%25") &&
+            !segments.contains(".") && !segments.contains("..")
     }
 }
 
@@ -113,6 +137,10 @@ private final class ChanlunExchangeDelegate: NSObject, URLSessionTaskDelegate {
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse) async -> WKNavigationResponsePolicy {
+        guard let url = navigationResponse.response.url, configuration.allows(url) else {
+            if navigationResponse.isForMainFrame { showError() }
+            return .cancel
+        }
         if navigationResponse.isForMainFrame, let result = navigationResponse.response as? HTTPURLResponse,
            !(200..<300).contains(result.statusCode) {
             showError()

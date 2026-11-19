@@ -8,9 +8,6 @@ struct SumlyApp: App {
     private static let holdingsContainer: ModelContainer = {
         do {
             if HoldingsDesignPreview.isEnabled { return try HoldingsDesignPreview.container() }
-            if SumlyInternalTestEnvironment.chanlunURL != nil {
-                return try ModelContainer(for: HoldingRecord.self, configurations: ModelConfiguration("ChanlunInternalHoldings"))
-            }
             return try ModelContainer(for: HoldingRecord.self)
         } catch {
             fatalError("无法初始化本地持仓存储: \(error)")

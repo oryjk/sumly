@@ -30,7 +30,7 @@ ASC_KEY_PATH=$HOME/.private_keys/AuthKey_<Key ID>.p8
 
 `~/.private_keys/AuthKey_<Key ID>.p8`
 
-禅观公网联调包用 `SUMLY_UPLOAD_INTERNAL_ONLY=1 make upload`。该命令归档 `InternalTest` 配置，并在同一签名导出流程中启用 `testFlightInternalTestingOnly`。普通 `make upload` 仍归档 `Release` 配置。
+需要正式提审的构建使用 `make upload` 归档 `Release` 配置。同一个构建可先分发给内部 TestFlight，再提交审核。专供内测的构建可用 `SUMLY_UPLOAD_INTERNAL_ONLY=1 make upload` 归档 `InternalTest` 并启用 `testFlightInternalTestingOnly`。
 
 建议权限：
 

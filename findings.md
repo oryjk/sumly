@@ -34,3 +34,8 @@
 - 1.0（30）为线上版本。后台 147 个店面显示可用，27 个显示缺少交易商状态，中国大陆店面关闭。
 - Apple 土耳其公开目录按 App ID 可查到 1.0，按「记金」搜索返回该 App，按「Sumly」未返回该 App。
 - Apple 2026-11-16 将备案号及新增的中国大陆声明移至「App 合规」。两项声明的填写依据为实际提供的 App 功能。参见 [Apple 合规说明](https://developer.apple.com/help/app-store-connect/manage-compliance-information/view-china-mainland-compliance-information)。
+# 2026-11-19 禅观正式站切换
+
+- `match.oryjk.cn/chanlun/` 页面正常。该正式站 `/api/auth/sumly/session` 在切换前返回 404。
+- 京东云 nginx 通过 WireGuard 将禅观 API 转到 peiqian `:8001`。peiqian 的生产目录为 `/data/chanlun/releases/20261112-secid`，与 local233 的开发和独立联调服务分开。
+- 生产记金使用京东云 `sumly-backend` 和原有 Apple 登录。独立联调的账号与凭据继续隔离，直到验证生产入口后停止专用进程及转发。
