@@ -7,3 +7,6 @@
 - peiqian 服务复用已有配置、运行时和持久化数据。新源码位于 `/data/chanlun/releases/sumly-b37`，由 `zz-sumly-bridge.conf` 指定。原配置 `ios-b1.conf` 仍可作为回退。京东云 nginx 配置备份在 `/root/docker_data/sumly/releases/chanlun-b37/nginx.before.conf`。
 - Go 测试、`go vet` 与 Linux 构建通过。禅观后端 190 项及 H5 49 项通过，H5 构建与线上资产一致。iOS 模拟器 200 项通过、1 项需要登录凭据的测试跳过，独立认证测试 26 项通过。
 - 生产实测覆盖 WireGuard 签发、HTTPS 兑换、15 分钟安全 Cookie 及同一票据重放拒绝，正式记金拒绝无效登录态。正式行情页、普通禅观游客会话、Android 登录和更新接口均返回 200。真实 Apple 账号授权待 iPhone 内测。
+- 使用受控验收身份在浏览器中带 HttpOnly 会话打开线上 H5，核对贵州茅台、30 分钟图表和完整入口 URL。
+- 已签名 IPA 的最低系统版本为 iOS 17.0，SHA-256 为 `3a02c16cf724e93abfe43760ef0fd7573c6bf7dc97cf64216af4de57bca6c0d1`。App Store Connect 构建 `42bb5441-1902-4391-8eaa-585606b7dc87` 为 `VALID`、`APP_STORE_ELIGIBLE`，内部「测试」组 `IN_BETA_TESTING`。
+- App Store 1.0.2 草稿 `7bcda58f-acec-43d1-b8a3-1c4352c688c5` 与构建 37 已关联，已保存更新说明和审核入口说明，发布方式为 `AFTER_APPROVAL`。
