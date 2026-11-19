@@ -65,4 +65,4 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 
 - [x] 通过 local109 和 local233 增加独立 HTTPS 测试路由，保护服务端签发接口，复查 Android。
 - [x] 用 iPhone 模拟器在公网 HTTPS 上验证内部构建。
-- [ ] 推送源码，上传 1.0.2（34），确认内部「测试」可安装。
+- [x] 推送源码，上传 1.0.2（34），确认 App Store Connect 显示内部「测试」可安装。
