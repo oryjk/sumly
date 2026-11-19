@@ -73,4 +73,4 @@ Goal: prepare and submit 记金 for App Store distribution using existing creden
 - [x] 基于现网版本接入正式禅观免登，为记金生产后端配置私有签发，保留正式账号和现有网页功能。
 - [x] 切换 iOS 入口与贵州茅台 30 分钟参数，核对正式域名、票据交换、两端登录能力和 iOS 回归。Apple 真机验证待内测构建。
 - [x] 提交并推送软件源码和版本记录，上传可正式提审的构建，验证内部 TestFlight 可用。
-- [ ] 下线 local233 专用 iOS 联调环境并复查 Android 通道。提交 App Store 审核并配置通过后自动发布。
+- [x] 下线 local233 专用 iOS 联调环境并复查 Android 通道。1.0.2（37）已提交 App Store，状态为等待审核，通过后自动发布。

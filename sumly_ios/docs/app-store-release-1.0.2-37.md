@@ -10,3 +10,5 @@
 - 使用受控验收身份在浏览器中带 HttpOnly 会话打开线上 H5，核对贵州茅台、30 分钟图表和完整入口 URL。
 - 已签名 IPA 的最低系统版本为 iOS 17.0，SHA-256 为 `3a02c16cf724e93abfe43760ef0fd7573c6bf7dc97cf64216af4de57bca6c0d1`。App Store Connect 构建 `42bb5441-1902-4391-8eaa-585606b7dc87` 为 `VALID`、`APP_STORE_ELIGIBLE`，内部「测试」组 `IN_BETA_TESTING`。
 - App Store 1.0.2 草稿 `7bcda58f-acec-43d1-b8a3-1c4352c688c5` 与构建 37 已关联，已保存更新说明和审核入口说明，发布方式为 `AFTER_APPROVAL`。
+- local233 为记金 iOS 专用的四个进程已停止，端口 18173、18174、18190、18191 无相应监听。local109 已撤掉专用代理，旧 `/sumly-chanlun-dev/` 返回 410，Android 登录和更新接口仍返回 200。回退文件保留在两台机器的私有状态目录。
+- 北京时间 2026-11-20 00:00:29，构建 37 进入正式审核队列，审核 ID `9335d6bf-7954-40c1-8b7f-2a8ffccd5950`，版本和审核单状态均为 `WAITING_FOR_REVIEW`。`AFTER_APPROVAL` 已复核。
