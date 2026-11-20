@@ -208,6 +208,7 @@ struct MacroIndicatorDetailView: View {
             ForEach(MacroExtendedRange.allCases) { item in
                 let isSelected = model.range == item
                 Button {
+                    selectedChartDate = nil
                     Task { await model.selectRange(item) }
                 } label: {
                     Text(item.title)

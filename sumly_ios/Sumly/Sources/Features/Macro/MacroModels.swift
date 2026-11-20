@@ -1163,16 +1163,22 @@ enum MacroPresentation {
         return "\(prefix)\(String(format: "%.2f", value))%"
     }
 
+    private static func signPrefix(for value: Double, signed: Bool) -> String {
+        if value < 0 { return "-" }
+        if signed && value > 0 { return "+" }
+        return ""
+    }
+
     static func formatTrillionUSD(_ value: Double?, signed: Bool = false) -> String {
         guard let value, value.isFinite else { return "—" }
-        let prefix = signed && value > 0 ? "+" : ""
-        return "\(prefix)$\(String(format: "%.2f", value)) 万亿"
+        let sign = signPrefix(for: value, signed: signed)
+        return "\(sign)$\(String(format: "%.2f", abs(value))) 万亿"
     }
 
     static func formatContracts(_ value: Double?, signed: Bool = false) -> String {
         guard let value, value.isFinite else { return "—" }
         let absVal = abs(value)
-        let prefix = signed && value > 0 ? "+" : (value < 0 ? "-" : "")
+        let prefix = signPrefix(for: value, signed: signed)
         if absVal >= 10_000 {
             return "\(prefix)\(String(format: "%.2f", absVal / 10_000)) 万手"
         }
@@ -1182,22 +1188,32 @@ enum MacroPresentation {
     static func formatValue(_ value: Double?, unit: String) -> String {
         guard let value, value.isFinite else { return "—" }
         let normalized = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let sign = signPrefix(for: value, signed: false)
+        let absVal = abs(value)
         switch normalized {
         case "%", "pct", "percent", "percentage":
             return String(format: "%.2f%%", value)
         case "trillion_usd", "usd_trillion":
-            return String(format: "$%.2f 万亿", value)
+            return "\(sign)$\(String(format: "%.2f", absVal)) 万亿"
         case "billion_usd", "usd_billion":
-            if abs(value) >= 1_000 {
-                return String(format: "$%.2f 万亿", value / 1_000)
+            if absVal >= 1_000 {
+                return "\(sign)$\(String(format: "%.2f", absVal / 1_000)) 万亿"
             }
-            return String(format: "$%.1fB", value)
+            return "\(sign)$\(String(format: "%.1f", absVal))B"
+        case "million_usd", "usd_million":
+            if absVal >= 1_000_000 {
+                return "\(sign)$\(String(format: "%.2f", absVal / 1_000_000)) 万亿"
+            }
+            if absVal >= 1_000 {
+                return "\(sign)$\(String(format: "%.1f", absVal / 1_000))B"
+            }
+            return "\(sign)$\(String(format: "%.1f", absVal))M"
         case "tons", "tonnes":
             return String(format: "%.1f 吨", value)
         case "usd", "usd/oz", "usd_oz", "usd/troy_oz", "usd/bbl":
-            return "$" + value.formatted(.number.precision(.fractionLength(2)))
+            return "\(sign)$" + absVal.formatted(.number.precision(.fractionLength(2)))
         case "cny/g", "cny_g":
-            return "¥" + value.formatted(.number.precision(.fractionLength(2)))
+            return "\(sign)¥" + absVal.formatted(.number.precision(.fractionLength(2)))
         case "contracts":
             return formatContracts(value)
         case "index", "score", "ratio", "points", "":
@@ -1210,20 +1226,32 @@ enum MacroPresentation {
     static func formatDelta(_ value: Double?, unit: String) -> String {
         guard let value, value.isFinite else { return "—" }
         let normalized = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let prefix = value > 0 ? "+" : ""
+        let sign = signPrefix(for: value, signed: true)
+        let absVal = abs(value)
         switch normalized {
         case "%", "pct", "percent", "percentage":
-            return "\(prefix)\(String(format: "%.2f", value))%"
+            return "\(sign)\(String(format: "%.2f", absVal))%"
         case "trillion_usd", "usd_trillion":
-            return "\(prefix)\(String(format: "%.2f", value)) 万亿"
+            return "\(sign)\(String(format: "%.2f", absVal)) 万亿"
         case "billion_usd", "usd_billion":
-            return "\(prefix)\(String(format: "%.1f", value))B"
+            if absVal >= 1_000 {
+                return "\(sign)\(String(format: "%.2f", absVal / 1_000)) 万亿"
+            }
+            return "\(sign)\(String(format: "%.1f", absVal))B"
+        case "million_usd", "usd_million":
+            if absVal >= 1_000_000 {
+                return "\(sign)\(String(format: "%.2f", absVal / 1_000_000)) 万亿"
+            }
+            if absVal >= 1_000 {
+                return "\(sign)\(String(format: "%.1f", absVal / 1_000))B"
+            }
+            return "\(sign)\(String(format: "%.1f", absVal))M"
         case "tons", "tonnes":
-            return "\(prefix)\(String(format: "%.1f", value)) 吨"
+            return "\(sign)\(String(format: "%.1f", absVal)) 吨"
         case "contracts":
             return formatContracts(value, signed: true)
         default:
-            return "\(prefix)\(String(format: "%.2f", value))"
+            return "\(sign)\(String(format: "%.2f", absVal))"
         }
     }
 
