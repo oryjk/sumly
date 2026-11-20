@@ -7,6 +7,7 @@ final class MacroIndicatorDetailViewModel {
     let initialSummary: MacroIndicatorSummary?
 
     private(set) var range: MacroExtendedRange = .fiveYears
+    private(set) var chartScale: MacroChartScale = .linear
     private(set) var detail: MacroIndicatorDetail?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
@@ -67,12 +68,33 @@ final class MacroIndicatorDetailViewModel {
         detail?.observations ?? []
     }
 
+    var supportsLogScale: Bool {
+        MacroChartScale.supportsLogScale(observations.map(\.value))
+    }
+
+    var effectiveChartScale: MacroChartScale {
+        MacroChartScale.effectiveScale(requested: chartScale, for: observations.map(\.value))
+    }
+
+    var chartScaleContext: MacroChartScaleContext {
+        MacroChartScaleContext.make(
+            values: observations.map(\.value),
+            requestedScale: chartScale,
+            unit: displayUnit,
+            desiredTickCount: 4
+        )
+    }
+
     var periodMin: MacroTimePoint? {
         observations.min { $0.value < $1.value }
     }
 
     var periodMax: MacroTimePoint? {
         observations.max { $0.value < $1.value }
+    }
+
+    func setChartScale(_ scale: MacroChartScale) {
+        chartScale = MacroChartScale.effectiveScale(requested: scale, for: observations.map(\.value))
     }
 
     func load() async {
@@ -106,6 +128,7 @@ final class MacroIndicatorDetailViewModel {
             guard !Task.isCancelled, activeRequestID == requestID else { return }
             detail = loaded
             selectedPoint = nil
+            reconcileChartScale()
             isLoading = false
         } catch is CancellationError {
             if activeRequestID == requestID { isLoading = false }
@@ -114,5 +137,9 @@ final class MacroIndicatorDetailViewModel {
             errorMessage = MacroDashboardViewModel.userFacingError(error)
             isLoading = false
         }
+    }
+
+    private func reconcileChartScale() {
+        chartScale = MacroChartScale.effectiveScale(requested: chartScale, for: observations.map(\.value))
     }
 }

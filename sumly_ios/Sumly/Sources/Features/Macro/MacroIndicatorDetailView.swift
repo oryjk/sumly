@@ -51,6 +51,7 @@ struct MacroIndicatorDetailView: View {
             await model.load()
         }
         .sensoryFeedback(.selection, trigger: model.range)
+        .sensoryFeedback(.selection, trigger: model.effectiveChartScale)
     }
 
     // MARK: - 头部摘要
@@ -171,7 +172,18 @@ struct MacroIndicatorDetailView: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 200)
             } else {
-                indicatorChart(points: model.observations)
+                let scaleContext = model.chartScaleContext
+
+                MacroChartScaleBar(
+                    context: scaleContext,
+                    accessibilityPrefix: "macro.detail"
+                ) { chosen in
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        model.setChartScale(chosen)
+                    }
+                }
+
+                indicatorChart(points: model.observations, context: scaleContext)
 
                 if let low = model.periodMin, let high = model.periodMax {
                     HStack(spacing: 12) {
@@ -224,19 +236,16 @@ struct MacroIndicatorDetailView: View {
         }
     }
 
-    private func indicatorChart(points: [MacroTimePoint]) -> some View {
-        let values = points.map(\.value)
-        let minVal = values.min() ?? 0
-        let maxVal = values.max() ?? 1
-        let pad = max((maxVal - minVal) * 0.08, abs(maxVal) * 0.01, 0.01)
-        let domain = (minVal - pad)...(maxVal + pad)
+    private func indicatorChart(points: [MacroTimePoint], context: MacroChartScaleContext) -> some View {
+        let domain = context.domain
 
         return Chart {
             ForEach(points) { point in
+                let plotY = context.clampedPlotValue(point.value)
                 AreaMark(
                     x: .value("日期", point.date),
                     yStart: .value("基线", domain.lowerBound),
-                    yEnd: .value("数值", point.value)
+                    yEnd: .value("数值", plotY)
                 )
                 .foregroundStyle(
                     LinearGradient(
@@ -249,7 +258,7 @@ struct MacroIndicatorDetailView: View {
 
                 LineMark(
                     x: .value("日期", point.date),
-                    y: .value("数值", point.value)
+                    y: .value("数值", plotY)
                 )
                 .foregroundStyle(GoldTheme.gold)
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
@@ -258,7 +267,7 @@ struct MacroIndicatorDetailView: View {
                 if points.count == 1 {
                     PointMark(
                         x: .value("日期", point.date),
-                        y: .value("数值", point.value)
+                        y: .value("数值", plotY)
                     )
                     .foregroundStyle(GoldTheme.gold)
                     .symbolSize(48)
@@ -266,18 +275,20 @@ struct MacroIndicatorDetailView: View {
             }
 
             if let selected = inspectedPoint {
+                let selectedY = context.clampedPlotValue(selected.value)
                 RuleMark(x: .value("选中日期", selected.date))
                     .foregroundStyle(GoldTheme.goldSoft.opacity(0.65))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 PointMark(
                     x: .value("选中日期", selected.date),
-                    y: .value("选中数值", selected.value)
+                    y: .value("选中数值", selectedY)
                 )
                 .foregroundStyle(GoldTheme.gold)
                 .symbolSize(48)
             }
         }
         .chartYScale(domain: domain)
+        .chartPlotStyle { $0.clipped() }
         .chartXSelection(value: $selectedChartDate)
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
@@ -288,11 +299,17 @@ struct MacroIndicatorDetailView: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { _ in
+            AxisMarks(position: .trailing, values: context.yAxisTicks) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                     .foregroundStyle(GoldTheme.gridline)
-                AxisValueLabel()
-                    .foregroundStyle(GoldTheme.textSecondary)
+                AxisValueLabel {
+                    if let plotY = value.as(Double.self) {
+                        Text(context.axisLabel(forPlotValue: plotY))
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(GoldTheme.textSecondary)
+                    }
+                }
             }
         }
         .frame(height: 220)

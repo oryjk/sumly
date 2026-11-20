@@ -75,6 +75,10 @@ struct MacroDashboardView: View {
             await model.loadDashboard()
         }
         .sensoryFeedback(.selection, trigger: model.selectedTab)
+        .sensoryFeedback(.selection, trigger: model.temperatureGoldPriceScale)
+        .sensoryFeedback(.selection, trigger: model.treasuryDebtScale)
+        .sensoryFeedback(.selection, trigger: model.treasuryYieldScale)
+        .sensoryFeedback(.selection, trigger: model.cotScale)
     }
 
     // MARK: - 顶部分段切换
@@ -435,42 +439,66 @@ struct MacroDashboardView: View {
                     return (p.date, price)
                 }
                 if !goldPoints.isEmpty {
-                    let prices = goldPoints.map(\.1)
-                    let minP = prices.min() ?? 0
-                    let maxP = prices.max() ?? 1
-                    let pad = max((maxP - minP) * 0.08, 10)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("国际金价（USD/oz）")
-                            .font(.caption2)
-                            .foregroundStyle(GoldTheme.goldSoft)
+                    let goldContext = model.temperatureGoldPriceScaleContext
+                    VStack(alignment: .leading, spacing: 6) {
+                        MacroChartScaleBar(
+                            context: goldContext,
+                            leadingLabel: "国际金价（USD/oz）",
+                            accessibilityPrefix: "macro.temperature.gold"
+                        ) { chosen in
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                model.setTemperatureGoldPriceScale(chosen)
+                            }
+                        }
                         Chart {
                             ForEach(points) { point in
                                 if let price = point.goldPriceUSD {
+                                    let plotY = goldContext.clampedPlotValue(price)
                                     LineMark(
                                         x: .value("日期", point.date),
-                                        y: .value("金价", price)
+                                        y: .value("金价", plotY)
                                     )
                                     .foregroundStyle(GoldTheme.gold)
                                     .lineStyle(StrokeStyle(lineWidth: 1.8))
                                     .interpolationMethod(.monotone)
+
+                                    if goldPoints.count == 1 {
+                                        PointMark(
+                                            x: .value("日期", point.date),
+                                            y: .value("金价", plotY)
+                                        )
+                                        .foregroundStyle(GoldTheme.gold)
+                                        .symbolSize(36)
+                                    }
                                 }
                             }
                             if let inspected, let price = inspected.goldPriceUSD {
                                 RuleMark(x: .value("选中", inspected.date))
                                     .foregroundStyle(GoldTheme.goldSoft.opacity(0.6))
                                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                                PointMark(x: .value("选中", inspected.date), y: .value("金价", price))
-                                    .foregroundStyle(GoldTheme.gold)
-                                    .symbolSize(36)
+                                PointMark(
+                                    x: .value("选中", inspected.date),
+                                    y: .value("金价", goldContext.clampedPlotValue(price))
+                                )
+                                .foregroundStyle(GoldTheme.gold)
+                                .symbolSize(36)
                             }
                         }
-                        .chartYScale(domain: (minP - pad)...(maxP + pad))
+                        .chartYScale(domain: goldContext.domain)
+                        .chartPlotStyle { $0.clipped() }
                         .chartXSelection(value: $selectedHistoryDate)
                         .chartXAxis(.hidden)
                         .chartYAxis {
-                            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
+                            AxisMarks(position: .trailing, values: goldContext.yAxisTicks) { value in
                                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(GoldTheme.gridline)
-                                AxisValueLabel().foregroundStyle(GoldTheme.textSecondary)
+                                AxisValueLabel {
+                                    if let plotY = value.as(Double.self) {
+                                        Text(goldContext.axisLabel(forPlotValue: plotY))
+                                            .font(.caption2)
+                                            .monospacedDigit()
+                                            .foregroundStyle(GoldTheme.textSecondary)
+                                    }
+                                }
                             }
                         }
                         .frame(height: 112)
@@ -529,6 +557,7 @@ struct MacroDashboardView: View {
                         }
                     }
                     .chartYScale(domain: 0...100)
+                    .chartPlotStyle { $0.clipped() }
                     .chartXSelection(value: $selectedHistoryDate)
                     .chartXAxis {
                         AxisMarks(values: .automatic(desiredCount: 4)) { _ in
@@ -781,16 +810,25 @@ struct MacroDashboardView: View {
                     .foregroundStyle(GoldTheme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
             } else {
-                let vals = series.map(\.value)
-                let minV = vals.min() ?? 0
-                let maxV = vals.max() ?? 1
-                let pad = max((maxV - minV) * 0.08, 0.2)
+                let debtContext = model.treasuryDebtScaleContext
+                let domain = debtContext.domain
+
+                MacroChartScaleBar(
+                    context: debtContext,
+                    accessibilityPrefix: "macro.treasury.debt"
+                ) { chosen in
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        model.setTreasuryDebtScale(chosen)
+                    }
+                }
+
                 Chart {
                     ForEach(series) { point in
+                        let plotY = debtContext.clampedPlotValue(point.value)
                         AreaMark(
                             x: .value("日期", point.date),
-                            yStart: .value("基线", minV - pad),
-                            yEnd: .value("规模", point.value)
+                            yStart: .value("基线", domain.lowerBound),
+                            yEnd: .value("规模", plotY)
                         )
                         .foregroundStyle(
                             LinearGradient(
@@ -803,14 +841,14 @@ struct MacroDashboardView: View {
 
                         LineMark(
                             x: .value("日期", point.date),
-                            y: .value("规模", point.value)
+                            y: .value("规模", plotY)
                         )
                         .foregroundStyle(GoldTheme.gold)
                         .lineStyle(StrokeStyle(lineWidth: 2))
                         .interpolationMethod(.monotone)
 
                         if series.count == 1 {
-                            PointMark(x: .value("日期", point.date), y: .value("规模", point.value))
+                            PointMark(x: .value("日期", point.date), y: .value("规模", plotY))
                                 .foregroundStyle(GoldTheme.gold)
                                 .symbolSize(44)
                         }
@@ -819,12 +857,16 @@ struct MacroDashboardView: View {
                         RuleMark(x: .value("选中", inspected.date))
                             .foregroundStyle(GoldTheme.goldSoft.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        PointMark(x: .value("选中", inspected.date), y: .value("规模", inspected.value))
-                            .foregroundStyle(GoldTheme.gold)
-                            .symbolSize(44)
+                        PointMark(
+                            x: .value("选中", inspected.date),
+                            y: .value("规模", debtContext.clampedPlotValue(inspected.value))
+                        )
+                        .foregroundStyle(GoldTheme.gold)
+                        .symbolSize(44)
                     }
                 }
-                .chartYScale(domain: (minV - pad)...(maxV + pad))
+                .chartYScale(domain: domain)
+                .chartPlotStyle { $0.clipped() }
                 .chartXSelection(value: $selectedDebtDate)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
@@ -833,9 +875,16 @@ struct MacroDashboardView: View {
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { _ in
+                    AxisMarks(position: .trailing, values: debtContext.yAxisTicks) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(GoldTheme.gridline)
-                        AxisValueLabel().foregroundStyle(GoldTheme.textSecondary)
+                        AxisValueLabel {
+                            if let plotY = value.as(Double.self) {
+                                Text(debtContext.axisLabel(forPlotValue: plotY))
+                                    .font(.caption2)
+                                    .monospacedDigit()
+                                    .foregroundStyle(GoldTheme.textSecondary)
+                            }
+                        }
                     }
                 }
                 .frame(height: 185)
@@ -885,36 +934,58 @@ struct MacroDashboardView: View {
                     .foregroundStyle(GoldTheme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
             } else {
-                let allVals = real.map(\.value) + nominal.map(\.value)
-                let minV = min(allVals.min() ?? 0, 0)
-                let maxV = max(allVals.max() ?? 1, 0)
-                let pad = max((maxV - minV) * 0.1, 0.25)
+                let yieldContext = model.treasuryYieldScaleContext
+
+                MacroChartScaleBar(
+                    context: yieldContext,
+                    accessibilityPrefix: "macro.treasury.yield"
+                ) { chosen in
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        model.setTreasuryYieldScale(chosen)
+                    }
+                }
 
                 Chart {
-                    RuleMark(y: .value("零轴", 0))
-                        .foregroundStyle(GoldTheme.textFaint.opacity(0.6))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    if yieldContext.effectiveScale == .linear {
+                        RuleMark(y: .value("零轴", 0))
+                            .foregroundStyle(GoldTheme.textFaint.opacity(0.6))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    }
 
                     ForEach(nominal) { point in
+                        let plotY = yieldContext.clampedPlotValue(point.value)
                         LineMark(
                             x: .value("日期", point.date),
-                            y: .value("收益率", point.value),
+                            y: .value("收益率", plotY),
                             series: .value("类型", "名义")
                         )
                         .foregroundStyle(GoldTheme.chartSecondary)
                         .lineStyle(StrokeStyle(lineWidth: 1.8))
                         .interpolationMethod(.monotone)
+
+                        if nominal.count == 1 {
+                            PointMark(x: .value("日期", point.date), y: .value("收益率", plotY))
+                                .foregroundStyle(GoldTheme.chartSecondary)
+                                .symbolSize(36)
+                        }
                     }
 
                     ForEach(real) { point in
+                        let plotY = yieldContext.clampedPlotValue(point.value)
                         LineMark(
                             x: .value("日期", point.date),
-                            y: .value("收益率", point.value),
+                            y: .value("收益率", plotY),
                             series: .value("类型", "实际")
                         )
                         .foregroundStyle(GoldTheme.gold)
                         .lineStyle(StrokeStyle(lineWidth: 2.0))
                         .interpolationMethod(.monotone)
+
+                        if real.count == 1 {
+                            PointMark(x: .value("日期", point.date), y: .value("收益率", plotY))
+                                .foregroundStyle(GoldTheme.gold)
+                                .symbolSize(36)
+                        }
                     }
 
                     if let target = inspectedReal?.date ?? inspectedNominal?.date {
@@ -922,8 +993,25 @@ struct MacroDashboardView: View {
                             .foregroundStyle(GoldTheme.goldSoft.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     }
+                    if let r = inspectedReal {
+                        PointMark(
+                            x: .value("选中", r.date),
+                            y: .value("收益率", yieldContext.clampedPlotValue(r.value))
+                        )
+                        .foregroundStyle(GoldTheme.gold)
+                        .symbolSize(36)
+                    }
+                    if let n = inspectedNominal {
+                        PointMark(
+                            x: .value("选中", n.date),
+                            y: .value("收益率", yieldContext.clampedPlotValue(n.value))
+                        )
+                        .foregroundStyle(GoldTheme.chartSecondary)
+                        .symbolSize(36)
+                    }
                 }
-                .chartYScale(domain: (minV - pad)...(maxV + pad))
+                .chartYScale(domain: yieldContext.domain)
+                .chartPlotStyle { $0.clipped() }
                 .chartXSelection(value: $selectedYieldDate)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
@@ -932,9 +1020,16 @@ struct MacroDashboardView: View {
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { _ in
+                    AxisMarks(position: .trailing, values: yieldContext.yAxisTicks) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(GoldTheme.gridline)
-                        AxisValueLabel().foregroundStyle(GoldTheme.textSecondary)
+                        AxisValueLabel {
+                            if let plotY = value.as(Double.self) {
+                                Text(yieldContext.axisLabel(forPlotValue: plotY))
+                                    .font(.caption2)
+                                    .monospacedDigit()
+                                    .foregroundStyle(GoldTheme.textSecondary)
+                            }
+                        }
                     }
                 }
                 .frame(height: 185)
@@ -1108,20 +1203,28 @@ struct MacroDashboardView: View {
                     }
                 }
 
-                let netValues = points.flatMap { [$0.mmNet, $0.swapNet] }
-                let minNet = min(netValues.min() ?? 0, 0)
-                let maxNet = max(netValues.max() ?? 1, 0)
-                let pad = max((maxNet - minNet) * 0.1, 10_000)
+                let cotContext = model.cotScaleContext
+
+                MacroChartScaleBar(
+                    context: cotContext,
+                    accessibilityPrefix: "macro.panorama.cot"
+                ) { chosen in
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        model.setCotScale(chosen)
+                    }
+                }
 
                 Chart {
-                    RuleMark(y: .value("零轴", 0))
-                        .foregroundStyle(GoldTheme.textFaint.opacity(0.6))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    if cotContext.effectiveScale == .linear {
+                        RuleMark(y: .value("零轴", 0))
+                            .foregroundStyle(GoldTheme.textFaint.opacity(0.6))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    }
 
                     ForEach(points) { point in
                         LineMark(
                             x: .value("日期", point.date),
-                            y: .value("头寸", point.mmNet),
+                            y: .value("头寸", cotContext.clampedPlotValue(point.mmNet)),
                             series: .value("阵营", "管理基金净多")
                         )
                         .foregroundStyle(GoldTheme.up)
@@ -1130,7 +1233,7 @@ struct MacroDashboardView: View {
 
                         LineMark(
                             x: .value("日期", point.date),
-                            y: .value("头寸", point.swapNet),
+                            y: .value("头寸", cotContext.clampedPlotValue(point.swapNet)),
                             series: .value("阵营", "Swap 净头寸")
                         )
                         .foregroundStyle(GoldTheme.chartSecondary)
@@ -1144,7 +1247,8 @@ struct MacroDashboardView: View {
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     }
                 }
-                .chartYScale(domain: (minNet - pad)...(maxNet + pad))
+                .chartYScale(domain: cotContext.domain)
+                .chartPlotStyle { $0.clipped() }
                 .chartXSelection(value: $selectedCotDate)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
@@ -1153,12 +1257,13 @@ struct MacroDashboardView: View {
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
+                    AxisMarks(position: .trailing, values: cotContext.yAxisTicks) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(GoldTheme.gridline)
                         AxisValueLabel {
-                            if let num = value.as(Double.self) {
-                                Text("\(String(format: "%.0f", num / 10_000))万")
+                            if let plotY = value.as(Double.self) {
+                                Text(cotContext.axisLabel(forPlotValue: plotY))
                                     .font(.caption2)
+                                    .monospacedDigit()
                                     .foregroundStyle(GoldTheme.textSecondary)
                             }
                         }

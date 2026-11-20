@@ -10,6 +10,11 @@ final class MacroDashboardViewModel {
     private(set) var treasuryRange: MacroExtendedRange = .fiveYears
     private(set) var cotRange: MacroHistoryRange = .threeYears
 
+    private(set) var temperatureGoldPriceScale: MacroChartScale = .linear
+    private(set) var treasuryDebtScale: MacroChartScale = .linear
+    private(set) var treasuryYieldScale: MacroChartScale = .linear
+    private(set) var cotScale: MacroChartScale = .linear
+
     private(set) var temperature: MacroTemperatureReport?
     private(set) var temperatureHistory: MacroTemperatureHistory?
     private(set) var treasury: MacroTreasuryReport?
@@ -58,6 +63,95 @@ final class MacroDashboardViewModel {
         case .panorama:
             isLoadingCatalog || isLoadingCot
         }
+    }
+
+    // MARK: - 图表纵轴刻度上下文与自动校核
+
+    var temperatureGoldPriceValues: [Double] {
+        (temperatureHistory?.points ?? []).compactMap(\.goldPriceUSD)
+    }
+
+    var treasuryDebtValues: [Double] {
+        (treasury?.debtSeries ?? []).map(\.value)
+    }
+
+    var treasuryYieldValues: [Double] {
+        (treasury?.realYieldSeries ?? []).map(\.value)
+            + (treasury?.nominalYieldSeries ?? []).map(\.value)
+    }
+
+    var cotValues: [Double] {
+        (cot?.points ?? []).flatMap { [$0.mmNet, $0.swapNet] }
+    }
+
+    var temperatureGoldPriceScaleContext: MacroChartScaleContext {
+        MacroChartScaleContext.make(
+            values: temperatureGoldPriceValues,
+            requestedScale: temperatureGoldPriceScale,
+            unit: "usd/oz",
+            minLinearPadding: 10,
+            desiredTickCount: 3
+        )
+    }
+
+    var treasuryDebtScaleContext: MacroChartScaleContext {
+        MacroChartScaleContext.make(
+            values: treasuryDebtValues,
+            requestedScale: treasuryDebtScale,
+            unit: "trillion_usd",
+            minLinearPadding: 0.2,
+            desiredTickCount: 4
+        )
+    }
+
+    var treasuryYieldScaleContext: MacroChartScaleContext {
+        MacroChartScaleContext.make(
+            values: treasuryYieldValues,
+            requestedScale: treasuryYieldScale,
+            unit: "%",
+            includeZeroInLinear: true,
+            minLinearPadding: 0.25,
+            desiredTickCount: 4
+        )
+    }
+
+    var cotScaleContext: MacroChartScaleContext {
+        MacroChartScaleContext.make(
+            values: cotValues,
+            requestedScale: cotScale,
+            unit: "contracts",
+            includeZeroInLinear: true,
+            minLinearPadding: 10_000,
+            desiredTickCount: 4
+        )
+    }
+
+    func setTemperatureGoldPriceScale(_ scale: MacroChartScale) {
+        temperatureGoldPriceScale = MacroChartScale.effectiveScale(
+            requested: scale,
+            for: temperatureGoldPriceValues
+        )
+    }
+
+    func setTreasuryDebtScale(_ scale: MacroChartScale) {
+        treasuryDebtScale = MacroChartScale.effectiveScale(
+            requested: scale,
+            for: treasuryDebtValues
+        )
+    }
+
+    func setTreasuryYieldScale(_ scale: MacroChartScale) {
+        treasuryYieldScale = MacroChartScale.effectiveScale(
+            requested: scale,
+            for: treasuryYieldValues
+        )
+    }
+
+    func setCotScale(_ scale: MacroChartScale) {
+        cotScale = MacroChartScale.effectiveScale(
+            requested: scale,
+            for: cotValues
+        )
     }
 
     // MARK: - 组合加载
@@ -145,6 +239,10 @@ final class MacroDashboardViewModel {
             let history = try await service.fetchTemperatureHistory(range: targetRange)
             guard !Task.isCancelled, historyRequestID == requestID else { return }
             temperatureHistory = history
+            temperatureGoldPriceScale = MacroChartScale.effectiveScale(
+                requested: temperatureGoldPriceScale,
+                for: temperatureGoldPriceValues
+            )
             isLoadingHistory = false
         } catch is CancellationError {
             if historyRequestID == requestID { isLoadingHistory = false }
@@ -172,6 +270,14 @@ final class MacroDashboardViewModel {
             let report = try await service.fetchTreasury(range: targetRange)
             guard !Task.isCancelled, treasuryRequestID == requestID else { return }
             treasury = report
+            treasuryDebtScale = MacroChartScale.effectiveScale(
+                requested: treasuryDebtScale,
+                for: treasuryDebtValues
+            )
+            treasuryYieldScale = MacroChartScale.effectiveScale(
+                requested: treasuryYieldScale,
+                for: treasuryYieldValues
+            )
             isLoadingTreasury = false
         } catch is CancellationError {
             if treasuryRequestID == requestID { isLoadingTreasury = false }
@@ -218,6 +324,10 @@ final class MacroDashboardViewModel {
             let result = try await service.fetchGoldCot(range: targetRange)
             guard !Task.isCancelled, cotRequestID == requestID else { return }
             cot = result
+            cotScale = MacroChartScale.effectiveScale(
+                requested: cotScale,
+                for: cotValues
+            )
             isLoadingCot = false
         } catch is CancellationError {
             if cotRequestID == requestID { isLoadingCot = false }
