@@ -87,3 +87,10 @@
 - `ai.oryjk.cn:82/sumly-chanlun-dev/` 已通过 local109 和 local233 两级 Nginx。配置比对确认旧规则逐字保留，Android 登录和更新入口实测 HTTP 200。
 - HTTPS 实测通过记金测试账户登录、短期票据签发、兑换与重复兑换拒绝。Cookie 为 `Secure`、`HttpOnly`，路径限定为 `/sumly-chanlun-dev/`，签发接口公网返回 404。
 - `InternalTest` 连接独立测试后端，隔离 Keychain、持仓文件、用户设置和行情缓存。iPhone 17 Pro 模拟器通过公网真实 WebView 及同源限制测试。禅观依赖源码 `2cafc966a255de04c170807e1ba6c6f4e24b68ae` 已推送。
+
+## 2026-11-20 — iOS 流畅度与核心功能升级 1.0.3（39）
+
+- 源码分支：`main`，源码提交：`1aa6c0556fe6000b53cf2287ff85d5945adf5b6c`（已推送 `origin/main`），版本号：`1.0.3`，构建号：`39`。
+- 核心升级：四 Tab（行情/持仓/日历/我的）状态保活与直达持仓/日历、全局共享行情 `LiveGoldQuoteStore`、消除图表单击查价延迟与二分查找优化、行情页今日涨跌/盘口概览/沪伦价差/持仓保本线与买入点叠加、持仓页原生 NavigationStack push + 攒金目标 + 持仓结构环形图、记一笔快捷预设模板/常用品牌渠道标签/键盘收起工具栏、日历 O(1) 按日聚合与滑动切月、禅观加载进度条。
+- 验证：iPhone 17 Pro 模拟器全量 210 项单元测试通过（含新增 9 项体验升级纯逻辑单测），行情首页与持仓预览页模拟器截图目视验收通过。
+- TestFlight 发布：通过本地签名 IPA + JWT API 上传完成，Build ID `a611ca37-3b1f-4300-955f-11f77d4300f1`，Apple 状态 `processingState=VALID`、`internalBuildState=IN_BETA_TESTING`，内部「测试」组已包含该构建且保持 `hasAccessToAllBuilds=true`，已保存中文测试说明。未变动外部分发或 App Store 正式审核状态。
