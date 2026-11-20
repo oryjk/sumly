@@ -36,13 +36,24 @@ enum GoldTheme {
     static let up = Color(hex: 0xFF5D5D)
     static let down = Color(hex: 0x3DD68C)
 
+    // 温度与宏观语义色
+    static let tempFreezing = Color(hex: 0x56B4E9)
+    static let tempCool = Color(hex: 0x3DD68C)
+    static let tempNeutral = Color(hex: 0xFFE08A)
+    static let tempWarm = Color(hex: 0xF59E0B)
+    static let tempHot = Color(hex: 0xFF5D5D)
+
     // 图表
     static let gridline = Color.white.opacity(0.06)
+    static let chartSecondary = Color(hex: 0x56B4E9)
+    static let chartTertiary = Color(hex: 0xF59E0B)
 
     static let holdingsCardShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
     static let holdingPriceShape = UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 0, bottomTrailingRadius: 13, topTrailingRadius: 0)
     static let capsuleShape = Capsule()
     static let cardShape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+    static let subCardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+    static let badgeShape = RoundedRectangle(cornerRadius: 8, style: .continuous)
     static let rangeShape = RoundedRectangle(cornerRadius: 6, style: .continuous)
     static let serviceText = Color(hex: 0xC4C4C4)
     static let serviceStroke = Color.white.opacity(0.035)

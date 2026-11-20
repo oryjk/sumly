@@ -6,6 +6,7 @@ import Charts
 struct HomeView: View {
     @Binding private var marketBasis: GoldMarketBasis
     private let quoteStore: LiveGoldQuoteStore?
+    private let macroService: any MacroServicing
     private let onOpenHoldings: (() -> Void)?
     private let onOpenChanlun: (() -> Void)?
     @Query private var records: [HoldingRecord]
@@ -13,6 +14,8 @@ struct HomeView: View {
     @AppStorage("holdings.hideAmounts") private var hideAmounts = false
     @AppStorage("market.showHoldingOverlay") private var showHoldingOverlay = true
     @State private var model: MarketHomeViewModel
+    @State private var macroModel: MacroDashboardViewModel
+    @State private var showingMacroDashboard = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingHistorySources = false
     @State private var showingDates = false
@@ -29,15 +32,18 @@ struct HomeView: View {
     init(
         marketBasis: Binding<GoldMarketBasis>,
         quoteStore: LiveGoldQuoteStore? = nil,
+        macroService: any MacroServicing = BackendMacroService(),
         onOpenHoldings: (() -> Void)? = nil,
         onOpenChanlun: (() -> Void)? = nil
     ) {
         _highlightedBasis = State(initialValue: marketBasis.wrappedValue)
         _marketBasis = marketBasis
         self.quoteStore = quoteStore
+        self.macroService = macroService
         self.onOpenHoldings = onOpenHoldings
         self.onOpenChanlun = onOpenChanlun
         _model = State(initialValue: MarketHomeViewModel(basis: marketBasis.wrappedValue))
+        _macroModel = State(initialValue: MacroDashboardViewModel(service: macroService))
     }
 
     private var activeBookRecords: [HoldingRecord] {
@@ -58,13 +64,20 @@ struct HomeView: View {
     }
 
     var body: some View {
-        Group {
-            if model.showsInitialLoading {
-                MarketLoadingView()
-            } else {
-                dashboard
+        NavigationStack {
+            Group {
+                if model.showsInitialLoading {
+                    MarketLoadingView()
+                } else {
+                    dashboard
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(isPresented: $showingMacroDashboard) {
+                MacroDashboardView(model: macroModel, service: macroService)
             }
         }
+        .tint(GoldTheme.gold)
         .onReceive(NotificationCenter.default.publisher(for: .marketCacheCleared)) { _ in
             stopBasisTransition()
             model.clearMarketCache()
@@ -80,6 +93,9 @@ struct HomeView: View {
         }
         .task(id: scenePhase) {
             if scenePhase == .active { await model.start() }
+        }
+        .task(id: scenePhase) {
+            if scenePhase == .active { await macroModel.loadSummary() }
         }
         .task(id: model.range) {
             if model.range != .realtime { await model.loadHistory() }
@@ -126,7 +142,35 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     ZStack {
+                        HStack {
+                            Button {
+                                showingMacroDashboard = true
+                            } label: {
+                                let hasScore = macroModel.temperature?.hasAvailableData == true
+                                let pillTint = hasScore
+                                    ? MacroPresentation.temperatureColor(for: macroModel.temperature?.level ?? .neutral)
+                                    : GoldTheme.goldSoft
+                                HStack(spacing: 4) {
+                                    Image(systemName: "thermometer.medium")
+                                        .font(.caption.weight(.semibold))
+                                    Text(hasScore ? String(format: "%.0f°", macroModel.temperature?.clampedScore ?? 0) : "温度")
+                                        .font(.caption.weight(.semibold))
+                                        .monospacedDigit()
+                                }
+                                .foregroundStyle(pillTint)
+                                .padding(.horizontal, 10)
+                                .frame(height: 34)
+                                .background(GoldTheme.card, in: GoldTheme.capsuleShape)
+                                .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("查看黄金温度与美国国债")
+                            .accessibilityIdentifier("home.macroEntryButton")
+                            Spacer()
+                        }
+
                         marketBasisPicker
+
                         if ChanlunWebConfiguration.current != nil, let onOpenChanlun {
                             HStack {
                                 Spacer()
@@ -176,9 +220,18 @@ struct HomeView: View {
                         }
                         .allowsHitTesting(outgoing == nil)
 
+                    GoldTemperatureCard(
+                        temperature: macroModel.temperature,
+                        treasury: macroModel.treasury?.summary,
+                        isLoading: macroModel.isSummaryLoading,
+                        errorMessage: macroModel.temperatureError,
+                        onRetry: { Task { await macroModel.loadSummary(force: true) } },
+                        onOpenDashboard: { showingMacroDashboard = true }
+                    )
+                    .padding(.top, 14)
+
                     if let snapshot = currentQuoteSnapshot {
                         marketMetricsCard(snapshot: snapshot)
-                            .padding(.top, 14)
                     }
 
                     if !activeBookRecords.isEmpty {
