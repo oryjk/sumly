@@ -71,15 +71,19 @@ import Observation
         }
     }
     func currentUser() async throws -> NativeUser {
+        try await authorized(NativeUser.self, request: AuthRequest.me)
+    }
+
+    func authorized<T: Decodable & Sendable>(_ type: T.Type, request: (String) -> AuthRequest) async throws -> T {
         guard let current = stored else { throw AuthError.unauthorized }
         let stamp = generation
         let refreshedForExpiry = current.expiresAt <= Date()
         if refreshedForExpiry { try await refresh() }
         guard stamp == generation, let token = stored?.result.token else { throw AuthError.stale }
         do {
-            let user = try await service.fetch(NativeUser.self, .me(token))
+            let result = try await service.fetch(type, request(token))
             guard stamp == generation else { throw AuthError.stale }
-            return user
+            return result
         } catch AuthError.unauthorized {
             guard stamp == generation else { throw AuthError.stale }
             if refreshedForExpiry { clearLocal(); throw AuthError.unauthorized }
@@ -87,9 +91,9 @@ import Observation
             if stored?.result.token == token { try await refresh() }
             guard stamp == generation, let retryToken = stored?.result.token else { throw AuthError.stale }
             do {
-                let user = try await service.fetch(NativeUser.self, .me(retryToken))
+                let result = try await service.fetch(type, request(retryToken))
                 guard stamp == generation else { throw AuthError.stale }
-                return user
+                return result
             } catch AuthError.unauthorized {
                 if stamp == generation { clearLocal() }
                 throw AuthError.unauthorized

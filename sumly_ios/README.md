@@ -113,6 +113,12 @@ Tests/                      # Swift Testing 单测
 
 Debug 可通过启动参数 `--holdings-design-preview` 对照参考图：只使用独立的内存数据库和示例报价，不写入真实持仓。正常启动不加载示例。
 
+## 禅观 WebView
+
+登录记金后，从「金伴 → 禅观」进入正式网站 `https://match.oryjk.cn/chanlun/?secid=600519.SH&timeframe=30m&view=market`。网页复用记金登录身份，15 分钟网页会话到期后可返回金伴重新打开。金伴的「记金」入口打开原账本和持仓页。
+
+行情参数只用于加载网页。兑换请求发送到同源的 `/chanlun/api/auth/sumly/session`，票据由生产后端经私有链路签发。Debug 构建仍可使用 `SUMLY_LOCAL_API_BASE_URL` 和 `SUMLY_CHANLUN_WEB_URL` 指向手动启动的本机服务。
+
 ### 记金日历
 
 - 日/月/年/全部视图按交易发生日期筛选，支持农历、购入/卖出/赠出标记、关键词与跨账本筛选。

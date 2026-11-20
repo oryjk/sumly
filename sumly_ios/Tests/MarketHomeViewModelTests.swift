@@ -2,6 +2,17 @@ import Foundation
 import Testing
 @testable import Sumly
 
+@MainActor @Test func marketHomeOpensWithThreeMonthRange() {
+    #expect(MarketHomeViewModel().range == .quarter)
+}
+
+@MainActor private func waitForMarketCondition(_ condition: () -> Bool) async throws {
+    let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while !condition(), ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(25))
+    }
+}
+
 private struct HomeMarketFixture: GoldPriceServicing, GoldQuoteServicing, GoldRealtimeServicing {
     var failing = false
     var usdCNY = 7.0
@@ -26,6 +37,7 @@ private struct HomeMarketFixture: GoldPriceServicing, GoldQuoteServicing, GoldRe
 @MainActor @Test func homeKeepsRealtimeSamplePriceWithoutReconversionOrExtraQuote() async {
     let service = HomeMarketFixture()
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     #expect(model.price == 697.67)
     #expect(model.points.count == 1)
@@ -33,8 +45,9 @@ private struct HomeMarketFixture: GoldPriceServicing, GoldQuoteServicing, GoldRe
 }
 
 private struct DomesticHistoryFixture: GoldHistoryServicing {
+    let date = ChartViewport.noon(Calendar.current.date(byAdding: .day, value: -5, to: .now)!)
     func fetchHistory() async throws -> [GoldHistoryPoint] {
-        [GoldHistoryPoint(date: GoldDailyPrice.parseDay("2026-09-28")!, price: 942.35, granularity: .daily, source: "sge-au9999")]
+        [GoldHistoryPoint(date: date, price: 942.35, granularity: .daily, source: "sge-au9999")]
     }
 }
 
@@ -47,14 +60,15 @@ private struct DomesticQuoteFixture: GoldQuoteServicing {
 
 @MainActor @Test func domesticHistoryStaysInNativeCNYPerGramWithoutFXConversion() async {
     let service = HomeMarketFixture()
-    let model = MarketHomeViewModel(basis: .domestic, dailyService: service, quoteService: DomesticQuoteFixture(), realtimeService: service, historyService: DomesticHistoryFixture())
+    let history = DomesticHistoryFixture()
+    let model = MarketHomeViewModel(basis: .domestic, dailyService: service, quoteService: DomesticQuoteFixture(), realtimeService: service, historyService: history)
     model.range = .month
     await model.refresh()
     #expect(model.price == 945.20)
     #expect(model.points.count == 1)
-    #expect(model.points[0].price == 942.35)
+    #expect(model.points.first?.price == 942.35)
     model.range = .history
-    #expect(model.fullDomain.lowerBound == GoldDailyPrice.parseDay("2026-09-28")!)
+    #expect(model.fullDomain.lowerBound == history.date)
 }
 
 private actor BasisSwitchGate {
@@ -89,7 +103,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 
     func fetchDailyPrices() async throws -> [GoldDailyPrice] {
         if let gate { await gate.wait() }
-        let date = GoldDailyPrice.parseDay("2026-09-28")!
+        let date = ChartViewport.noon(Calendar.current.date(byAdding: .day, value: -5, to: .now)!)
         return [GoldDailyPrice(date: date, open: historyPrice, high: historyPrice, low: historyPrice, close: historyPrice)]
     }
 
@@ -100,7 +114,8 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 
     func fetchHistory() async throws -> [GoldHistoryPoint] {
         if let gate { await gate.wait() }
-        return [GoldHistoryPoint(date: GoldDailyPrice.parseDay("2026-09-28")!, price: historyPrice, granularity: .daily, source: "fixture")]
+        let date = ChartViewport.noon(Calendar.current.date(byAdding: .day, value: -5, to: .now)!)
+        return [GoldHistoryPoint(date: date, price: historyPrice, granularity: .daily, source: "fixture")]
     }
 }
 
@@ -146,6 +161,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 @MainActor @Test func homeRangesUseRealDailyDates() async {
     let service = HomeMarketFixture()
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     model.range = .month
     #expect(model.windowPoints.count == 1)
@@ -156,6 +172,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 @MainActor @Test func homeNetworkFailureDoesNotDisplayReferencePrice() async {
     let service = HomeMarketFixture(failing: true)
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     #expect(model.price == nil)
     #expect(model.points.isEmpty)
@@ -165,6 +182,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 @MainActor @Test func homeMissingFXDoesNotShowZeroAsGoldPrice() async {
     let service = HomeMarketFixture(usdCNY: 0)
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     #expect(model.price == nil)
     #expect(model.points.count == 1) // 已采集的人民币报价不依赖当前汇率。
@@ -200,6 +218,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 @MainActor @Test func chartSelectionUsesSamplePriceAndClearsOnRangeChange() async {
     let service = HomeMarketFixture()
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     model.selectedDate = model.points.first?.date
     #expect(model.selectedPoint?.price == 675.25)
@@ -210,11 +229,12 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 @MainActor @Test func chartSelectionExpiresAfterFiveSecondsAndRestoresExtrema() async throws {
     let service = HomeMarketFixture()
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     model.selectChart(at: 0.5)
     #expect(model.selectedPoint?.price == 675.25)
     let snapshot = model.makeDisplaySnapshot()
-    try await Task.sleep(for: .seconds(5.4))
+    try await waitForMarketCondition { model.selectedDate == nil }
     #expect(model.selectedDate == nil)
     #expect(model.selectedPoint == nil)
     #expect(model.windowStatistics.high?.price == 675.25)
@@ -226,6 +246,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 @MainActor @Test func selectingAgainRestartsFiveSecondExpiryEvenAtTheSamePosition() async throws {
     let service = HomeMarketFixture()
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     model.selectChart(at: 0.5)
     try await Task.sleep(for: .seconds(3))
@@ -249,6 +270,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
     for failing in [false, true] {
         let service = HomeMarketFixture(failing: failing)
         let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+        model.range = .realtime
         #expect(model.showsInitialLoading)
         await model.refresh()
         #expect(!model.showsInitialLoading)
@@ -325,6 +347,7 @@ private actor AdvancingRealtimeFixture: GoldRealtimeServicing {
     let service = HomeMarketFixture()
     let realtime = AdvancingRealtimeFixture()
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: realtime)
+    model.range = .realtime
     await model.refresh()
     model.beginChartGesture()
     model.transformChart(scale: 100, anchor: 0, translation: 0)
@@ -533,6 +556,7 @@ private actor MutableHomeHistoryFixture: GoldHistoryServicing, GoldQuoteServicin
 
 private actor RecoveringHomeService: GoldPriceServicing, GoldQuoteServicing, GoldRealtimeServicing {
     var realtimeCalls = 0
+    private let retryGate = BasisSwitchGate()
     let slowDaily: Bool
     let emptyAfterFirst: Bool
     init(slowDaily: Bool = false, emptyAfterFirst: Bool = false) {
@@ -546,21 +570,25 @@ private actor RecoveringHomeService: GoldPriceServicing, GoldQuoteServicing, Gol
     func fetchRealtime() async throws -> [MarketChartPoint] {
         realtimeCalls += 1
         if slowDaily && realtimeCalls == 1 { throw URLError(.networkConnectionLost) }
+        if slowDaily { await retryGate.wait() }
         if emptyAfterFirst && realtimeCalls > 1 { return [] }
         return try await HomeMarketFixture().fetchRealtime()
     }
+    func releaseRetry() async { await retryGate.release() }
 }
 
 @MainActor @Test func slowDailySyncDoesNotHideRealtimeFailureOrBlockItsRetry() async throws {
     let service = RecoveringHomeService(slowDaily: true)
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     let task = Task { await model.start() }
     // Daily sync is still pending. A failed realtime request must leave loading,
     // then recover through its own five-second polling schedule.
-    try await Task.sleep(for: .milliseconds(300))
+    try await waitForMarketCondition { !model.loading }
     #expect(!model.loading)
     #expect(model.message?.contains("失败") == true)
-    try await Task.sleep(for: .seconds(6))
+    await service.releaseRetry()
+    try await waitForMarketCondition { !model.points.isEmpty }
     #expect(await service.realtimeCalls >= 2)
     #expect(!model.points.isEmpty)
     task.cancel()
@@ -570,6 +598,7 @@ private actor RecoveringHomeService: GoldPriceServicing, GoldQuoteServicing, Gol
 @MainActor @Test func emptyRealtimeRefreshRetainsVisibleCurveAndOffersRetry() async {
     let service = RecoveringHomeService(emptyAfterFirst: true)
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     let previous = model.points
     await model.refresh()
@@ -604,6 +633,7 @@ private actor SuspendedRealtimeService: GoldRealtimeServicing {
     let service = SuspendedRealtimeService()
     let fixture = HomeMarketFixture()
     let model = MarketHomeViewModel(dailyService: fixture, quoteService: fixture, realtimeService: service)
+    model.range = .realtime
     let first = Task { await model.refresh() }
     await service.waitForCall(1)
     let second = Task { await model.refresh() }
@@ -620,6 +650,7 @@ private actor SuspendedRealtimeService: GoldRealtimeServicing {
     let service = SuspendedRealtimeService()
     let fixture = HomeMarketFixture()
     let model = MarketHomeViewModel(dailyService: fixture, quoteService: fixture, realtimeService: service)
+    model.range = .realtime
     let backgrounded = Task { await model.start() }
     await service.waitForCall(1)
     backgrounded.cancel()
@@ -683,6 +714,7 @@ private actor SuspendedRealtimeService: GoldRealtimeServicing {
     let failure = HomeMarketFixture(failing: true)
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service,
         serviceFactory: { _ in MarketHomeDataServices(daily: failure, quote: failure, realtime: failure, history: DomesticHistoryFixture()) })
+    model.range = .realtime
     await model.refresh()
     let old = model.points
     var commits = 0
@@ -702,6 +734,7 @@ private struct FailingRealtimeOnly: GoldRealtimeServicing {
     let service = HomeMarketFixture()
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service,
         serviceFactory: { _ in MarketHomeDataServices(daily: service, quote: DomesticQuoteFixture(), realtime: FailingRealtimeOnly(), history: DomesticHistoryFixture()) })
+    model.range = .realtime
     await model.refresh()
     let old = model.points
     var commits = 0
@@ -733,6 +766,7 @@ private actor DelayedFailingHistory: GoldHistoryServicing {
     let domestic = BasisSwitchFixture(symbol: "AU9999", quotePrice: 945.2, historyPrice: 942.35, gate: nil)
     let model = MarketHomeViewModel(dailyService: service, quoteService: service, realtimeService: service, historyService: history,
         serviceFactory: { _ in MarketHomeDataServices(daily: domestic, quote: domestic, realtime: domestic, history: domestic) })
+    model.range = .realtime
     await model.refresh()
     model.range = .history
     let loading = Task { await model.loadHistory() }
@@ -752,6 +786,7 @@ private actor DelayedFailingHistory: GoldHistoryServicing {
     let domestic = BasisSwitchFixture(symbol: "AU9999", quotePrice: 945.2, historyPrice: 942.35, gate: gate)
     let model = MarketHomeViewModel(dailyService: original, quoteService: original, realtimeService: original,
         serviceFactory: { _ in MarketHomeDataServices(daily: domestic, quote: domestic, realtime: domestic, history: domestic) })
+    model.range = .realtime
     await model.refresh()
     let first = Task { await model.switchBasis(to: .domestic) }
     for _ in 0..<1000 {

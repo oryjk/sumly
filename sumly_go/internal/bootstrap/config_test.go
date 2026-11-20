@@ -1,6 +1,24 @@
 package bootstrap
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestLoadConfigRejectsAppleTestCredentialOutsideTest(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("JWT_SECRET", "secret")
+	t.Setenv("WECHAT_APP_ID", "appid")
+	t.Setenv("WECHAT_APP_SECRET", "appsecret")
+	t.Setenv("NATIVE_AUTH_ENABLED", "true")
+	t.Setenv("APPLE_TEST_CLIENT_SECRET_FILE", "test-credential")
+	for _, environment := range []string{"production", "development", ""} {
+		t.Setenv("APP_ENV", environment)
+		if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "requires APP_ENV=test") {
+			t.Fatalf("expected test credential rejection for %q, got %v", environment, err)
+		}
+	}
+}
 
 func TestLoadConfigParsesDevLoginEnabled(t *testing.T) {
 	for _, test := range []struct {

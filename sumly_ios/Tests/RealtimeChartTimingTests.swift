@@ -19,6 +19,7 @@ private struct FrozenMarketFixture: GoldPriceServicing, GoldQuoteServicing, Gold
 @MainActor @Test func frozenDomesticWindowIsExplicitlyPausedWithoutChangingItsPrices() async {
     let service = FrozenMarketFixture(end: .now.addingTimeInterval(-86400))
     let model = MarketHomeViewModel(basis: .domestic, dailyService: service, quoteService: service, realtimeService: service)
+    model.range = .realtime
     await model.refresh()
     #expect(model.message?.contains("更新暂停") == true)
     #expect(model.points.map(\.price) == [907.5, 907.61])
@@ -87,11 +88,12 @@ private func timingDate(_ value: String) -> Date { BackendGoldPriceService.parse
     for (name, offset, basis, size) in states {
         let service = FrozenMarketFixture(end: .now.addingTimeInterval(offset))
         let model = MarketHomeViewModel(basis: basis, dailyService: service, quoteService: service, realtimeService: service)
+        model.range = .realtime
         await model.refresh()
         let window = UIWindow(windowScene: scene)
         let controller = UIHostingController(rootView: ScrollView {
             MarketHomeChartContent(model: model, availableHeight: window.bounds.height - 110,
-                showingNotice: .constant(false), showingHistorySources: .constant(false), showingDates: .constant(false)).padding(18)
+                showingHistorySources: .constant(false), showingDates: .constant(false)).padding(18)
         }.background(GoldTheme.background).environment(\.dynamicTypeSize, size).preferredColorScheme(.dark).tint(GoldTheme.gold))
         window.rootViewController = controller
         window.makeKeyAndVisible()

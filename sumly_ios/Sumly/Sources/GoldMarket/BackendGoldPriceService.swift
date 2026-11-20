@@ -6,10 +6,17 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
     /// 默认走线上 nginx 反代（`https://oryjk.cn/sumly/`，jd 部署）；
     /// 本地联调可在 Info.plist 用 SUMLY_API_BASE_URL 覆盖（如 http://127.0.0.1:18090/api/v1）。
     static let defaultBaseURL: URL = {
+        #if DEBUG
+        if let raw = ProcessInfo.processInfo.environment["SUMLY_LOCAL_API_BASE_URL"],
+           let url = URL(string: raw), url.scheme == "http",
+           ["localhost", "127.0.0.1"].contains(url.host ?? "") {
+            return url
+        }
         if let raw = Bundle.main.object(forInfoDictionaryKey: "SUMLY_API_BASE_URL") as? String,
            !raw.isEmpty, let url = URL(string: raw) {
             return url
         }
+        #endif
         return URL(string: "https://oryjk.cn/sumly/api/v1")!
     }()
 

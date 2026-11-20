@@ -1,0 +1,89 @@
+# Launch progress
+
+## 2026-11-10
+- User authorized proceeding with App Store launch and necessary preparation.
+- Read iOS release instructions and restored credentials in the preceding task.
+- Beginning live metadata audit and release preparation.
+- Created codex/app-store-1-0 branch for release changes.
+- Updated version to 1.0 (30), linked existing calendar, removed unfinished subscription UI, added privacy/support links.
+- First test build found two rendering fixtures still passing the removed showingNotice argument; updated both call sites before rerunning.
+- Corrected rolling-date fixtures and replaced brittle fixed sleep assertions with bounded state waits. Realtime failure/retry test now gates recovery until the failed state has been observed.
+- Full simulator suite passed: 195 tests (ReleaseReadiness-1.0-30-stable.xcresult).
+- Saved Chinese store copy, category, copyright, age-rating answers, privacy URL and review contacts through Apple's API.
+- User authorized launch outside mainland China first; separately requested assistance applying for mainland app filing. Requested provider and legal-subject details.
+- Independent release review found incorrect legacy sign-in copy claiming holdings remain local / no cloud sync. Corrected those disclosures and hid unavailable provider controls; retained failure/retry behavior.
+- Phone and iPad simulator home screens visually verified. Created a 10 g / CNY 800-per-gram local guest sample on the dedicated iPad simulator for actual UI/screenshot checks; no production account or cloud data was changed.
+- Privacy questionnaire prepared with seven collected types, functionality-only, linked to user, no tracking. Apple's publication attestation awaits explicit user confirmation.
+- Final simulator validation passed again: 195 tests; plist checks and independent code review completed.
+- Distribution is configured for all 174 territories outside mainland China. Free price schedule saved.
+- Four screenshots uploaded successfully: iPhone market; iPad market, holdings and calendar.
+- First archive compiled but automatic signing selected an existing development key and waited for keychain authorization. Stopped that signing step; Release now explicitly uses the restored distribution certificate/profile, leaving Debug signing unchanged.
+- Mainland filing technical bundle prepared under ~/.config/sumly/mainland-filing-20261110; contains public certificate/key, MD5, Bundle ID and icon, no private keys.
+- Manual distribution archive/export succeeded. Strict archive signature verified; exported IPA metadata and privacy manifest checked. Apple accepted the IPA and is processing it.
+- Live pricing verified free; live availability verified 174 enabled / mainland China disabled. Four screenshot uploads accepted, no asset errors reported.
+- Content rights declaration is unset; requested the owner's authorization/permitted-use basis for the third-party market data. No content-rights assertion or formal submission was made.
+- Final upload verification: build 1.0 (30), ID 88b12597-3ebd-4555-bc8e-8b7fae4172be, is VALID / IN_BETA_TESTING and in internal 测试 group. Selected it for the App Store 1.0 draft. Upload phase is complete; do not restart upload or repeat successful checks.
+- Formal review remains pending the privacy publication attestation and content-rights facts. Mainland filing remains pending provider / subject information.
+- User confirmed publication of the seven privacy types. Published in App Store Connect and verified the "几秒钟前由睿 王发布" status; saved privacy-published.png outside Git.
+- User identifies the filing/cloud provider as JD. Investigating the 京东云 filing route; legal subject remains unconfirmed.
+- User explained planned multi-source fusion/processing and no public provider naming. Store description already does not name providers; did not remove accurate source/basis labels or infer distribution rights from this explanation. Asked for explicit confirmation of rights or lawful basis for derived outputs.
+- All screenshot states are COMPLETE. Saved no-IDFA declaration. Created App Review draft c36abf74-a690-4ae9-9c7a-97329e3083ab but did not submit; adding version returned the required contentRightsDeclaration field as a validation blocker.
+- Found JD Cloud's official filing entry from its homepage. Browser interaction was interrupted by the user's active use; stopped and requested a logged-in filing page so the original legal subject can be inspected.
+- User explicitly confirmed necessary content rights / lawful basis and requested continuation. Saved USES_THIRD_PARTY_CONTENT, added App Store 1.0 / build 30 to the existing review draft, and submitted it. Actual submission and version state both WAITING_FOR_REVIEW; AFTER_APPROVAL preserved. Do not submit again.
+- User confirmed JD login and reuse of original website filing subject. Accessed the JD filing console; inspecting existing records and the start wizard. Do not log identity numbers or submit legal acknowledgements without the required user step.
+- Verified the JD Cloud lightweight server against the production domain and existing SSH host. Generated one new filing authorization code, saved it privately, and selected it in the APP application form. Preserved the older code already marked 备案中; do not generate another code.
+- Filled service type APP and name 记金. The console did not populate the original website subject; requested that the user enter the original subject's location, nature and identity details directly on the official page and personally acknowledge its privacy policy. Filing verification/submission has not been performed.
+- User reported an incorrect district and explicitly authorized discarding the unsubmitted draft. Confirmed the portal's deletion warning and discarded only that current draft; observed 放弃本次流程成功. Restarted the form with the user-specified corrected region, restored APP / 记金, and verified the same authorization code was available and selected. No new code generated. Original subject identity and privacy acknowledgement still require the user's direct entry.
+- User subsequently chose personal operation for 记金 instead of reusing the individual-business website subject, and confirmed selecting 个人 before verification. The user completed subject information and handed over at service-information step 2.
+- Filled iOS platform, Bundle ID, public certificate key, the iOS-required SHA-1 fingerprint and actual backend domain. Retained no external SDK / no SDK provision based on the native source dependency audit. Converted the existing icon to JPG because JD rejected PNG, then verified JPG acceptance. Selected 工具 and entered an accurate description covering holdings records, reference market data, estimates and account synchronization.
+- Service information saved successfully; advanced to step 3 上传资料. Default personal filing undertaking is present and was opened for full reading. The page explicitly says 下一步 accepts it; requested action-time user confirmation and have not accepted it or submitted the filing order. No name-length validation blocker occurred.
+- User explicitly accepted the personal filing undertaking and authorized 下一步. Continued successfully to 京东云 /eleCheck (电子核验). This step has two sets of resident-ID attachments (subject and service responsible person) plus 视频核身. Requested the user provide those materials directly on JD Cloud; no identity images/video were supplied or uploaded by the agent. Final filing order has not been submitted.
+- User reported identity materials uploaded. The live portal is now on the final confirmation page. Verified personal subject, 记金, iOS Bundle ID, SHA-1, actual backend domain and 工具 category; the displayed public-key prefix matches (the review UI truncates the key). The final page requires two additional agreements: 信息安全管理协议 and 协助更改备案信息服务在线服务条款. Requested explicit bundled acceptance and authorization to submit the identity/contact/verification materials and APP information to JD Cloud for filing review. Submit has not been clicked.
+- User explicitly accepted both final agreements and authorized formal submission, then supplied a success screenshot. Live /audit page independently confirmed 您的资料已提交等待审核, current phase 京东云初审, displayed estimate 1–3 working days. No duplicate submission was attempted. The order identifier is retained privately. Filing is submitted, not approved; later steps are submission to the communications administration, SMS verification, administration review and filing completion.
+
+## 2026-11-11 — Account settings
+- User requested moving account synchronization and market-cache clearing out of 我的 into a settings page entered through a top-right gear.
+- Added AccountSettingsView, moved the existing sync/import/conflict and cache controls with their state/dialogs, and connected a top-right accessible gear to a navigation destination from AccountView. Uses the same session and cloud instances and existing theme tokens.
+- Generated the Xcode project. Simulator compilation succeeded. The corrected Swift Testing selectors ran three relevant tests: guest rendering, cloud-account rendering and pending-download invalidation during cache clearing; all passed. Four visual artifacts are in sumly_ios/build/settings-review-20261111. Guest account and signed-in settings renders inspected.
+- Manual simulator navigation is pending because the Mac is locked; asked the user to unlock while continuing independent work. No new TestFlight upload or App Store submission performed for this change.
+- Code committed as 55ef770 and pushed successfully to origin/codex/app-store-1-0. User cannot unlock the home Mac and will continue on the office computer. Office follow-up: pull that branch, manually verify 我的 → top-right gear → 设置 → back, then prepare a new build if distribution is requested. The current TestFlight 1.0 (30) does not contain this later source change.
+- User requested a new test package. App Store Connect initially has no build 31. Bumped to 1.0 (31), source commit 1d2d10f214969dcecdee14cc4f77b7aef682b5af. Reused the already-passing feature compilation/render/cache evidence because application code is unchanged; the uploader's 12 offline tests also passed. Preparing to push source and release records before signing/upload.
+- Source and release records were pushed and the remote ref verified before archive/upload. Local archive/export and signature/IPA identity validation succeeded. Uploaded one IPA through the existing JWT uploader; Apple completed processing.
+- Final TestFlight verification: 1.0 (31), ID ae7d1886-35bf-4a75-86eb-8c26b0a9527c, VALID / IN_BETA_TESTING and present in internal 测试 group. Testing notes and automatic notification are saved. The new settings UI is now available to internal testers. Do not rerun upload or repeat successful Apple verification.
+- Build 31 is also in 外部测试, but Apple rejected its Beta review submission with ANOTHER_BUILD_IN_REVIEW because build 30 is still under review. Actual external state is READY_FOR_BETA_SUBMISSION; external installation is not yet available. Reported this limitation immediately. Did not cancel any review or replace the App Store build.
+
+## 2026-11-11 — Remove persistent reauthentication button
+- User requested removing the always-visible 重新验证 Apple 登录 action from 我的. Removed the provider-specific manual login button for signed-in accounts and kept normal sign-in plus the account-deletion reauthentication flow.
+- Simulator compilation and the signed-in account rendering test passed; inspected the rendered account page with only 退出登录 / 注销账户 in its action card. Two existing authentication regression tests also passed: rejecting another account during deletion reauthentication, and requiring explicit deletion confirmation after matching reauthentication.
+- This is a source change after TestFlight build 31. No new binary upload was requested or performed in this step; a subsequent build is needed for this removal to appear on devices.
+
+## 2026-11-11 — Internal TestFlight build 32
+- User requested uploading the updated test package, then instructed that every completed iOS application-code/UI change should automatically receive a new internal TestFlight build. Recorded the standing workflow in sumly_ios/AGENTS.md; documentation-only changes are excluded from redundant builds. External testing is paused at the user's request.
+- Initial checks found no Apple build 32 or existing local archive/IPA directory. Bumped project.yml and generated Info.plist to 1.0 (32); source commit 8f27df562b4279b930bab97a1da2a6873d0e3eec. The feature code is identical to the already-verified button-removal commit; reuse its passing compile, rendering and authentication checks.
+- Source/provenance were pushed and the remote ref verified before archive/upload. Local archive/export, strict signature and IPA identity validation succeeded. Uploaded one signed IPA using the established JWT workflow; Apple processing completed.
+- Final verification: 1.0 (32), ID f3e44ffa-0f76-4d09-8aa9-d0dafd26bc53, VALID / IN_BETA_TESTING and present in internal 测试 only. Testing notes and automatic notification saved. Reported internal availability immediately; no external distribution or App Store review changes. Upload phase complete; do not re-upload or repeat successful Apple checks.
+
+## 2026-11-18 — App Store 1.0.1（33）
+
+- 游客和登录态的设置页渲染测试均通过。签名归档通过严格校验，IPA 标识、版本和构建号正确。
+- 源码提交 `fb947b1710fbc1436bb6167e6347730034250d9b` 已推送。Apple 已接收签名 IPA，正在处理。
+- Apple 后台已显示 `蜀ICP备2020035100号-3A`。按当前功能填写的生成式内容及安全评估声明均显示有效。
+- 草稿继承了 1.0 的商店截图和审核联系方式。已保存 1.0.1 的更新说明及审核操作路径。
+- 1.0.1（33）已成功处理并进入内部「测试」组，正式提交 `f76c74f0-4c43-4973-8e1f-75c5f017a237` 已进入等待审核。中国大陆店面等待批准后开放。
+
+## 2026-11-19 — 中国大陆店面
+
+- Apple 已通过 1.0.1（33）的正式审核。核对远端源码后，已打开中国大陆地区分发。08:37（北京时间）Apple 后台显示可用。08:41 国区公开商品页尚未出现。
+
+## 2026-11-19 — 禅观 WebView 本地联调
+
+- 记金 Go 后端按实时会话查询用户，直连禅观申请 60 秒单次票据。禅观签发短期 HttpOnly Cookie，跟踪数据使用 `sumly:<user_id>`。iOS Debug 在独立 WebKit 会话中兑换并加载 H5。
+- 两个隔离测试账户通过真实记金邮箱登录、票据兑换、禅观身份和跟踪接口检验。访客和已撤销的会话无法领票，重复兑换被拒绝。iPhone 17 Pro 模拟器已通过真实 WebKit 端到端测试。
+- 禅观源码在 local233 的 `/home/betalpha/projects/chanlun-sumly-webview` 工作树，基于 `676d881`。私有联调实例的 Go API 和 H5 都仅监听回环，通过 SSH 测试。
+- 本次交付为本地联调。生产入口需配置 HTTPS，若面向付费会员需接入服务端权益核验。
+
+## 2026-11-19 — 禅观公网免登测试
+
+- `ai.oryjk.cn:82/sumly-chanlun-dev/` 已通过 local109 和 local233 两级 Nginx。配置比对确认旧规则逐字保留，Android 登录和更新入口实测 HTTP 200。
+- HTTPS 实测通过记金测试账户登录、短期票据签发、兑换与重复兑换拒绝。Cookie 为 `Secure`、`HttpOnly`，路径限定为 `/sumly-chanlun-dev/`，签发接口公网返回 404。
+- `InternalTest` 连接独立测试后端，隔离 Keychain、持仓文件、用户设置和行情缓存。iPhone 17 Pro 模拟器通过公网真实 WebView 及同源限制测试。禅观依赖源码 `2cafc966a255de04c170807e1ba6c6f4e24b68ae` 已推送。

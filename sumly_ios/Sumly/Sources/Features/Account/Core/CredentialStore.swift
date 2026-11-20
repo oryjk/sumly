@@ -44,7 +44,8 @@ import Security
 @MainActor final class SystemKeychainDataStore: KeychainDataStoring {
     private var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: "com.oryjk.sumly.native-auth", kSecAttrAccount as String: "session-v1"]
+         kSecAttrService as String: "com.oryjk.sumly.native-auth",
+         kSecAttrAccount as String: "session-v1"]
     }
     func read() throws -> Data? {
         var query = query

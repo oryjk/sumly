@@ -1,0 +1,41 @@
+# Launch findings
+
+- iOS uses SwiftUI / Swift 6 / SwiftData; iPhone and iPad targets, iOS 17+.
+- App Store Connect is accessible using restored existing API credentials.
+- Current App Store draft is version 1.0; source project is 0.1.1 (29).
+- Unimplemented accounting tab and subscription button remain visible in source.
+- Privacy policy exists at docs/privacy.html, but account UI has no privacy link.
+- Credentials live outside the repository; private Python environment is ~/.config/sumly/publish-venv.
+- This run must distinguish submission, approval, and actual public availability.
+- Live App Store draft has no build selected, screenshots, description, keywords, support URL, copyright, category, age-rating answers or privacy-policy URL. Release type is AFTER_APPROVAL.
+- Existing Beta reviewer contact fields are present and can be reused; no test login credentials are stored there.
+- Production authentication capabilities: Apple enabled, phone/email disabled. Guests can use the app locally.
+- https://oryjk.cn/sumly/privacy returns HTTP 200; /privacy.html is not a valid deployment path.
+- Production AU9999 quote endpoint returned HTTP 200 and a current quote.
+- Browser control initialization timed out; API access works. Public App Store privacy questionnaire may require a working logged-in browser.
+- Asked user asynchronously for launch territories and, if mainland China is included, the app ICP filing number.
+- User answered: launch outside mainland China first.
+- Official Apple OpenAPI 4.6 contains no privacy-questionnaire API; browser access now works through native Edge accessibility and will be used only for those unsupported fields.
+- Tests were terminated by a test fixture with fixed 2026-09-28 data outside today's rolling month, followed by points[0] access. Replacing rolling-range fixture dates with five days ago and using optional first element assertions preserves test meaning without changing production market logic.
+- Privacy disclosure is now published after the user's explicit attestation confirmation; browser publication status and screenshot verified.
+- All four screenshots now report COMPLETE. No-IDFA declaration saved based on implementation.
+- Created an App Review draft (not submitted). Adding the version fails validation with ENTITY_ERROR.ATTRIBUTE.REQUIRED for contentRightsDeclaration; detailed private response is under ~/.config/sumly/release-tools/last-apple-api-error.json.
+- User explained planned source fusion/processing and no public provider naming. Requested explicit confirmation of the necessary rights or other lawful basis for distributed outputs; no rights assertion was inferred from transformation alone.
+- User identifies the hosting/filing provider as jd. Official JD Cloud homepage links to https://record-console.jdcloud.com/. Native browser access was interrupted by the user's active browsing; stopped interaction and requested a logged-in filing page.
+- Public DNS for the API domain matches the existing jd SSH alias; network candidates are saved only in the private filing technical material. Existing legal subject still needs verification in the filing account.
+- Final App Store state: the owner explicitly confirmed rights / lawful basis; privacy and content-rights declarations are saved, version 1.0 (30) is formally submitted, WAITING_FOR_REVIEW / AFTER_APPROVAL. Earlier draft blockers above are resolved.
+- JD Cloud's filing account supports APP filing but did not auto-populate the original website subject. The verified lightweight server has eligible filing quota. One new authorization code is selected in the APP / 记金 form and stored only outside Git; the older in-progress code is untouched. Original subject identity and the user's privacy-policy acknowledgement remain pending on the official form.
+- The user later explicitly chose personal operation for 记金, confirmed selecting 个人, and completed the subject-information step. This supersedes the earlier plan to reuse the individual-business website subject. Original website and APP are separate service filings; reuse of subject identity is a convenience, not a requirement to select that same business for a separately operated APP.
+- iOS filing fingerprint must be the certificate SHA-1, despite JD's generic MD5签名 field label. Reference: https://help.aliyun.com/zh/icp-filing/basic-icp-service/user-guide/fill-in-app-feature-information . Public key was extracted as DER PKCS#1 RSAPublicKey hexadecimal (270 bytes), separate from the earlier SPKI representation. Only public certificate material is entered; no private key uploaded.
+- JD accepted the completed service information, including the existing 记金 name, iOS technical fields, JPG icon, 工具 classification and full actual feature description. The draft is now at 上传资料 with a generated personal undertaking. Next accepts a legal declaration, so explicit user confirmation is pending. Domain entry passing this step does not independently establish domain real-name ownership.
+
+## 2026-11-18 — App Store 地区实查
+
+- 1.0（30）为线上版本。后台 147 个店面显示可用，27 个显示缺少交易商状态，中国大陆店面关闭。
+- Apple 土耳其公开目录按 App ID 可查到 1.0，按「记金」搜索返回该 App，按「Sumly」未返回该 App。
+- Apple 2026-11-16 将备案号及新增的中国大陆声明移至「App 合规」。两项声明的填写依据为实际提供的 App 功能。参见 [Apple 合规说明](https://developer.apple.com/help/app-store-connect/manage-compliance-information/view-china-mainland-compliance-information)。
+# 2026-11-19 禅观正式站切换
+
+- `match.oryjk.cn/chanlun/` 页面正常。该正式站 `/api/auth/sumly/session` 在切换前返回 404。
+- 京东云 nginx 通过 WireGuard 将禅观 API 转到 peiqian `:8001`。peiqian 的生产目录为 `/data/chanlun/releases/20261112-secid`，与 local233 的开发和独立联调服务分开。
+- 生产记金使用京东云 `sumly-backend` 和原有 Apple 登录。独立联调的账号与凭据继续隔离，直到验证生产入口后停止专用进程及转发。

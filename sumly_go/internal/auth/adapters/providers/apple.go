@@ -26,9 +26,11 @@ const appleIssuer = "https://appleid.apple.com"
 type AppleConfig struct {
 	ClientID, TeamID, KeyID string
 	PrivateKey              *ecdsa.PrivateKey
+	TestClientSecret        string
 }
 type Apple struct {
 	config             AppleConfig
+	testSecretExpiry   time.Time
 	http               *http.Client
 	crypto             ports.Cryptography
 	mu                 sync.Mutex
@@ -46,10 +48,27 @@ func boundedClient(c *http.Client) *http.Client {
 	return &copy
 }
 func NewApple(c AppleConfig, h *http.Client, crypto ports.Cryptography) *Apple {
-	return &Apple{config: c, http: boundedClient(h), crypto: crypto}
+	apple := &Apple{config: c, http: boundedClient(h), crypto: crypto}
+	if c.TestClientSecret != "" {
+		// Apple validates the signature on exchange. Read only the claims needed to disable
+		// this locally provisioned test credential when it expires or has the wrong audience.
+		var claims jwt.RegisteredClaims
+		token, _, err := jwt.NewParser().ParseUnverified(c.TestClientSecret, &claims)
+		if err == nil && token.Method == jwt.SigningMethodES256 && claims.Subject == c.ClientID &&
+			len(claims.Audience) == 1 && claims.Audience[0] == appleIssuer && claims.ExpiresAt != nil {
+			apple.testSecretExpiry = claims.ExpiresAt.Time
+		}
+	}
+	return apple
 }
 func (a *Apple) Enabled() bool {
-	return a != nil && a.config.ClientID != "" && a.config.TeamID != "" && a.config.KeyID != "" && a.config.PrivateKey != nil && a.config.PrivateKey.Curve.Params().Name == "P-256" && a.crypto != nil
+	if a == nil || a.config.ClientID == "" || a.crypto == nil {
+		return false
+	}
+	if a.config.TestClientSecret != "" {
+		return time.Now().Before(a.testSecretExpiry)
+	}
+	return a.config.TeamID != "" && a.config.KeyID != "" && a.config.PrivateKey != nil && a.config.PrivateKey.Curve.Params().Name == "P-256"
 }
 func (a *Apple) key(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	a.mu.Lock()
@@ -203,6 +222,9 @@ func (a *Apple) VerifyNotification(ctx context.Context, raw string) (domain.Appl
 }
 
 func (a *Apple) clientSecret() (string, error) {
+	if a.config.TestClientSecret != "" {
+		return a.config.TestClientSecret, nil
+	}
 	now := time.Now()
 	token := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.RegisteredClaims{Issuer: a.config.TeamID, Subject: a.config.ClientID, Audience: jwt.ClaimStrings{appleIssuer}, IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute))})
 	token.Header["kid"] = a.config.KeyID
@@ -270,7 +292,8 @@ func (a *Apple) Verify(ctx context.Context, raw, code, nonceHash string) (ports.
 	return ports.AppleIdentity{Subject: first.Subject, RefreshToken: tokens.Refresh, IssuedAt: first.IssuedAt.Time}, nil
 }
 func (a *Apple) Revoke(ctx context.Context, token string) error {
-	if !a.Enabled() || token == "" {
+	// Internal builds share the production App ID. Keep its Apple grant out of test deletion.
+	if !a.Enabled() || a.config.TestClientSecret != "" || token == "" {
 		return domain.ErrUnavailable
 	}
 	res, e := a.post(ctx, "/auth/revoke", url.Values{"token": {token}, "token_type_hint": {"refresh_token"}})
