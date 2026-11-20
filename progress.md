@@ -94,3 +94,9 @@
 - 核心升级：四 Tab（行情/持仓/日历/我的）状态保活与直达持仓/日历、全局共享行情 `LiveGoldQuoteStore`、消除图表单击查价延迟与二分查找优化、行情页今日涨跌/盘口概览/沪伦价差/持仓保本线与买入点叠加、持仓页原生 NavigationStack push + 攒金目标 + 持仓结构环形图、记一笔快捷预设模板/常用品牌渠道标签/键盘收起工具栏、日历 O(1) 按日聚合与滑动切月、禅观加载进度条。
 - 验证：iPhone 17 Pro 模拟器全量 210 项单元测试通过（含新增 9 项体验升级纯逻辑单测），行情首页与持仓预览页模拟器截图目视验收通过。
 - TestFlight 发布：通过本地签名 IPA + JWT API 上传完成，Build ID `a611ca37-3b1f-4300-955f-11f77d4300f1`，Apple 状态 `processingState=VALID`、`internalBuildState=IN_BETA_TESTING`，内部「测试」组已包含该构建且保持 `hasAccessToAllBuilds=true`，已保存中文测试说明。未变动外部分发或 App Store 正式审核状态。
+
+## 2026-11-20 — iOS 新应用图标（24K 斜切金条）1.0.3（40）
+
+- 源码分支：`main`，源码提交：`333fe0169e03ee37dfc79e3e9f0a27bfb1ef6fb2`（已推送 `origin/main`），版本号：`1.0.3`，构建号：`40`。
+- 变更：将 `AppIcon1024.png` 更新为「24K 拉丝斜切金条」深黑鎏金图标（1024×1024 无 Alpha 通道 sRGB PNG），通过模拟器编译与主屏桌面图标目视核验；业务逻辑代码未变，沿用 1.0.3（39）全量 210 项单元测试结果。
+- TestFlight 发布：通过本地签名 IPA + JWT API 上传完成，Build ID `5a67b143-3ce4-40ca-b5e3-567dd7a242c5`，Apple 状态 `processingState=VALID`、`internalBuildState=IN_BETA_TESTING`，内部「测试」组已包含该构建且保持 `hasAccessToAllBuilds=true`，已保存中文测试说明。未变动外部分发或 App Store 正式审核状态。
