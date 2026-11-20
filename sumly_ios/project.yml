@@ -44,7 +44,7 @@ targets:
         CFBundleDisplayName: 记金
         CFBundleDevelopmentRegion: zh-Hans
         CFBundleShortVersionString: "1.0.3"
-        CFBundleVersion: "38"
+        CFBundleVersion: "39"
         UILaunchScreen:
           UIColorName: NeoBackground
         UISupportedInterfaceOrientations:

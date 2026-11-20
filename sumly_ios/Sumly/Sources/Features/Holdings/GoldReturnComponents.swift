@@ -1,4 +1,23 @@
 import SwiftUI
+import UIKit
+
+extension View {
+    /// 统一为含数字键盘的表单添加交互式下滑收起和键盘顶部「完成」按钮。
+    func goldKeyboardDismissable() -> some View {
+        self
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundStyle(GoldTheme.gold)
+                }
+            }
+    }
+}
 
 struct GoldInputField: View {
     let title: String
@@ -16,6 +35,9 @@ struct GoldInputField: View {
 
 struct GoldAdvancedFields: View {
     @Binding var draft: HoldingDraft
+    var recentBrands: [String] = []
+    var recentChannels: [String] = []
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -27,11 +49,41 @@ struct GoldAdvancedFields: View {
             GoldInputField(title: draft.laborPerGram ? "工费（元/克）" : "工费总额（元）", text: $draft.laborText)
             GoldInputField(title: "纯度（%）· 9999 = 99.99%", text: $draft.purityText)
             GoldInputField(title: "其他成本（元）", text: $draft.otherText)
-            TextField("品牌 / 名称（可选）", text: $draft.brand).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-            TextField("购买渠道（可选）", text: $draft.channel).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("品牌 / 名称（可选）", text: $draft.brand).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+                if !recentBrands.isEmpty {
+                    quickTagRow(tags: recentBrands, selected: draft.brand) { draft.brand = $0 }
+                }
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("购买渠道（可选）", text: $draft.channel).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+                if !recentChannels.isEmpty {
+                    quickTagRow(tags: recentChannels, selected: draft.channel) { draft.channel = $0 }
+                }
+            }
             TextField("备注（可选）", text: $draft.note).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
             GoldRecoveryFields(draft: $draft)
         }.foregroundStyle(GoldTheme.text)
+    }
+
+    private func quickTagRow(tags: [String], selected: String, onSelect: @escaping (String) -> Void) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(tags, id: \.self) { tag in
+                    let isChosen = selected == tag
+                    Button { onSelect(tag) } label: {
+                        Text(tag)
+                            .font(.caption)
+                            .foregroundStyle(isChosen ? GoldTheme.onGold : GoldTheme.goldSoft)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(isChosen ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.capsuleShape)
+                            .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 }
 

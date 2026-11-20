@@ -88,8 +88,10 @@ private struct GoldWorkspaceView: View {
     @AppStorage("market.basis") private var marketBasisRaw = GoldMarketBasis.domestic.rawValue
     @AppStorage("holdings.currentBook") private var currentBook = "默认账本"
     @AppStorage("holdings.hideAmounts") private var hideAmounts = false
+    @State private var quoteStore = LiveGoldQuoteStore()
     @State private var showingAdd = false
-    @State private var showingCalendar = false
+    @State private var showingLoginForChanlun = false
+    @State private var showingChanlun = false
 
     private var marketBasis: GoldMarketBasis {
         GoldMarketBasis(rawValue: marketBasisRaw) ?? .domestic
@@ -102,87 +104,166 @@ private struct GoldWorkspaceView: View {
         )
     }
 
+    private func openChanlun() {
+        guard ChanlunWebConfiguration.current != nil else { return }
+        if session.user == nil {
+            showingLoginForChanlun = true
+        } else {
+            showingChanlun = true
+        }
+    }
+
     var body: some View {
         GeometryReader { geometry in
-            let scale = geometry.size.width / 430
+            let safeBottom = geometry.safeAreaInsets.bottom
+            let barBodyHeight: CGFloat = 64
+            let totalBarHeight = barBodyHeight + safeBottom
             ZStack(alignment: .bottom) {
                 GoldTheme.background.ignoresSafeArea()
-                if selectedTab == 0 {
-                    HomeView(marketBasis: marketBasisBinding)
-                } else if selectedTab == 3 {
-                    AccountView(session: session, cloud: cloud)
-                        .padding(.bottom, 80 * scale)
-                } else {
-                    GoldCompanionView(marketBasis: marketBasis, cloud: cloud, session: session)
-                        .padding(.bottom, 80 * scale)
+
+                // Keep all 4 primary tabs alive so switching tabs preserves scroll, navigation stacks, and chart state.
+                ZStack {
+                    HomeView(
+                        marketBasis: marketBasisBinding,
+                        quoteStore: quoteStore,
+                        onOpenHoldings: { selectedTab = 1 },
+                        onOpenChanlun: openChanlun
+                    )
+                    .opacity(selectedTab == 0 ? 1 : 0)
+                    .allowsHitTesting(selectedTab == 0)
+                    .accessibilityHidden(selectedTab != 0)
+
+                    HoldingsView(
+                        marketBasis: marketBasis,
+                        cloud: cloud,
+                        quoteStore: quoteStore,
+                        onOpenCalendar: { selectedTab = 2 }
+                    )
+                    .padding(.bottom, totalBarHeight)
+                    .opacity(selectedTab == 1 ? 1 : 0)
+                    .allowsHitTesting(selectedTab == 1)
+                    .accessibilityHidden(selectedTab != 1)
+
+                    HoldingsCalendarSheet(
+                        initialBook: currentBook,
+                        hideAmounts: hideAmounts,
+                        marketBasis: marketBasis,
+                        quoteStore: quoteStore,
+                        isEmbeddedTab: true
+                    )
+                    .padding(.bottom, totalBarHeight)
+                    .opacity(selectedTab == 2 ? 1 : 0)
+                    .allowsHitTesting(selectedTab == 2)
+                    .accessibilityHidden(selectedTab != 2)
+
+                    AccountView(
+                        session: session,
+                        cloud: cloud,
+                        onOpenChanlun: openChanlun
+                    )
+                    .padding(.bottom, totalBarHeight)
+                    .opacity(selectedTab == 3 ? 1 : 0)
+                    .allowsHitTesting(selectedTab == 3)
+                    .accessibilityHidden(selectedTab != 3)
                 }
-                tabBar(scale: scale)
-                    .frame(height: 80 * scale)
+
+                tabBar(barBodyHeight: barBodyHeight, safeBottom: safeBottom)
+                    .frame(height: totalBarHeight)
             }
             .ignoresSafeArea(edges: .bottom)
         }
+        .sensoryFeedback(.selection, trigger: selectedTab)
         .sheet(isPresented: $showingAdd) {
-            AddHoldingSheet(defaultUnitPrice: nil, marketBasis: marketBasis)
+            AddHoldingSheet(
+                defaultUnitPrice: quoteStore.quote(for: marketBasis)?.cnyPerGram,
+                marketBasis: marketBasis
+            )
         }
-        .sheet(isPresented: $showingCalendar) {
-            HoldingsCalendarSheet(initialBook: currentBook, hideAmounts: hideAmounts, marketBasis: marketBasis)
+        .sheet(isPresented: $showingLoginForChanlun) {
+            AuthenticationSheet(session: session)
         }
-        .task(id: scenePhase) {
-            if scenePhase == .active { await cloud.run() }
-        }
-        .modifier(HoldingAlertsLifecycle())
-        .persistentSystemOverlays(.hidden)
-    }
-
-    private func tabBar(scale: CGFloat) -> some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            ZStack(alignment: .topLeading) {
-                GoldTabBarShape().fill(GoldTheme.card)
-                tabItem("动态", symbol: "house.fill", index: 0, scale: scale)
-                    .position(x: width * 0.1, y: 42 * scale)
-                tabItem("金伴", symbol: "bag.fill", index: 1, scale: scale)
-                    .position(x: width * 0.3, y: 42 * scale)
-                tabItem("日历", symbol: "calendar", index: 2, scale: scale)
-                    .position(x: width * 0.7, y: 42 * scale)
-                tabItem("我的", symbol: "person.fill", index: 3, scale: scale)
-                    .position(x: width * 0.9, y: 42 * scale)
-                Button { showingAdd = true } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 32 * scale, weight: .semibold))
-                        .foregroundStyle(GoldTheme.card)
-                        .frame(width: 65 * scale, height: 65 * scale)
-                        .background(GoldTheme.gold, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("添加黄金")
-                .position(x: width / 2, y: 16 * scale)
+        .fullScreenCover(isPresented: $showingChanlun) {
+            if let configuration = ChanlunWebConfiguration.current {
+                ChanlunWebPage(configuration: configuration, session: session)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .marketCacheCleared)) { _ in
+            quoteStore.clearCache()
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            async let cloudSync: Void = cloud.run()
+            async let quotePolling: Void = quoteStore.start { self.marketBasis }
+            _ = await (cloudSync, quotePolling)
+        }
+        .modifier(HoldingAlertsLifecycle())
     }
 
-    private func tabItem(_ title: String, symbol: String, index: Int, scale: CGFloat) -> some View {
+    private func tabBar(barBodyHeight: CGFloat, safeBottom: CGFloat) -> some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let addDiameter: CGFloat = 56
+            ZStack(alignment: .topLeading) {
+                GoldTabBarShape()
+                    .fill(GoldTheme.card)
+                    .overlay(alignment: .top) {
+                        GoldTabBarShape()
+                            .stroke(GoldTheme.cardStroke, lineWidth: 0.75)
+                    }
+                tabItem("行情", symbol: "chart.xyaxis.line", index: 0)
+                    .position(x: width * 0.1, y: barBodyHeight * 0.54)
+                tabItem("持仓", symbol: "bag.fill", index: 1)
+                    .position(x: width * 0.3, y: barBodyHeight * 0.54)
+                tabItem("日历", symbol: "calendar", index: 2)
+                    .position(x: width * 0.7, y: barBodyHeight * 0.54)
+                tabItem("我的", symbol: "person.fill", index: 3)
+                    .position(x: width * 0.9, y: barBodyHeight * 0.54)
+                Button { showingAdd = true } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundStyle(GoldTheme.onGold)
+                        .frame(width: addDiameter, height: addDiameter)
+                        .background(GoldTheme.gold, in: Circle())
+                        .shadow(color: GoldTheme.gold.opacity(0.28), radius: 8, y: 3)
+                }
+                .buttonStyle(GoldScalePressStyle())
+                .accessibilityLabel("添加黄金")
+                .position(x: width / 2, y: 18)
+            }
+            .padding(.bottom, safeBottom > 0 ? 0 : 2)
+        }
+    }
+
+    private func tabItem(_ title: String, symbol: String, index: Int) -> some View {
         Button {
-            if index == 2 { showingCalendar = true } else { selectedTab = index }
+            selectedTab = index
         } label: {
-            VStack(spacing: 7 * scale) {
+            VStack(spacing: 5) {
                 if index == 1 {
                     GoldMoneyBagShape()
                         .fill(selectedTab == index ? GoldTheme.gold : GoldTheme.textSecondary)
-                        .frame(width: 25 * scale, height: 25 * scale)
+                        .frame(width: 22, height: 22)
                 } else {
                     Image(systemName: symbol)
-                        .font(.system(size: 23 * scale, weight: .semibold))
-                        .frame(height: 25 * scale)
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(height: 22)
                 }
                 Text(title)
-                    .font(.system(size: 11 * scale))
+                    .font(.system(size: 10.5, weight: selectedTab == index ? .semibold : .regular))
             }
             .foregroundStyle(selectedTab == index ? GoldTheme.gold : GoldTheme.textSecondary)
-            .frame(width: 64 * scale, height: 58 * scale)
+            .frame(width: 64, height: 50)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(GoldScalePressStyle())
         .accessibilityAddTraits(selectedTab == index ? .isSelected : [])
+    }
+}
+
+private struct GoldScalePressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.93 : 1)
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
     }
 }

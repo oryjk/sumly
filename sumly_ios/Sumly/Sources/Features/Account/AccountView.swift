@@ -3,6 +3,7 @@ import SwiftUI
 struct AccountView: View {
     @Bindable var session: AuthSession
     var cloud: HoldingsCloud? = nil
+    var onOpenChanlun: (() -> Void)? = nil
     @State private var showSettings = false
     @State private var showLogin = false
     @State private var reauthentication: AccountDeletionIntent?
@@ -63,6 +64,29 @@ struct AccountView: View {
                             .accessibilityIdentifier("account.login")
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).goldCard(padding: 24)
+                if ChanlunWebConfiguration.current != nil, let onOpenChanlun {
+                    Button(action: onOpenChanlun) {
+                        HStack(spacing: 14) {
+                            Image(systemName: "chart.line.uptrend.xyaxis")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(GoldTheme.gold)
+                                .frame(width: 42, height: 42)
+                                .background(GoldTheme.background, in: GoldTheme.rangeShape)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("禅观").font(.headline).foregroundStyle(GoldTheme.text)
+                                Text("查看行情走势与复盘").font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(GoldTheme.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .goldCard(padding: 16)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
                 VStack(alignment: .leading, spacing: 16) {
                     Link(destination: URL(string: "https://oryjk.cn/sumly/privacy")!) {
                         Label("隐私政策", systemImage: "hand.raised")

@@ -4,6 +4,9 @@ import SwiftData
 struct HoldingsView: View {
     let marketBasis: GoldMarketBasis
     let cloud: HoldingsCloud?
+    let quoteStore: LiveGoldQuoteStore?
+    let onOpenCalendar: (() -> Void)?
+    let embedInNavigationStack: Bool
     @Query(sort: \HoldingRecord.timestamp, order: .reverse) private var records: [HoldingRecord]
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
@@ -24,15 +27,29 @@ struct HoldingsView: View {
     @State private var transferTargets: [HoldingRecord] = []
     @State private var showingTransfer = false
     @State private var detail: HoldingRecord?
+    @State private var pushedDetail: HoldingRecord?
     @State private var explaining = false
     @State private var profitBreakdown = false
     @State private var disposing: HoldingRecord?
     @State private var error: String?
 
-    init(marketBasis: GoldMarketBasis = .domestic, cloud: HoldingsCloud? = nil) {
+    init(
+        marketBasis: GoldMarketBasis = .domestic,
+        cloud: HoldingsCloud? = nil,
+        quoteStore: LiveGoldQuoteStore? = nil,
+        onOpenCalendar: (() -> Void)? = nil,
+        embedInNavigationStack: Bool = true
+    ) {
         self.cloud = cloud
         self.marketBasis = marketBasis
-        _model = State(initialValue: HoldingsDesignPreview.makeModel(basis: marketBasis))
+        self.quoteStore = quoteStore
+        self.onOpenCalendar = onOpenCalendar
+        self.embedInNavigationStack = embedInNavigationStack
+        let vm = HoldingsDesignPreview.makeModel(basis: marketBasis)
+        if let quoteStore {
+            vm.applyExternalQuote(quoteStore.quote(for: marketBasis), failed: quoteStore.isFailed(for: marketBasis))
+        }
+        _model = State(initialValue: vm)
     }
 
     private var books: [String] { Array(Set(savedBooks.components(separatedBy: "\n") + records.map(\.bookName) + ["默认账本"])).sorted() }
@@ -41,6 +58,23 @@ struct HoldingsView: View {
     private var visibleRecords: [HoldingRecord] { HoldingsSelection.records(records, book: book, search: search, filter: filter, sort: sort, quote: model.quote?.cnyPerGram) }
 
     var body: some View {
+        Group {
+            if embedInNavigationStack {
+                NavigationStack {
+                    holdingsContent
+                        .toolbar(.hidden, for: .navigationBar)
+                        .navigationDestination(item: $pushedDetail) { record in
+                            HoldingDetailView(record: record, model: model, marketBasis: marketBasis, embeddedInNavigationStack: true)
+                        }
+                }
+                .tint(GoldTheme.gold)
+            } else {
+                holdingsContent
+            }
+        }
+    }
+
+    private var holdingsContent: some View {
         ZStack {
             GoldTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
@@ -52,6 +86,15 @@ struct HoldingsView: View {
                             .listRowBackground(GoldTheme.background).listRowSeparator(.hidden)
                     }
                     summary.listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
+                    HoldingsInsightsSection(
+                        records: activeRecords,
+                        currentGrams: activeRecords.reduce(0) { $0 + $1.grams },
+                        referencePrice: model.quote?.cnyPerGram,
+                        hideAmounts: hideAmounts
+                    )
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
+                    .listRowBackground(GoldTheme.background)
+                    .listRowSeparator(.hidden)
                     filters.listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
                     if visibleRecords.isEmpty {
                         emptyState.listRowInsets(EdgeInsets(top: 25, leading: 16, bottom: 0, trailing: 16))
@@ -59,11 +102,21 @@ struct HoldingsView: View {
                     ForEach(visibleRecords) { record in
                         HStack(spacing: 8) {
                             if batch {
-                                Button { if selection.contains(record.id) { selection.remove(record.id) } else { selection.insert(record.id) } } label: {
+                                Button {
+                                    if selection.contains(record.id) { selection.remove(record.id) } else { selection.insert(record.id) }
+                                } label: {
                                     Image(systemName: selection.contains(record.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(GoldTheme.gold)
                                 }.buttonStyle(.plain).accessibilityLabel("选择持仓")
                             }
-                            Button { if batch { if selection.contains(record.id) { selection.remove(record.id) } else { selection.insert(record.id) } } else { detail = record } } label: {
+                            Button {
+                                if batch {
+                                    if selection.contains(record.id) { selection.remove(record.id) } else { selection.insert(record.id) }
+                                } else if embedInNavigationStack {
+                                    pushedDetail = record
+                                } else {
+                                    detail = record
+                                }
+                            } label: {
                                 HoldingRowView(record: record, result: GoldReturnCalculator.calculate(record.returnInput, referencePrice: model.quote?.cnyPerGram), hideAmounts: hideAmounts)
                             }.buttonStyle(.plain)
                         }
@@ -79,12 +132,35 @@ struct HoldingsView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboard(.interactively)
                 .environment(\.defaultMinListRowHeight, 0)
                 .listRowSpacing(0)
                 if batch { batchBar.padding(.horizontal, 16).padding(.bottom, 10) }
             }
         }
-        .task(id: scenePhase) { if scenePhase == .active { await model.start() } }
+        .task(id: scenePhase) {
+            if quoteStore == nil, scenePhase == .active { await model.start() }
+        }
+        .onChange(of: quoteStore?.quote(for: marketBasis)) { _, latest in
+            if let quoteStore {
+                model.applyExternalQuote(latest, failed: quoteStore.isFailed(for: marketBasis))
+            }
+        }
+        .onChange(of: quoteStore?.isFailed(for: marketBasis)) { _, failed in
+            if let quoteStore {
+                model.applyExternalQuote(quoteStore.quote(for: marketBasis), failed: failed ?? false)
+            }
+        }
+        .onChange(of: marketBasis) { _, updatedBasis in
+            if let quoteStore {
+                model.applyExternalQuote(quoteStore.quote(for: updatedBasis), failed: quoteStore.isFailed(for: updatedBasis))
+            }
+        }
+        .sensoryFeedback(.selection, trigger: book)
+        .sensoryFeedback(.selection, trigger: hideAmounts)
+        .sensoryFeedback(.selection, trigger: filter)
+        .sensoryFeedback(.selection, trigger: sort)
+        .sensoryFeedback(.selection, trigger: batch)
         .sheet(item: $sheet) { page in
             switch page {
             case .add: AddHoldingSheet(defaultUnitPrice: model.quote?.cnyPerGram, marketBasis: marketBasis)
@@ -154,6 +230,8 @@ struct HoldingsView: View {
             Button { if !activeRecords.isEmpty { sheet = .overview } } label: {
                 Text(GoldReturnPresentation.money(stats?.proceeds, hidden: hideAmounts))
                     .font(.system(size: 39, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(GoldTheme.gold)
+                    .contentTransition(.numericText())
+                    .animation(.easeOut(duration: 0.2), value: stats?.proceeds)
                     .lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: .infinity, alignment: .leading)
             }.buttonStyle(.plain)
             Button { if !activeRecords.isEmpty { profitBreakdown = true } } label: {
@@ -190,7 +268,9 @@ struct HoldingsView: View {
                 action("买前算一算", filled: false) { sheet = .calculator }
             }
             HStack {
-                Button("记金日历", systemImage: "calendar") { sheet = .calendar }
+                Button("记金日历", systemImage: "calendar") {
+                    if let onOpenCalendar { onOpenCalendar() } else { sheet = .calendar }
+                }
                 Spacer()
                 Button("赠卖记录", systemImage: "clock") { sheet = .history }
             }.font(.caption).foregroundStyle(GoldTheme.textSecondary).frame(minHeight: 32)

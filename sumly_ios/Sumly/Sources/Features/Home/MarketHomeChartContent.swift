@@ -8,6 +8,15 @@ struct MarketHomeChartContent: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showingHistorySources: Bool
     @Binding var showingDates: Bool
+    var holdingOverlay: MarketHoldingOverlay? = nil
+    var showHoldingOverlay: Bool = false
+    var onToggleHoldingOverlay: (() -> Void)? = nil
+
+    private static let quickRanges: [MarketRange] = [.realtime, .month, .quarter, .year, .fiveYears]
+
+    private var quoteSnapshot: MarketQuoteSnapshot? {
+        model.quote.flatMap { MarketQuoteSnapshot.make(from: $0, basis: model.basis) }
+    }
 
     var body: some View {
         MarketDashboardLayout(availableHeight: availableHeight) {
@@ -15,7 +24,15 @@ struct MarketHomeChartContent: View {
             chartControls
             VStack(alignment: .leading, spacing: 6) {
                 chartCaption
-                ChartWindowSummary(statistics: model.windowStatistics)
+                HStack(spacing: 8) {
+                    ChartWindowSummary(statistics: model.windowStatistics)
+                    if showHoldingOverlay, let breakEven = holdingOverlay?.breakEvenPrice {
+                        Text("· 保本 ¥\(breakEven.moneyText)")
+                            .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                            .foregroundStyle(GoldTheme.goldSoft)
+                            .lineLimit(1)
+                    }
+                }
             }.frame(maxWidth: .infinity, alignment: .leading)
 
             if model.range == .realtime || model.range.dateBounds() != nil {
@@ -28,6 +45,9 @@ struct MarketHomeChartContent: View {
             }
             navigator
         }
+        .sensoryFeedback(.selection, trigger: model.selectedPoint?.date)
+        .sensoryFeedback(.selection, trigger: model.range)
+        .sensoryFeedback(.selection, trigger: model.priceScale)
     }
 
     private var quoteHeader: some View {
@@ -38,12 +58,29 @@ struct MarketHomeChartContent: View {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(model.price.map { $0.formatted(.number.precision(.fractionLength(2)).grouping(.never)) } ?? "—")
                     .font(.system(size: 42, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.easeOut(duration: 0.2), value: model.price)
                 Text("元/克").font(.caption)
             }.foregroundStyle(GoldTheme.gold)
                 .lineLimit(1).minimumScaleFactor(0.75)
                 .padding(.horizontal, 44)
                 .frame(maxWidth: .infinity)
                 .accessibilityLabel("黄金价格，\(model.price.map { String(format: "%.2f", $0) } ?? "暂无报价") 元每克")
+            if let snapshot = quoteSnapshot, let change = snapshot.changeCNY, let percent = snapshot.changePercent {
+                let isUp = change >= 0
+                let tintColor = change == 0 ? GoldTheme.textSecondary : (isUp ? GoldTheme.up : GoldTheme.down)
+                HStack(spacing: 6) {
+                    Text("今日 \(change.signedMoneyText)")
+                    Text("(\(percent.signedMoneyText)%)")
+                }
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(tintColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .background(tintColor.opacity(0.12), in: GoldTheme.capsuleShape)
+            }
             ZStack {
                 if let message = model.message {
                     Button(message) { Task { await model.refresh() } }
@@ -56,21 +93,73 @@ struct MarketHomeChartContent: View {
     }
 
     @ViewBuilder private var chartControls: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(spacing: 8) {
-                rangeMenu
-                HStack(spacing: 8) { scalePicker; Spacer(minLength: 0); resetButton }
+        VStack(spacing: 8) {
+            quickRangeBar
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 8) {
+                    rangeMenu
+                    HStack(spacing: 8) {
+                        scalePicker
+                        Spacer(minLength: 0)
+                        holdingOverlayToggle
+                        resetButton
+                    }
+                }
+            } else {
+                HStack(spacing: 6) {
+                    rangeMenu
+                    Rectangle().fill(GoldTheme.cardStroke).frame(width: 1, height: 22)
+                        .accessibilityHidden(true)
+                    scalePicker
+                    holdingOverlayToggle
+                    resetButton
+                }
+                .padding(.horizontal, 6)
+                .background(GoldTheme.card, in: GoldTheme.rangeShape)
             }
-        } else {
-            HStack(spacing: 6) {
-                rangeMenu
-                Rectangle().fill(GoldTheme.cardStroke).frame(width: 1, height: 22)
-                    .accessibilityHidden(true)
-                scalePicker
-                resetButton
+        }
+    }
+
+    private var quickRangeBar: some View {
+        HStack(spacing: 6) {
+            ForEach(Self.quickRanges, id: \.self) { range in
+                let isSelected = model.range == range
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        model.range = range
+                    }
+                } label: {
+                    Text(rangeTitle(range))
+                        .font(.system(size: 12, weight: isSelected ? .bold : .medium, design: .rounded))
+                        .foregroundStyle(isSelected ? GoldTheme.onGold : GoldTheme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 30)
+                        .background(isSelected ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.capsuleShape)
+                        .overlay(GoldTheme.capsuleShape.strokeBorder(isSelected ? Color.clear : GoldTheme.cardStroke, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 6)
-            .background(GoldTheme.card, in: GoldTheme.rangeShape)
+        }
+    }
+
+    @ViewBuilder private var holdingOverlayToggle: some View {
+        if holdingOverlay != nil, let onToggleHoldingOverlay {
+            Button(action: onToggleHoldingOverlay) {
+                HStack(spacing: 3) {
+                    Image(systemName: showHoldingOverlay ? "checkmark.circle.fill" : "circle")
+                        .font(.caption2)
+                    Text("保本线")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                }
+                .padding(.horizontal, 8)
+                .frame(minHeight: 36)
+                .foregroundStyle(showHoldingOverlay ? GoldTheme.onGold : GoldTheme.goldSoft)
+                .background(showHoldingOverlay ? GoldTheme.gold : GoldTheme.background, in: GoldTheme.rangeShape)
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .accessibilityLabel("在走势图叠加持仓保本线")
+            .accessibilityValue(showHoldingOverlay ? "已开启" : "已关闭")
         }
     }
 
@@ -82,12 +171,13 @@ struct MarketHomeChartContent: View {
                 }
             }
         } label: {
+            let isQuick = Self.quickRanges.contains(model.range)
             HStack(spacing: 5) {
-                Text(rangeTitle(model.range)).fontWeight(.semibold)
+                Text(isQuick ? "更多区间" : rangeTitle(model.range)).fontWeight(.semibold)
                 Image(systemName: "chevron.down").font(.caption2.weight(.bold))
-            }.font(.subheadline).foregroundStyle(GoldTheme.goldSoft)
-                .lineLimit(1).minimumScaleFactor(0.7)
-                .padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 44)
+            }.font(.footnote).foregroundStyle(isQuick ? GoldTheme.textSecondary : GoldTheme.goldSoft)
+                .lineLimit(1).minimumScaleFactor(0.75)
+                .padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 38)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("时间区间")
@@ -100,7 +190,7 @@ struct MarketHomeChartContent: View {
             ForEach(ChartPriceScale.allCases, id: \.self) { scale in
                 Button { model.priceScale = scale } label: {
                     Text(scale.rawValue).font(.system(.footnote, design: .rounded).weight(.semibold))
-                        .padding(.horizontal, 8).frame(minWidth: 44, minHeight: 44)
+                        .padding(.horizontal, 8).frame(minWidth: 42, minHeight: 36)
                         .foregroundStyle(model.priceScale == scale ? GoldTheme.onGold : GoldTheme.textSecondary)
                         .background(model.priceScale == scale ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.rangeShape)
                 }.buttonStyle(.plain)
@@ -114,7 +204,7 @@ struct MarketHomeChartContent: View {
     private var resetButton: some View {
         Button { model.resetViewport() } label: {
             Label("复位", systemImage: "arrow.counterclockwise")
-                .font(.footnote.weight(.semibold)).padding(.horizontal, 8).frame(minHeight: 44)
+                .font(.footnote.weight(.semibold)).padding(.horizontal, 8).frame(minHeight: 38)
                 .foregroundStyle(model.canReset ? GoldTheme.goldSoft : GoldTheme.textFaint)
                 .contentShape(Rectangle())
         }.buttonStyle(.plain).disabled(!model.canReset)
@@ -234,6 +324,34 @@ struct MarketHomeChartContent: View {
                 if let low = statistics.low, low.price != statistics.high?.price {
                     PointMark(x: .value("时间", low.date), y: .value("价格刻度", model.priceScale.value(low.price) ?? baseline))
                         .foregroundStyle(GoldTheme.goldSoft).symbolSize(24)
+                }
+                if showHoldingOverlay, let overlay = holdingOverlay {
+                    if let breakEven = overlay.breakEvenPrice,
+                       let scaled = model.priceScale.value(breakEven),
+                       domain.contains(scaled) {
+                        RuleMark(y: .value("保本价", scaled))
+                            .foregroundStyle(GoldTheme.goldSoft.opacity(0.75))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("保本 ¥\(breakEven.moneyText)")
+                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundStyle(GoldTheme.onGold)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(GoldTheme.goldSoft.opacity(0.92), in: GoldTheme.rangeShape)
+                            }
+                    }
+                    if model.range != .realtime {
+                        ForEach(overlay.markers) { marker in
+                            if let scaled = model.priceScale.value(marker.averageUnitPrice),
+                               domain.contains(scaled) {
+                                PointMark(x: .value("买入时间", marker.date), y: .value("买入单价", scaled))
+                                    .foregroundStyle(GoldTheme.up)
+                                    .symbolSize(46)
+                            }
+                        }
+                    }
                 }
                 if let point = model.selectedPoint {
                     RuleMark(x: .value("时间", point.date))

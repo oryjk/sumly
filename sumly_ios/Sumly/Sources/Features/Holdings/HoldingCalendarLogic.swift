@@ -34,8 +34,32 @@ struct HoldingCalendarSummary {
     var sales: HoldingCalendarCategorySummary
     var gifts: HoldingCalendarCategorySummary
 }
+struct HoldingCalendarDayBucket: Equatable, Sendable {
+    var purchaseGrams: Double = 0
+    var saleGrams: Double = 0
+    var giftGrams: Double = 0
+    var hasAny: Bool { purchaseGrams > 0 || saleGrams > 0 || giftGrams > 0 }
+}
+
 /// 日历按事件日期汇总；拆分持仓共享购入编号，购入件数不会因赠卖增加。
 enum HoldingCalendarLogic {
+    /// 一次性按自然日（startOfDay）聚合克重，供 42 格日历 O(1) 查表，避免 42×N 重复遍历。
+    static func dayBuckets(_ events: [HoldingCalendarEvent], calendar: Calendar = .current) -> [Date: HoldingCalendarDayBucket] {
+        var result: [Date: HoldingCalendarDayBucket] = [:]
+        for event in events {
+            let day = calendar.startOfDay(for: event.date)
+            var bucket = result[day] ?? HoldingCalendarDayBucket()
+            switch event.kind {
+            case "buy": bucket.purchaseGrams += event.grams
+            case "sold": bucket.saleGrams += event.grams
+            case "gift": bucket.giftGrams += event.grams
+            default: break
+            }
+            result[day] = bucket
+        }
+        return result
+    }
+
     static func events(_ records: [HoldingRecord], filter: HoldingCalendarFilter) -> [HoldingCalendarEvent] {
         var result: [HoldingCalendarEvent] = []
         for r in records {

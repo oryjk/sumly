@@ -4,16 +4,25 @@ import SwiftData
 struct AddHoldingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \HoldingRecord.timestamp, order: .reverse) private var existingRecords: [HoldingRecord]
     let marketBasis: GoldMarketBasis
     @State private var draft: HoldingDraft
     @State private var purchasePrice: HoldingPurchasePriceModel
     @State private var timestamp: Date
     @State private var advanced = false
+    @State private var selectedPreset: HoldingQuickPreset?
     private let targetBook: String?
     private let editing: HoldingRecord?
     private let onSaved: (() -> Void)?
     @AppStorage("holdings.currentBook") private var book = "默认账本"
     @State private var errorMessage: String?
+
+    private var recentBrands: [String] {
+        HoldingsInsights.recentTags(from: existingRecords.map(\.insightEntry), keyPath: \.brand)
+    }
+    private var recentChannels: [String] {
+        HoldingsInsights.recentTags(from: existingRecords.map(\.insightEntry), keyPath: \.channel)
+    }
 
     init(defaultUnitPrice: Double?, date: Date = .now, book: String? = nil, marketBasis: GoldMarketBasis = .domestic,
          editing: HoldingRecord? = nil, seed: HoldingDraft? = nil, onSaved: (() -> Void)? = nil) {
@@ -35,6 +44,9 @@ struct AddHoldingSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if editing == nil {
+                        quickPresetStrip
+                    }
                     Picker("黄金类型", selection: $draft.assetType) {
                         ForEach(GoldAssetType.allCases) { Text($0.rawValue).tag($0) }
                     }.pickerStyle(.segmented)
@@ -59,7 +71,7 @@ struct AddHoldingSheet: View {
                     }), in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
                         .environment(\.locale, Locale(identifier: "zh_CN")).font(.subheadline).foregroundStyle(GoldTheme.text)
                     DisclosureGroup("完善真实收益信息", isExpanded: $advanced) {
-                        GoldAdvancedFields(draft: $draft).padding(.top, 12)
+                        GoldAdvancedFields(draft: $draft, recentBrands: recentBrands, recentChannels: recentChannels).padding(.top, 12)
                     }.foregroundStyle(GoldTheme.gold)
                     Text("默认纯度 \(draft.purityText)%，回收参数可在高级信息中修改。")
                         .font(.caption).foregroundStyle(GoldTheme.textSecondary)
@@ -77,6 +89,7 @@ struct AddHoldingSheet: View {
                     if let errorMessage { Text(errorMessage).font(.footnote).foregroundStyle(GoldTheme.up) }
                 }.padding(16)
             }.background(GoldTheme.background)
+                .goldKeyboardDismissable()
                 .safeAreaInset(edge: .bottom) {
                     Button(editing == nil ? "保存持仓" : "保存修改") { save() }
                         .buttonStyle(GoldPrimaryButtonStyle()).padding(16).background(GoldTheme.background)
@@ -84,8 +97,46 @@ struct AddHoldingSheet: View {
                 .navigationTitle(editing == nil ? "记一笔黄金" : "编辑持仓").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.foregroundStyle(GoldTheme.textSecondary) } }
         }.presentationBackground(GoldTheme.background)
+            .sensoryFeedback(.selection, trigger: selectedPreset)
             .task(id: purchasePrice.selectedDay) { await purchasePrice.load(); draft.priceText = purchasePrice.priceText }
             .onChange(of: purchasePrice.priceText) { draft.priceText = purchasePrice.priceText }
+    }
+
+    private var quickPresetStrip: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("快捷场景预设（可选）")
+                .font(.caption)
+                .foregroundStyle(GoldTheme.textSecondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(HoldingQuickPreset.allCases) { preset in
+                        let active = selectedPreset == preset
+                        Button {
+                            selectedPreset = preset
+                            preset.apply(to: &draft)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: preset.symbol)
+                                    .font(.caption.weight(.semibold))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(preset.rawValue)
+                                        .font(.caption.bold())
+                                    Text(preset.subtitle)
+                                        .font(.system(size: 10))
+                                        .opacity(active ? 0.85 : 0.7)
+                                }
+                            }
+                            .foregroundStyle(active ? GoldTheme.onGold : GoldTheme.text)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(active ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.holdingsCardShape)
+                            .overlay(GoldTheme.holdingsCardShape.strokeBorder(active ? GoldTheme.gold : GoldTheme.cardStroke, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
     private var priceReferenceStatus: some View {

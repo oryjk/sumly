@@ -24,13 +24,14 @@ struct ChartGestureSurface: UIViewRepresentable {
         let tap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.tap(_:)))
         let reset = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.reset(_:)))
         reset.numberOfTapsRequired = 2
-        tap.require(toFail: reset)
+        // Do not block single-tap inspection waiting for double-tap failure (~300ms lag).
         for gesture in [pinch, pan, inspect, tap, reset] {
             gesture.delegate = coordinator
             view.addGestureRecognizer(gesture)
         }
         coordinator.pinchRecognizer = pinch
         coordinator.panRecognizer = pan
+        coordinator.inspectRecognizer = inspect
         return view
     }
     func updateUIView(_ uiView: UIView, context: Context) { context.coordinator.owner = self }
@@ -40,11 +41,21 @@ struct ChartGestureSurface: UIViewRepresentable {
         var owner: ChartGestureSurface
         weak var pinchRecognizer: UIPinchGestureRecognizer?
         weak var panRecognizer: UIPanGestureRecognizer?
+        weak var inspectRecognizer: UIPanGestureRecognizer?
         private var active = Set<ObjectIdentifier>()
         private var scale = 1.0
         private var translation = 0.0
         private var anchor = 0.5
         init(_ owner: ChartGestureSurface) { self.owner = owner }
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            if gestureRecognizer === inspectRecognizer, let pan = gestureRecognizer as? UIPanGestureRecognizer,
+               let view = pan.view {
+                let velocity = pan.velocity(in: view)
+                // Let vertical scrolling pass smoothly to the enclosing ScrollView.
+                if abs(velocity.y) > abs(velocity.x) * 1.15 { return false }
+            }
+            return true
+        }
         func gestureRecognizer(_ a: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith b: UIGestureRecognizer) -> Bool {
             (a === pinchRecognizer && b === panRecognizer) || (a === panRecognizer && b === pinchRecognizer)
         }

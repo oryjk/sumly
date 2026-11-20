@@ -37,7 +37,9 @@ struct GoldScenarioSheet: View {
                     Text("情景计算使用这笔持仓的纯度和回收规则，不改变实际持仓，也不预测未来金价。")
                         .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 }.padding(16)
-            }.background(GoldTheme.background).navigationTitle("情景测算").navigationBarTitleDisplayMode(.inline)
+            }.background(GoldTheme.background)
+                .goldKeyboardDismissable()
+                .navigationTitle("情景测算").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }.presentationBackground(GoldTheme.background)
     }

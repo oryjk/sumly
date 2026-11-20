@@ -33,6 +33,16 @@ final class HoldingsViewModel {
         }
     }
 
+    /// 同步外部共享报价源，避免多个 Tab 重复轮询同一接口。
+    func applyExternalQuote(_ externalQuote: GoldQuote?, failed: Bool) {
+        if let externalQuote, GoldReturnCalculator.validPrice(externalQuote.cnyPerGram) != nil {
+            quote = externalQuote
+            quoteFailed = false
+        } else if failed {
+            quoteFailed = true
+        }
+    }
+
     /// 拉一次实时报价；失败静默保留旧值。
     func pollQuote() async {
         guard let quoteService else { return }

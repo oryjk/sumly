@@ -81,6 +81,8 @@ private final class ChanlunExchangeDelegate: NSObject, URLSessionTaskDelegate {
     let webView: WKWebView
     private(set) var loading = true
     private(set) var failed = false
+    private(set) var progress: Double = 0
+    @ObservationIgnored private var progressObservation: NSKeyValueObservation?
 
     init(configuration: ChanlunWebConfiguration) {
         self.configuration = configuration
@@ -91,6 +93,11 @@ private final class ChanlunExchangeDelegate: NSObject, URLSessionTaskDelegate {
         webView.navigationDelegate = self
         // The H5 tab bar handles the bottom safe area through viewport-fit=cover.
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        progressObservation = webView.observe(\.estimatedProgress, options: [.new]) { [weak self] view, _ in
+            Task { @MainActor [weak self] in
+                self?.progress = view.estimatedProgress
+            }
+        }
     }
 
     func open(using session: AuthSession) async throws {
@@ -185,7 +192,14 @@ struct ChanlunWebPage: View {
                     .ignoresSafeArea(.container, edges: .bottom)
                     .opacity(webSession.loading || webSession.failed ? 0 : 1)
                 if webSession.loading {
-                    ProgressView("正在打开禅观…")
+                    VStack(spacing: 0) {
+                        ProgressView(value: max(0.08, webSession.progress))
+                            .progressViewStyle(.linear)
+                            .tint(GoldTheme.gold)
+                        Spacer()
+                        ProgressView("正在打开禅观…")
+                        Spacer()
+                    }
                 } else if webSession.failed {
                     VStack(spacing: 16) {
                         Text("暂时无法打开禅观")

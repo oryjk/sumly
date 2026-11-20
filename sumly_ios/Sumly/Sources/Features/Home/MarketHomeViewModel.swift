@@ -84,7 +84,9 @@ final class MarketHomeViewModel {
     private(set) var daily: [GoldDailyPrice] = [] {
         didSet { if daily != oldValue { historyRevision &+= 1 } }
     }
-    private(set) var realtime: [MarketChartPoint] = []
+    private(set) var realtime: [MarketChartPoint] = [] {
+        didSet { if realtime != oldValue { realtimeRevision &+= 1 } }
+    }
     private var quoteLoading = true
     private var dailyLoading = true
     private var realtimeLoading = true
@@ -107,16 +109,29 @@ final class MarketHomeViewModel {
     // Derived data is not observable state: filling this cache during a view read
     // must not schedule another SwiftUI render. Source properties remain observed.
     private var historyRevision: UInt = 0
+    private var realtimeRevision: UInt = 0
     @ObservationIgnored private var preparedKey: HistoricalPointsKey?
     @ObservationIgnored private var preparedPoints: [MarketChartPoint] = []
     @ObservationIgnored private var scopedKey: HistoricalPointsKey?
     @ObservationIgnored private var scopedRange: MarketRange?
     @ObservationIgnored private var scopedPoints: [MarketChartPoint] = []
+    @ObservationIgnored private var cachedWindowKey: WindowCacheKey?
+    @ObservationIgnored private var cachedWindowPoints: [MarketChartPoint] = []
+    @ObservationIgnored private var cachedWindowStats: ChartWindowStatistics = ChartWindowStatistics(points: [])
     private struct HistoricalPointsKey: Equatable {
         let revision: UInt
         let factor: Double
         let lastDay: Date
         let timeZone: TimeZone
+    }
+    private struct WindowCacheKey: Equatable {
+        let basis: GoldMarketBasis
+        let range: MarketRange
+        let historyRevision: UInt
+        let realtimeRevision: UInt
+        let usdCNY: Double
+        let lower: Date
+        let upper: Date
     }
 
     init(basis: GoldMarketBasis = .international,
@@ -224,9 +239,30 @@ final class MarketHomeViewModel {
 
     var selectedPoint: MarketChartPoint? {
         let window = xDomain
-        let values = points.filter { window.contains($0.date) }
         guard let selectedDate, window.contains(selectedDate) else { return nil }
-        return values.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
+        return Self.nearestPoint(in: windowPoints, to: selectedDate)
+    }
+
+    /// 二分查找有序点列中距离目标时刻最近的点，O(log n)，保障长历史数据拖动查价丝滑。
+    nonisolated static func nearestPoint(in sortedPoints: [MarketChartPoint], to target: Date) -> MarketChartPoint? {
+        guard !sortedPoints.isEmpty else { return nil }
+        var low = 0
+        var high = sortedPoints.count
+        while low < high {
+            let mid = (low + high) / 2
+            if sortedPoints[mid].date < target {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        if low == 0 { return sortedPoints[0] }
+        if low >= sortedPoints.count { return sortedPoints[sortedPoints.count - 1] }
+        let previous = sortedPoints[low - 1]
+        let next = sortedPoints[low]
+        let dPrev = abs(previous.date.timeIntervalSince(target))
+        let dNext = abs(next.date.timeIntervalSince(target))
+        return dPrev <= dNext ? previous : next
     }
 
     func start() async {
@@ -300,6 +336,7 @@ final class MarketHomeViewModel {
             cacheGeneration &+= 1
             preparedKey = nil; preparedPoints = []
             scopedKey = nil; scopedRange = nil; scopedPoints = []
+            cachedWindowKey = nil; cachedWindowPoints = []
 
             basis = newBasis
             dailyService = next.daily
@@ -386,9 +423,24 @@ final class MarketHomeViewModel {
     }
     var windowPoints: [MarketChartPoint] {
         let window = xDomain
-        return points.filter { window.contains($0.date) }
+        if range == .realtime {
+            return points.filter { window.contains($0.date) }
+        }
+        let fx = basis == .international ? (quote?.usdCNY ?? 0) : 1
+        let key = WindowCacheKey(basis: basis, range: range, historyRevision: historyRevision,
+                                 realtimeRevision: realtimeRevision, usdCNY: fx, lower: window.lowerBound, upper: window.upperBound)
+        if cachedWindowKey == key { return cachedWindowPoints }
+        let filtered = points.filter { window.contains($0.date) }
+        cachedWindowKey = key
+        cachedWindowPoints = filtered
+        cachedWindowStats = ChartWindowStatistics(points: filtered)
+        return filtered
     }
-    var windowStatistics: ChartWindowStatistics { ChartWindowStatistics(points: windowPoints) }
+    var windowStatistics: ChartWindowStatistics {
+        if range == .realtime { return ChartWindowStatistics(points: windowPoints) }
+        _ = windowPoints
+        return cachedWindowStats
+    }
     var canReset: Bool { xDomain != presetDomain }
     var axisDates: [Date] {
         let window = xDomain
@@ -469,6 +521,7 @@ final class MarketHomeViewModel {
         cacheGeneration &+= 1
         preparedKey = nil; preparedPoints = []
         scopedKey = nil; scopedRange = nil; scopedPoints = []
+        cachedWindowKey = nil; cachedWindowPoints = []
         daily = []; history = []; realtime = []; quote = nil; selectedDate = nil
         resetViewport()
     }

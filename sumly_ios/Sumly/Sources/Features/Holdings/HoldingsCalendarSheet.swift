@@ -5,6 +5,8 @@ struct HoldingsCalendarSheet: View {
     let initialBook: String
     let hideAmounts: Bool
     let marketBasis: GoldMarketBasis
+    let quoteStore: LiveGoldQuoteStore?
+    let isEmbeddedTab: Bool
     @Query private var records: [HoldingRecord]
     @AppStorage("holdings.books") private var savedBooks = "默认账本"
     @Environment(\.dismiss) private var dismiss
@@ -18,16 +20,30 @@ struct HoldingsCalendarSheet: View {
     @State private var showingAdd = false
     @State private var sectionExpansion: [CalendarStatisticsKind: Bool] = [:]
     @State private var model: HoldingsViewModel
-    init(initialBook: String, hideAmounts: Bool, marketBasis: GoldMarketBasis = .domestic) {
+    init(
+        initialBook: String,
+        hideAmounts: Bool,
+        marketBasis: GoldMarketBasis = .domestic,
+        quoteStore: LiveGoldQuoteStore? = nil,
+        isEmbeddedTab: Bool = false
+    ) {
         self.initialBook = initialBook
         self.hideAmounts = hideAmounts
         self.marketBasis = marketBasis
-        _model = State(initialValue: HoldingsDesignPreview.makeModel(basis: marketBasis))
+        self.quoteStore = quoteStore
+        self.isEmbeddedTab = isEmbeddedTab
+        let vm = HoldingsDesignPreview.makeModel(basis: marketBasis)
+        if let quoteStore {
+            vm.applyExternalQuote(quoteStore.quote(for: marketBasis), failed: quoteStore.isFailed(for: marketBasis))
+        }
+        _model = State(initialValue: vm)
     }
 
     private var events: [HoldingCalendarEvent] { HoldingCalendarLogic.events(records, filter: filter) }
+    private var dayBuckets: [Date: HoldingCalendarDayBucket] { HoldingCalendarLogic.dayBuckets(events) }
     private var selected: [HoldingCalendarEvent] { HoldingCalendarLogic.select(events, period: period, date: date) }
     private var books: [String] { Array(Set(records.map(\.bookName) + savedBooks.components(separatedBy: "\n") + [initialBook])).filter { !$0.isEmpty }.sorted() }
+    private var isToday: Bool { Calendar.current.isDateInToday(date) }
     private var title: String {
         switch period {
         case .day: HoldingsSelection.dateText(date)
@@ -37,38 +53,87 @@ struct HoldingsCalendarSheet: View {
         }
     }
     var body: some View {
+        let currentEvents = events
+        let currentBuckets = HoldingCalendarLogic.dayBuckets(currentEvents)
+        let currentSelected = HoldingCalendarLogic.select(currentEvents, period: period, date: date)
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    if isEmbeddedTab {
+                        HStack {
+                            Text("记金日历")
+                                .font(.title2.bold())
+                                .foregroundStyle(GoldTheme.text)
+                            Spacer()
+                            if !isToday && period != .all {
+                                Button("回到今天") {
+                                    withAnimation(.easeInOut(duration: 0.2)) { date = .now }
+                                }
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(GoldTheme.gold)
+                                .padding(.horizontal, 10)
+                                .frame(height: 30)
+                                .background(GoldTheme.card, in: GoldTheme.capsuleShape)
+                            }
+                        }
+                    }
                     controls
                     if period != .all { periodNavigation }
-                    if period == .day { calendarGrid }
+                    if period == .day { calendarGrid(buckets: currentBuckets) }
                     if period == .month { monthGrid }
-                    summary
-                    if selected.isEmpty {
+                    summary(selected: currentSelected)
+                    if currentSelected.isEmpty {
                         ContentUnavailableView("暂无记录", systemImage: "calendar", description: Text("可以切换日期、调整筛选或添加黄金。"))
                     } else {
                         Text("记录明细").font(.headline)
-                        ForEach(selected) { event in eventRow(event) }
+                        ForEach(currentSelected) { event in eventRow(event) }
                     }
                 }.padding(16)
             }
             .background(GoldTheme.background)
             .navigationTitle("记金日历").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭", systemImage: "xmark") { dismiss() }.labelStyle(.iconOnly) } }
+            .toolbar(isEmbeddedTab ? .hidden : .visible, for: .navigationBar)
+            .toolbar {
+                if !isEmbeddedTab {
+                    ToolbarItem(placement: .cancellationAction) { Button("关闭", systemImage: "xmark") { dismiss() }.labelStyle(.iconOnly) }
+                    if !isToday && period != .all {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("今天") { withAnimation(.easeInOut(duration: 0.2)) { date = .now } }
+                                .font(.subheadline.weight(.semibold))
+                        }
+                    }
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                Button { showingAdd = true } label: { Label("添加黄金", systemImage: "plus").frame(minHeight: 24) }
-                    .buttonStyle(GoldPrimaryButtonStyle()).padding(.horizontal, 20).padding(.vertical, 12)
-                    .background(GoldTheme.background)
+                if !isEmbeddedTab {
+                    Button { showingAdd = true } label: { Label("添加黄金", systemImage: "plus").frame(minHeight: 24) }
+                        .buttonStyle(GoldPrimaryButtonStyle()).padding(.horizontal, 20).padding(.vertical, 12)
+                        .background(GoldTheme.background)
+                }
             }
         }
         .tint(GoldTheme.gold).foregroundStyle(GoldTheme.text)
         .presentationBackground(GoldTheme.background)
         .onAppear { if !didInitialize { filter.book = initialBook; didInitialize = true } }
-        .task(id: scenePhase) { if scenePhase == .active { await model.start() } }
+        .onChange(of: initialBook) { _, updatedBook in
+            if isEmbeddedTab { filter.book = updatedBook }
+        }
+        .task(id: scenePhase) { if quoteStore == nil, scenePhase == .active { await model.start() } }
+        .onChange(of: quoteStore?.quote(for: marketBasis)) { _, latest in
+            if let quoteStore {
+                model.applyExternalQuote(latest, failed: quoteStore.isFailed(for: marketBasis))
+            }
+        }
+        .onChange(of: marketBasis) { _, updatedBasis in
+            if let quoteStore {
+                model.applyExternalQuote(quoteStore.quote(for: updatedBasis), failed: quoteStore.isFailed(for: updatedBasis))
+            }
+        }
         .onChange(of: date) { sectionExpansion = [:] }
         .onChange(of: period) { sectionExpansion = [:] }
         .onChange(of: filter) { sectionExpansion = [:] }
+        .sensoryFeedback(.selection, trigger: period)
+        .sensoryFeedback(.selection, trigger: Calendar.current.startOfDay(for: date))
         .sheet(isPresented: $showingFilter) { HoldingCalendarFilterSheet(filter: $filter, books: books) }
         .sheet(isPresented: $showingAdd) { AddHoldingSheet(defaultUnitPrice: model.quote?.cnyPerGram, date: date, book: filter.book ?? initialBook, marketBasis: marketBasis) }
     }
@@ -106,30 +171,50 @@ struct HoldingsCalendarSheet: View {
         let base = calendar.dateInterval(of: component, for: date)?.start ?? date
         date = calendar.date(byAdding: component, value: amount, to: base) ?? date
     }
-    private var calendarGrid: some View {
+    private func calendarGrid(buckets: [Date: HoldingCalendarDayBucket]) -> some View {
         VStack(spacing: 6) {
             HStack { ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { Text("周" + $0).font(.caption).foregroundStyle(GoldTheme.textFaint).frame(maxWidth: .infinity) } }.padding(.bottom, 8)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 5) {
-                ForEach(HoldingCalendarLogic.days(in: date), id: \.self) { day in dayCell(day) }
+                ForEach(HoldingCalendarLogic.days(in: date), id: \.self) { day in
+                    dayCell(day, bucket: buckets[Calendar.current.startOfDay(for: day)])
+                }
             }
         }.padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 36, coordinateSpace: .local)
+                    .onEnded { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) * 1.4 else { return }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            shift(value.translation.width < 0 ? 1 : -1)
+                        }
+                    }
+            )
     }
-    private func dayCell(_ day: Date) -> some View {
+    private func dayCell(_ day: Date, bucket: HoldingCalendarDayBucket?) -> some View {
         let sameMonth = Calendar.current.isDate(day, equalTo: date, toGranularity: .month)
         let isSelected = Calendar.current.isDate(day, inSameDayAs: date)
-        let stats = HoldingCalendarLogic.stats(HoldingCalendarLogic.select(events, period: .day, date: day), quote: nil)
+        let isTodayCell = Calendar.current.isDateInToday(day)
+        let purchaseGrams = bucket?.purchaseGrams ?? 0
+        let saleGrams = bucket?.saleGrams ?? 0
+        let giftGrams = bucket?.giftGrams ?? 0
         return Button { date = day } label: {
             VStack(spacing: 2) {
                 Text("\(Calendar.current.component(.day, from: day))").font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isSelected ? GoldTheme.gold : sameMonth ? GoldTheme.text : GoldTheme.textFaint)
-                if stats.purchases.grams > 0 { marker("记", stats.purchases.grams, color: GoldTheme.gold) }
-                if stats.sales.grams > 0 { marker("卖", stats.sales.grams, color: GoldTheme.up) }
-                if stats.gifts.grams > 0 { marker("赠", stats.gifts.grams, color: GoldTheme.textSecondary) }
-                if stats.purchases.grams + stats.sales.grams + stats.gifts.grams == 0 { Text(HoldingCalendarLogic.lunar(day)).font(.system(size: 10)).foregroundStyle(GoldTheme.textFaint) }
+                    .foregroundStyle(isSelected ? GoldTheme.gold : isTodayCell ? GoldTheme.goldSoft : sameMonth ? GoldTheme.text : GoldTheme.textFaint)
+                if purchaseGrams > 0 { marker("记", purchaseGrams, color: GoldTheme.gold) }
+                if saleGrams > 0 { marker("卖", saleGrams, color: GoldTheme.up) }
+                if giftGrams > 0 { marker("赠", giftGrams, color: GoldTheme.textSecondary) }
+                if purchaseGrams + saleGrams + giftGrams == 0 { Text(HoldingCalendarLogic.lunar(day)).font(.system(size: 10)).foregroundStyle(GoldTheme.textFaint) }
                 Spacer(minLength: 0)
             }.padding(.top, 7).frame(maxWidth: .infinity).frame(height: 68)
                 .background(GoldTheme.calendarCell, in: GoldTheme.rangeShape)
-                .overlay { if isSelected { GoldTheme.rangeShape.strokeBorder(GoldTheme.gold, lineWidth: 1) } }
+                .overlay {
+                    if isSelected {
+                        GoldTheme.rangeShape.strokeBorder(GoldTheme.gold, lineWidth: 1.5)
+                    } else if isTodayCell {
+                        GoldTheme.rangeShape.strokeBorder(GoldTheme.goldSoft.opacity(0.45), lineWidth: 1)
+                    }
+                }
         }.buttonStyle(.plain).accessibilityLabel(HoldingsSelection.dateText(day))
     }
     private func marker(_ text: String, _ grams: Double, color: Color) -> some View {
@@ -150,7 +235,7 @@ struct HoldingsCalendarSheet: View {
             }
         }
     }
-    private var summary: some View {
+    private func summary(selected: [HoldingCalendarEvent]) -> some View {
         let stats = HoldingCalendarLogic.stats(selected, quote: model.quote?.cnyPerGram)
         return VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.headline)

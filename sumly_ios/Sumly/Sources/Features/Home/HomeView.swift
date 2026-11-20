@@ -1,9 +1,17 @@
 import SwiftUI
+import SwiftData
 import Charts
 
 /// 参考稿高保真布局，行情统一由 Go 服务提供。
 struct HomeView: View {
     @Binding private var marketBasis: GoldMarketBasis
+    private let quoteStore: LiveGoldQuoteStore?
+    private let onOpenHoldings: (() -> Void)?
+    private let onOpenChanlun: (() -> Void)?
+    @Query private var records: [HoldingRecord]
+    @AppStorage("holdings.currentBook") private var currentBook = "默认账本"
+    @AppStorage("holdings.hideAmounts") private var hideAmounts = false
+    @AppStorage("market.showHoldingOverlay") private var showHoldingOverlay = true
     @State private var model: MarketHomeViewModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingHistorySources = false
@@ -18,10 +26,35 @@ struct HomeView: View {
     @State private var showingBasisError = false
     @State private var transitionID: UUID?
 
-    init(marketBasis: Binding<GoldMarketBasis>) {
+    init(
+        marketBasis: Binding<GoldMarketBasis>,
+        quoteStore: LiveGoldQuoteStore? = nil,
+        onOpenHoldings: (() -> Void)? = nil,
+        onOpenChanlun: (() -> Void)? = nil
+    ) {
         _highlightedBasis = State(initialValue: marketBasis.wrappedValue)
         _marketBasis = marketBasis
+        self.quoteStore = quoteStore
+        self.onOpenHoldings = onOpenHoldings
+        self.onOpenChanlun = onOpenChanlun
         _model = State(initialValue: MarketHomeViewModel(basis: marketBasis.wrappedValue))
+    }
+
+    private var activeBookRecords: [HoldingRecord] {
+        records.filter { $0.bookName == currentBook && $0.disposition == "holding" }
+    }
+
+    private var holdingOverlay: MarketHoldingOverlay? {
+        guard !activeBookRecords.isEmpty else { return nil }
+        return HoldingsInsights.marketOverlay(
+            entries: activeBookRecords.map(\.insightEntry),
+            window: model.xDomain,
+            referencePrice: model.price
+        )
+    }
+
+    private var currentQuoteSnapshot: MarketQuoteSnapshot? {
+        model.quote.flatMap { MarketQuoteSnapshot.make(from: $0, basis: model.basis) }
     }
 
     var body: some View {
@@ -51,6 +84,10 @@ struct HomeView: View {
         .task(id: model.range) {
             if model.range != .realtime { await model.loadHistory() }
         }
+        .onChange(of: model.quote) { _, latest in
+            if let latest { quoteStore?.ingest(latest, for: model.basis) }
+        }
+        .sensoryFeedback(.selection, trigger: highlightedBasis)
         .sheet(isPresented: $showingDates) {
             ChartDateRangeSheet(bounds: model.fullDomain, window: model.xDomain, apply: model.setDateWindow)
         }
@@ -84,15 +121,46 @@ struct HomeView: View {
     private var dashboard: some View {
         GeometryReader { geometry in
             // The custom tab bar scales with width and its add button protrudes upward.
-            let bottomInset = 110 * geometry.size.width / 430
+            let bottomInset = 112 + geometry.safeAreaInsets.bottom
             let availableChartContentHeight = max(0, geometry.size.height - bottomInset - 66)
             ScrollView {
-                VStack(spacing: 12) {
-                    marketBasisPicker
-                        .padding(.top, 8)
+                VStack(spacing: 14) {
+                    ZStack {
+                        marketBasisPicker
+                        if ChanlunWebConfiguration.current != nil, let onOpenChanlun {
+                            HStack {
+                                Spacer()
+                                Button(action: onOpenChanlun) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "chart.line.uptrend.xyaxis")
+                                            .font(.caption.weight(.semibold))
+                                        Text("禅观")
+                                            .font(.caption.weight(.semibold))
+                                    }
+                                    .foregroundStyle(GoldTheme.goldSoft)
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 34)
+                                    .background(GoldTheme.card, in: GoldTheme.capsuleShape)
+                                    .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("companion.chanlun")
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
 
-                    MarketHomeChartContent(model: model, availableHeight: availableChartContentHeight,
-                        showingHistorySources: $showingHistorySources, showingDates: $showingDates)
+                    MarketHomeChartContent(
+                        model: model,
+                        availableHeight: availableChartContentHeight,
+                        showingHistorySources: $showingHistorySources,
+                        showingDates: $showingDates,
+                        holdingOverlay: holdingOverlay,
+                        showHoldingOverlay: showHoldingOverlay,
+                        onToggleHoldingOverlay: {
+                            withAnimation(.easeInOut(duration: 0.18)) { showHoldingOverlay.toggle() }
+                        }
+                    )
                         .transaction { $0.animation = nil }
                         .opacity(crossfadeProgress)
                         .overlay(alignment: .top) {
@@ -107,9 +175,130 @@ struct HomeView: View {
                             }
                         }
                         .allowsHitTesting(outgoing == nil)
+
+                    if let snapshot = currentQuoteSnapshot {
+                        marketMetricsCard(snapshot: snapshot)
+                            .padding(.top, 14)
+                    }
+
+                    if !activeBookRecords.isEmpty {
+                        holdingsLinkCard
+                    }
                 }.padding(.horizontal, 18).padding(.bottom, bottomInset)
             }.scrollIndicators(.hidden).background(GoldTheme.background)
         }
+    }
+
+    private func marketMetricsCard(snapshot: MarketQuoteSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("今日盘口参考")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(GoldTheme.text)
+                Spacer()
+                Text(snapshot.basis.title + " · 元/克")
+                    .font(.caption)
+                    .foregroundStyle(GoldTheme.textSecondary)
+            }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                metricCell("今开", snapshot.openCNY.map { "¥" + $0.moneyText } ?? "—")
+                metricCell("昨收", snapshot.prevCloseCNY.map { "¥" + $0.moneyText } ?? "—")
+                metricCell("最高", snapshot.highCNY.map { "¥" + $0.moneyText } ?? "—", tint: GoldTheme.up)
+                metricCell("最低", snapshot.lowCNY.map { "¥" + $0.moneyText } ?? "—", tint: GoldTheme.down)
+            }
+            if let spread = quoteStore?.spread {
+                GoldTheme.cardStroke.frame(height: 1)
+                HStack(spacing: 8) {
+                    Text("沪伦实时价差")
+                        .font(.caption)
+                        .foregroundStyle(GoldTheme.textSecondary)
+                    Spacer()
+                    let label = spread.spreadCNY >= 0 ? "国内溢价" : "国内折价"
+                    Text("\(label) \(spread.spreadCNY.signedMoneyText) 元/克 (\(spread.spreadPercent.signedMoneyText)%)")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(spread.spreadCNY >= 0 ? GoldTheme.up : GoldTheme.down)
+                }
+            }
+            if let usd = snapshot.usdPerOz, let fx = snapshot.usdCNY {
+                HStack(spacing: 8) {
+                    Text("伦敦金现货")
+                        .font(.caption)
+                        .foregroundStyle(GoldTheme.textSecondary)
+                    Spacer()
+                    Text("$\(usd.moneyText)/oz · 汇率 \(fx.formatted(.number.precision(.fractionLength(2...4))))")
+                        .font(.caption.weight(.medium))
+                        .monospacedDigit()
+                        .foregroundStyle(GoldTheme.textSecondary)
+                }
+            }
+        }
+        .goldCard(padding: 16)
+    }
+
+    private func metricCell(_ title: String, _ value: String, tint: Color = GoldTheme.text) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(GoldTheme.textSecondary)
+            Text(value)
+                .font(.system(.footnote, design: .rounded).weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var holdingsLinkCard: some View {
+        let portfolio = GoldReturnCalculator.aggregate(activeBookRecords.map(\.returnInput), referencePrice: model.price)
+        return Button {
+            onOpenHoldings?()
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("我的持仓 · \(currentBook)", systemImage: "bag.fill")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(GoldTheme.gold)
+                    Spacer()
+                    Text(hideAmounts ? "•••• g" : "\((portfolio?.grams ?? 0).moneyText) g")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(GoldTheme.textSecondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(GoldTheme.textSecondary)
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("预计到手")
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                        Text(GoldReturnPresentation.money(portfolio?.proceeds, hidden: hideAmounts))
+                            .font(.system(.title3, design: .rounded).bold())
+                            .monospacedDigit()
+                            .foregroundStyle(GoldTheme.text)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("真实盈亏")
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                        Text(GoldReturnPresentation.money(portfolio?.profit, hidden: hideAmounts, signed: true))
+                            .font(.system(.title3, design: .rounded).bold())
+                            .monospacedDigit()
+                            .foregroundStyle(hideAmounts ? GoldTheme.text : (portfolio?.profit ?? 0) >= 0 ? GoldTheme.up : GoldTheme.down)
+                    }
+                }
+                Text(GoldReturnPresentation.status(price: model.price, breakEven: portfolio?.breakEvenPrice, hidden: hideAmounts))
+                    .font(.caption)
+                    .foregroundStyle(GoldTheme.goldSoft)
+            }
+            .goldCard(padding: 16)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
     private var marketBasisPicker: some View {
         HStack(spacing: 4) {
