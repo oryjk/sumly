@@ -35,6 +35,10 @@ type Config struct {
 	HoldingNotificationFieldTarget string
 	AppEnvironment                 AppEnvironment
 	DevLoginEnabled                bool
+	// Macro 宏观与黄金温度模块配置：FRED_API_KEY 可选（留空时跳过 FRED 并告警，不阻断服务启动）；
+	// MACRO_SYNC_ENABLED 默认 true，设置为 false 时关闭后台同步 goroutine。
+	FREDAPIKey       string
+	MacroSyncEnabled bool
 }
 
 func LoadConfig() (Config, error) {
@@ -53,6 +57,8 @@ func LoadConfig() (Config, error) {
 		HoldingNotificationFieldTarget: os.Getenv("HOLDING_NOTIFICATION_FIELD_TARGET"),
 		AppEnvironment:                 parseAppEnvironment(os.Getenv("APP_ENV")),
 		DevLoginEnabled:                os.Getenv("DEV_LOGIN_ENABLED") == "true",
+		FREDAPIKey:                     strings.TrimSpace(os.Getenv("FRED_API_KEY")),
+		MacroSyncEnabled:               !strings.EqualFold(strings.TrimSpace(os.Getenv("MACRO_SYNC_ENABLED")), "false"),
 	}
 
 	for name, value := range map[string]string{

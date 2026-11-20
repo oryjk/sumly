@@ -97,6 +97,64 @@ type HoldingsSnapshot struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type MacroCotObservation struct {
+	SeriesID     string
+	ObsDate      pgtype.Date
+	MmLong       float64
+	MmShort      float64
+	MmNet        float64
+	SwapLong     float64
+	SwapShort    float64
+	SwapNet      float64
+	OpenInterest float64
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type MacroObservation struct {
+	SeriesID  string
+	ObsDate   pgtype.Date
+	Value     float64
+	UpdatedAt pgtype.Timestamptz
+}
+
+type MacroSeries struct {
+	SeriesID     string
+	NameZh       string
+	Section      string
+	Unit         string
+	Frequency    string
+	Source       string
+	GoldRelation string
+	PlainNote    string
+	DisplayOrder int32
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type MacroSyncState struct {
+	SeriesID      string
+	Source        string
+	Status        string
+	LastSyncedAt  pgtype.Timestamptz
+	LastSuccessAt pgtype.Timestamptz
+	LastError     string
+	RowCount      int32
+	LatestObsDate pgtype.Date
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type MacroTemperatureDaily struct {
+	ModelVersion   string
+	ObsDate        pgtype.Date
+	Score          float64
+	Level          string
+	Degraded       bool
+	MissingFactors []string
+	GoldPriceUsd   pgtype.Float8
+	PayloadJson    []byte
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type MarketDailyJob struct {
 	Symbol       string
 	CompletedDay pgtype.Date
@@ -143,6 +201,38 @@ type MarketLatestQuote struct {
 	UsdCny             float64
 	AsOf               pgtype.Timestamptz
 	SourceDelaySeconds int32
+}
+
+type NotificationDeviceBaseline struct {
+	DeviceID        pgtype.UUID
+	Workspace       string
+	ConfigHash      string
+	PreviousPrice   float64
+	PreviousAsOf    pgtype.Timestamptz
+	Armed           bool
+	LastTriggeredAt pgtype.Timestamptz
+}
+
+type NotificationEvent struct {
+	ID        pgtype.UUID
+	DeviceID  pgtype.UUID
+	Workspace string
+	RequestID string
+	AlertID   string
+	Status    string
+	Detail    string
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+}
+
+type NotificationGrant struct {
+	Hash       string
+	DeviceID   pgtype.UUID
+	Workspace  string
+	UserID     pgtype.Int8
+	TemplateID string
+	Openid     string
+	ExpiresAt  pgtype.Timestamptz
 }
 
 type User struct {

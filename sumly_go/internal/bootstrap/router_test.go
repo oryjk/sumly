@@ -13,6 +13,8 @@ import (
 	authapplication "gitee.com/oryjk/sumly/sumly_go/internal/auth/application"
 	holdingshttp "gitee.com/oryjk/sumly/sumly_go/internal/holdings/adapters/http"
 	holdingsdomain "gitee.com/oryjk/sumly/sumly_go/internal/holdings/domain"
+	macrohttp "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/http"
+	macrodomain "gitee.com/oryjk/sumly/sumly_go/internal/macro/domain"
 	sharedauth "gitee.com/oryjk/sumly/sumly_go/internal/shared/auth"
 	sharederror "gitee.com/oryjk/sumly/sumly_go/internal/shared/domain"
 	userhttp "gitee.com/oryjk/sumly/sumly_go/internal/user/adapters/http"
@@ -257,4 +259,48 @@ func (routerHoldings) Get(_ context.Context, a sharedauth.Actor) (holdingsdomain
 }
 func (routerHoldings) Put(ctx context.Context, a sharedauth.Actor, _ int64, _ holdingsdomain.Document) (holdingsdomain.Snapshot, error) {
 	return routerHoldings{}.Get(ctx, a)
+}
+
+func TestMacroRoutesArePublicAndVersioned(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := NewRouter(Dependencies{Macro: macrohttp.NewHandler(routerMacroQuery{})})
+	for _, path := range []string{
+		"/api/v1/app/macro/temperature",
+		"/api/v1/app/macro/temperature/history",
+		"/api/v1/app/macro/treasury",
+		"/api/v1/app/macro/indicators",
+		"/api/v1/app/macro/indicators/DFII10",
+		"/api/v1/app/macro/cot/gold",
+		"/api/v1/app/macro/sync/status",
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s status=%d body=%s", path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+type routerMacroQuery struct{}
+
+func (routerMacroQuery) GetTemperature(context.Context) (macrodomain.TemperatureSnapshot, error) {
+	return macrodomain.EmptyTemperatureSnapshot(), nil
+}
+func (routerMacroQuery) GetTemperatureHistory(context.Context, string) (macrodomain.Range, []macrodomain.TemperatureDailyPoint, error) {
+	return macrodomain.Range3Y, []macrodomain.TemperatureDailyPoint{}, nil
+}
+func (routerMacroQuery) GetTreasuryDashboard(context.Context, string) (macrodomain.TreasuryDashboard, error) {
+	return macrodomain.TreasuryDashboard{}, nil
+}
+func (routerMacroQuery) ListIndicators(context.Context, string) ([]macrodomain.SectionWithIndicators, error) {
+	return []macrodomain.SectionWithIndicators{}, nil
+}
+func (routerMacroQuery) GetIndicatorDetail(context.Context, string, string) (macrodomain.IndicatorDetail, error) {
+	return macrodomain.IndicatorDetail{Range: macrodomain.Range5Y, SyncStatus: "pending"}, nil
+}
+func (routerMacroQuery) GetGoldCot(context.Context, string) (macrodomain.CotDashboard, error) {
+	return macrodomain.CotDashboard{SeriesID: macrodomain.SeriesGoldCOT, Range: macrodomain.Range3Y}, nil
+}
+func (routerMacroQuery) GetSyncStatus(context.Context) (macrodomain.SyncStatusOverview, error) {
+	return macrodomain.SyncStatusOverview{}, nil
 }

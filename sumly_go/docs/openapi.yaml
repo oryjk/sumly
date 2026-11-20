@@ -12,6 +12,7 @@ tags:
   - name: App Holdings
   - name: App Users
   - name: App Market
+  - name: App Macro
 
 x-bearer-security: &bearerSecurity
   - bearerAuth: []
@@ -1018,6 +1019,181 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/app/macro/temperature:
+    get:
+      operationId: getMacroTemperature
+      tags: [App Macro]
+      summary: 获取黄金温度计（0-100°）与操作指南针
+      description: 只读接口，仅从数据库已持久化快照读取，绝不触发外部回源或写库。冷启动尚无观测时返回 200 降级态（degraded=true, as_of=""）。公开接口，无需登录。
+      security: []
+      responses:
+        "200":
+          description: 黄金温度计快照
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MacroTemperatureResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/app/macro/temperature/history:
+    get:
+      operationId: getMacroTemperatureHistory
+      tags: [App Macro]
+      summary: 获取黄金温度与金价历史曲线
+      description: 返回指定时间区间内每日黄金温度、冷热档位与国际金价序列，用于双轴历史对比图。公开只读接口。
+      security: []
+      parameters:
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [1y, 3y, 5y, all]
+            default: 3y
+      responses:
+        "200":
+          description: 温度历史曲线
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MacroTemperatureHistoryResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/app/macro/treasury:
+    get:
+      operationId: getMacroTreasury
+      tags: [App Macro]
+      summary: 美国国债与利率专题看板
+      description: 返回美债总规模（日频/季频万亿美元口径）、债务/GDP、付息占财政收入比、财政压力指数、10Y/2Y 名义利率与利差、10Y 实际利率与通胀预期、TLT/IEF/SHV 等摘要及曲线。公开只读接口。
+      security: []
+      parameters:
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [1y, 3y, 5y, 10y, all]
+            default: 5y
+      responses:
+        "200":
+          description: 美国国债专题数据
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MacroTreasuryResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/app/macro/indicators:
+    get:
+      operationId: listMacroIndicators
+      tags: [App Macro]
+      summary: 全量宏观指标看板（6 大板块）
+      description: 按 6 大板块（treasury_fiscal, opportunity_cost, dollar_liquidity, inflation_growth, official_market, risk_temperature）返回所有强关联宏观指标的最新值、涨跌幅、3 年分位、迷你 sparkline 与白话解读。公开只读接口。
+      security: []
+      parameters:
+        - name: section
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [treasury_fiscal, opportunity_cost, dollar_liquidity, inflation_growth, official_market, risk_temperature]
+      responses:
+        "200":
+          description: 宏观指标分板块列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MacroIndicatorsListResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/app/macro/indicators/{series_id}:
+    get:
+      operationId: getMacroIndicatorDetail
+      tags: [App Macro]
+      summary: 单个宏观指标详情与历史曲线
+      description: 返回指定指标的元数据、多窗口涨跌统计、多窗口历史分位数、同步状态及按区间裁剪的完整观测序列。公开只读接口。
+      security: []
+      parameters:
+        - name: series_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [1y, 3y, 5y, 10y, all]
+            default: 5y
+      responses:
+        "200":
+          description: 单指标详情与历史序列
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MacroIndicatorDetailResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/app/macro/cot/gold:
+    get:
+      operationId: getMacroGoldCot
+      tags: [App Macro]
+      summary: CFTC 黄金期货持仓报告（COT）
+      description: 返回管理基金多空净头寸、Swap 商多空净头寸、总持仓及净多头占比周频序列。公开只读接口。
+      security: []
+      parameters:
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [1y, 3y, 5y, all]
+            default: 3y
+      responses:
+        "200":
+          description: 黄金 COT 持仓数据
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MacroGoldCotResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/app/macro/sync/status:
+    get:
+      operationId: getMacroSyncStatus
+      tags: [App Macro]
+      summary: 宏观数据源同步状态摘要
+      description: 返回各宏观指标的同步状态（ok/error/pending/skipped）、最近同步时间、数据条数与最新观测日期。公开只读接口。
+      security: []
+      responses:
+        "200":
+          description: 宏观同步状态摘要
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MacroSyncStatusResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1496,3 +1672,300 @@ components:
           type: number
         close:
           type: number
+
+    MacroDateValuePoint:
+      type: object
+      required: [date, value]
+      properties:
+        date:
+          type: string
+          format: date
+        value:
+          type: number
+
+    MacroIndicatorSummary:
+      type: object
+      required: [series_id, name_zh, section, unit, frequency, source, gold_relation, plain_note, sparkline]
+      properties:
+        series_id: {type: string}
+        name_zh: {type: string}
+        section: {type: string}
+        unit: {type: string}
+        frequency: {type: string}
+        source: {type: string}
+        gold_relation: {type: string}
+        plain_note: {type: string}
+        latest_date: {type: string, nullable: true}
+        latest_value: {type: number, nullable: true}
+        change_5d: {type: number, nullable: true}
+        change_20d: {type: number, nullable: true}
+        change_3m: {type: number, nullable: true}
+        change_yoy: {type: number, nullable: true}
+        percentile_3y: {type: number, nullable: true}
+        sparkline:
+          type: array
+          items: {type: number}
+
+    MacroTemperatureDimension:
+      type: object
+      required: [key, name, weight, score, available, status, summary, metrics]
+      properties:
+        key: {type: string}
+        name: {type: string}
+        weight: {type: number}
+        score: {type: number}
+        available: {type: boolean}
+        status: {type: string}
+        summary: {type: string}
+        metrics:
+          type: object
+          additionalProperties: {type: number}
+
+    MacroTemperatureResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, example: 0}
+        message: {type: string, example: ok}
+        data:
+          type: object
+          required: [as_of, model_version, degraded, missing_factors, score, level, level_label, volatility_alert, volatility_note, macro_regime, action_guide, dimensions]
+          properties:
+            as_of: {type: string}
+            model_version: {type: string, example: v1}
+            degraded: {type: boolean}
+            missing_factors:
+              type: array
+              items: {type: string}
+            score: {type: number}
+            level: {type: string, enum: [freezing, cool, neutral, warm, hot]}
+            level_label: {type: string}
+            change_1d: {type: number, nullable: true}
+            change_5d: {type: number, nullable: true}
+            volatility_alert: {type: boolean}
+            volatility_note: {type: string}
+            macro_regime:
+              type: object
+              required: [score, regime, label, summary]
+              properties:
+                score: {type: number}
+                regime: {type: string, enum: [tailwind, neutral, headwind]}
+                label: {type: string}
+                summary: {type: string}
+            action_guide:
+              type: object
+              required: [signal, title, summary, dca_multiplier, dca_label, ma200_note, domestic_premium_note, disclaimer]
+              properties:
+                signal: {type: string}
+                title: {type: string}
+                summary: {type: string}
+                dca_multiplier: {type: number}
+                dca_label: {type: string}
+                ma200_deviation_pct: {type: number, nullable: true}
+                ma200_note: {type: string}
+                domestic_premium_pct: {type: number, nullable: true}
+                domestic_premium_note: {type: string}
+                disclaimer: {type: string}
+            dimensions:
+              type: array
+              items:
+                $ref: "#/components/schemas/MacroTemperatureDimension"
+
+    MacroTemperatureHistoryResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, example: 0}
+        message: {type: string, example: ok}
+        data:
+          type: object
+          required: [range, model_version, points]
+          properties:
+            range: {type: string}
+            model_version: {type: string}
+            points:
+              type: array
+              items:
+                type: object
+                required: [date, score, level]
+                properties:
+                  date: {type: string, format: date}
+                  score: {type: number}
+                  level: {type: string}
+                  gold_price_usd: {type: number, nullable: true}
+
+    MacroTreasuryResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, example: 0}
+        message: {type: string, example: ok}
+        data:
+          type: object
+          required: [as_of, summary, cards, debt_series, real_yield_series, nominal_yield_series]
+          properties:
+            as_of: {type: string}
+            summary:
+              type: object
+              required: [gold_impact_note]
+              properties:
+                total_debt_trillion_usd: {type: number, nullable: true}
+                debt_change_yoy_trillion: {type: number, nullable: true}
+                debt_to_gdp_pct: {type: number, nullable: true}
+                interest_to_revenue_pct: {type: number, nullable: true}
+                fiscal_stress_score: {type: number, nullable: true}
+                yield_10y_nominal_pct: {type: number, nullable: true}
+                yield_2y_nominal_pct: {type: number, nullable: true}
+                spread_10y_2y_pct: {type: number, nullable: true}
+                yield_10y_real_pct: {type: number, nullable: true}
+                breakeven_10y_pct: {type: number, nullable: true}
+                tlt_price: {type: number, nullable: true}
+                gold_impact_note: {type: string}
+            cards:
+              type: array
+              items:
+                $ref: "#/components/schemas/MacroIndicatorSummary"
+            debt_series:
+              type: array
+              items:
+                $ref: "#/components/schemas/MacroDateValuePoint"
+            real_yield_series:
+              type: array
+              items:
+                $ref: "#/components/schemas/MacroDateValuePoint"
+            nominal_yield_series:
+              type: array
+              items:
+                $ref: "#/components/schemas/MacroDateValuePoint"
+
+    MacroIndicatorsListResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, example: 0}
+        message: {type: string, example: ok}
+        data:
+          type: object
+          required: [sections]
+          properties:
+            sections:
+              type: array
+              items:
+                type: object
+                required: [id, name_zh, description, indicators]
+                properties:
+                  id: {type: string}
+                  name_zh: {type: string}
+                  description: {type: string}
+                  indicators:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MacroIndicatorSummary"
+
+    MacroIndicatorDetailResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, example: 0}
+        message: {type: string, example: ok}
+        data:
+          type: object
+          required: [series_id, name_zh, section, unit, frequency, source, gold_relation, plain_note, range, percentiles, sync_status, observations]
+          properties:
+            series_id: {type: string}
+            name_zh: {type: string}
+            section: {type: string}
+            unit: {type: string}
+            frequency: {type: string}
+            source: {type: string}
+            gold_relation: {type: string}
+            plain_note: {type: string}
+            latest_date: {type: string, nullable: true}
+            latest_value: {type: number, nullable: true}
+            change_5d: {type: number, nullable: true}
+            change_20d: {type: number, nullable: true}
+            change_3m: {type: number, nullable: true}
+            change_yoy: {type: number, nullable: true}
+            percentile_3y: {type: number, nullable: true}
+            range: {type: string}
+            percentiles:
+              type: array
+              items:
+                type: object
+                required: [window, percentile, observation_count]
+                properties:
+                  window: {type: string}
+                  percentile: {type: number}
+                  observation_count: {type: integer}
+            last_synced_at: {type: string, format: date-time, nullable: true}
+            sync_status: {type: string}
+            observations:
+              type: array
+              items:
+                $ref: "#/components/schemas/MacroDateValuePoint"
+
+    MacroCotPoint:
+      type: object
+      required: [date, mm_long, mm_short, mm_net, swap_long, swap_short, swap_net, open_interest]
+      properties:
+        date: {type: string, format: date}
+        mm_long: {type: number}
+        mm_short: {type: number}
+        mm_net: {type: number}
+        swap_long: {type: number}
+        swap_short: {type: number}
+        swap_net: {type: number}
+        open_interest: {type: number}
+        mm_net_ratio_pct: {type: number, nullable: true}
+
+    MacroGoldCotResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, example: 0}
+        message: {type: string, example: ok}
+        data:
+          type: object
+          required: [series_id, range, points]
+          properties:
+            series_id: {type: string, example: GOLD_COT}
+            range: {type: string}
+            latest:
+              allOf:
+                - $ref: "#/components/schemas/MacroCotPoint"
+              nullable: true
+            points:
+              type: array
+              items:
+                $ref: "#/components/schemas/MacroCotPoint"
+
+    MacroSyncStatusResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, example: 0}
+        message: {type: string, example: ok}
+        data:
+          type: object
+          required: [total_series, ok_count, error_count, skipped_count, pending_count, states]
+          properties:
+            total_series: {type: integer}
+            ok_count: {type: integer}
+            error_count: {type: integer}
+            skipped_count: {type: integer}
+            pending_count: {type: integer}
+            last_synced_at: {type: string, format: date-time, nullable: true}
+            states:
+              type: array
+              items:
+                type: object
+                required: [series_id, source, status, last_error, row_count]
+                properties:
+                  series_id: {type: string}
+                  source: {type: string}
+                  status: {type: string}
+                  last_synced_at: {type: string, format: date-time, nullable: true}
+                  last_success_at: {type: string, format: date-time, nullable: true}
+                  last_error: {type: string}
+                  row_count: {type: integer}
+                  latest_obs_date: {type: string, nullable: true}

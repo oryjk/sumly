@@ -12,10 +12,42 @@ import (
 	"strings"
 	"testing"
 
+	macropostgres "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/postgres"
+	macroapp "gitee.com/oryjk/sumly/sumly_go/internal/macro/application"
+	macroports "gitee.com/oryjk/sumly/sumly_go/internal/macro/ports"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/postgres"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/application"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/ports"
 )
+
+func TestMacroReadAndWriteCapabilitiesStaySeparate(t *testing.T) {
+	for _, value := range []any{(*macropostgres.Reader)(nil), (*macroapp.MacroQuery)(nil), (*macroports.MacroReadStore)(nil)} {
+		typ := reflect.TypeOf(value)
+		if typ.Elem().Kind() == reflect.Interface {
+			typ = typ.Elem()
+		}
+		for i := 0; i < typ.NumMethod(); i++ {
+			name := typ.Method(i).Name
+			for _, prefix := range []string{"Save", "Upsert", "Prune", "Seed", "Sync", "Delete"} {
+				if strings.HasPrefix(name, prefix) {
+					t.Errorf("macro reader %s exposes mutation %s", typ, name)
+				}
+			}
+		}
+	}
+	for _, value := range []any{(*macropostgres.Writer)(nil), (*macroports.MacroWriteStore)(nil)} {
+		typ := reflect.TypeOf(value)
+		if typ.Elem().Kind() == reflect.Interface {
+			typ = typ.Elem()
+		}
+		for i := 0; i < typ.NumMethod(); i++ {
+			name := typ.Method(i).Name
+			if strings.HasPrefix(name, "Get") || strings.HasPrefix(name, "Load") || strings.HasPrefix(name, "List") {
+				t.Errorf("macro writer %s exposes query %s", typ, name)
+			}
+		}
+	}
+}
 
 func TestMarketReadAndWriteCapabilitiesStaySeparate(t *testing.T) {
 	for _, value := range []any{(*postgres.Reader)(nil), (*application.GoldQuery)(nil), (*ports.GoldReadStore)(nil)} {
@@ -82,6 +114,32 @@ func TestHexagonalCoreImportsAndMarketDependencies(t *testing.T) {
 			if parts[0] == "holdings" && layer == "application" && name == "encoding/json" {
 				t.Errorf("holdings application owns JSON encoding: %s", rel)
 			}
+		}
+		if parts[0] == "macro" && layer == "application" {
+			ast.Inspect(file, func(node ast.Node) bool {
+				spec, ok := node.(*ast.TypeSpec)
+				if !ok || spec.Name.Name != "MacroQuery" {
+					return true
+				}
+				model, ok := spec.Type.(*ast.StructType)
+				if !ok {
+					return true
+				}
+				for _, field := range model.Fields.List {
+					if selector, ok := field.Type.(*ast.SelectorExpr); ok {
+						if selector.Sel.Name != "MacroReadStore" {
+							t.Errorf("MacroQuery depends on %s", selector.Sel.Name)
+						}
+					}
+					if ptr, ok := field.Type.(*ast.StarExpr); ok {
+						if typ, ok := ptr.X.(*ast.Ident); ok && typ.Name == "MacroSyncer" {
+							t.Errorf("MacroQuery directly depends on MacroSyncer")
+						}
+					}
+				}
+				return true
+			})
+			return nil
 		}
 		if parts[0] != "market" || layer != "application" {
 			return nil

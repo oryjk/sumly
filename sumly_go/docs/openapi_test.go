@@ -38,6 +38,13 @@ func TestEmbeddedOpenAPISpecIsValid(t *testing.T) {
 		"/api/v1/app/auth/account",
 		"/api/v1/app/auth/capabilities",
 		"/api/v1/app/users/me",
+		"/api/v1/app/macro/temperature",
+		"/api/v1/app/macro/temperature/history",
+		"/api/v1/app/macro/treasury",
+		"/api/v1/app/macro/indicators",
+		"/api/v1/app/macro/indicators/{series_id}",
+		"/api/v1/app/macro/cot/gold",
+		"/api/v1/app/macro/sync/status",
 	} {
 		if document.Paths.Find(path) == nil {
 			t.Fatalf("OpenAPI spec is missing path %s", path)

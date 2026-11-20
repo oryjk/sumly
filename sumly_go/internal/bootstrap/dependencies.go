@@ -17,6 +17,17 @@ import (
 	holdingshttp "gitee.com/oryjk/sumly/sumly_go/internal/holdings/adapters/http"
 	holdingspostgres "gitee.com/oryjk/sumly/sumly_go/internal/holdings/adapters/postgres"
 	holdingsapplication "gitee.com/oryjk/sumly/sumly_go/internal/holdings/application"
+	macrobitcoin "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/bitcoin"
+	macrocftc "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/cftc"
+	macrofred "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/fred"
+	macrohttp "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/http"
+	macroimf "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/imf"
+	macropostgres "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/postgres"
+	macroseedcsv "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/seedcsv"
+	macrospdr "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/spdr"
+	macrotreasury "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/treasury"
+	macroyahoo "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/yahoo"
+	macroapplication "gitee.com/oryjk/sumly/sumly_go/internal/macro/application"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/feed"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/historical"
 	markethttp "gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/http"
@@ -54,6 +65,7 @@ type Dependencies struct {
 	GoldSync        *markethttp.SyncHandler
 	GoldHistory     *markethttp.HistoryHandler
 	Notifications   *notificationhttp.Handler
+	Macro           *macrohttp.Handler
 }
 
 func BuildDependencies(ctx context.Context, config Config) (Dependencies, func(), error) {
@@ -158,6 +170,29 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		go func() { defer workers.Done(); collector.CollectIntraday(samplerCtx) }()
 	}
 
+	macroReader := macropostgres.NewReader(pool)
+	macroWriter := macropostgres.NewWriter(pool)
+	macroQuery := macroapplication.NewMacroQuery(macroReader)
+	macroHandler := macrohttp.NewHandler(macroQuery)
+	if config.MacroSyncEnabled {
+		seedCSV := macroseedcsv.New()
+		macroSyncer := macroapplication.NewMacroSyncer(macroReader, macroWriter, macroapplication.SyncSources{
+			Treasury: macrotreasury.New(nil),
+			FRED:     macrofred.New(nil, config.FREDAPIKey),
+			Yahoo:    macroyahoo.New(nil),
+			SPDR:     macrospdr.New(nil),
+			CFTC:     macrocftc.New(nil),
+			Bitcoin:  macrobitcoin.New(nil),
+			IMF:      macroimf.New(nil, seedCSV),
+			SeedCSV:  seedCSV,
+		})
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			macroSyncer.RunScheduler(samplerCtx, 6*time.Hour)
+		}()
+	}
+
 	closeAll := func() { stopSampler(); workers.Wait(); closePool() }
 
 	// 持仓提醒订阅消息：模板 ID 与字段全部来自配置，缺失时能力检测报不可用，
@@ -198,5 +233,6 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		GoldSync:        markethttp.NewSyncHandler(marketapplication.NewHistorySync(goldReader, instruments.Catalog())),
 		GoldHistory:     historyHandler,
 		Notifications:   notificationHandler,
+		Macro:           macroHandler,
 	}, closeAll, nil
 }

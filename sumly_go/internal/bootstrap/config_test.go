@@ -82,3 +82,30 @@ func TestLoadConfigKeepsConfirmedLegacyAppID(t *testing.T) {
 		t.Fatalf("legacy appid = %q", config.WechatLegacyAppID)
 	}
 }
+
+func TestLoadConfigMacroDefaultsAndOverrides(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("JWT_SECRET", "secret")
+	t.Setenv("WECHAT_APP_ID", "appid")
+	t.Setenv("WECHAT_APP_SECRET", "appsecret")
+	t.Setenv("FRED_API_KEY", "")
+	t.Setenv("MACRO_SYNC_ENABLED", "")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.FREDAPIKey != "" || !cfg.MacroSyncEnabled {
+		t.Fatalf("expected optional empty FRED_API_KEY and default MacroSyncEnabled=true, got %+v", cfg)
+	}
+
+	t.Setenv("FRED_API_KEY", "test-fred-key")
+	t.Setenv("MACRO_SYNC_ENABLED", "false")
+	cfg, err = LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.FREDAPIKey != "test-fred-key" || cfg.MacroSyncEnabled {
+		t.Fatalf("expected FREDAPIKey=test-fred-key and MacroSyncEnabled=false, got %+v", cfg)
+	}
+}

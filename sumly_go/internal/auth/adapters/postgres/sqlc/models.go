@@ -97,6 +97,64 @@ type HoldingsSnapshot struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type MacroCotObservation struct {
+	SeriesID     string             `json:"series_id"`
+	ObsDate      pgtype.Date        `json:"obs_date"`
+	MmLong       float64            `json:"mm_long"`
+	MmShort      float64            `json:"mm_short"`
+	MmNet        float64            `json:"mm_net"`
+	SwapLong     float64            `json:"swap_long"`
+	SwapShort    float64            `json:"swap_short"`
+	SwapNet      float64            `json:"swap_net"`
+	OpenInterest float64            `json:"open_interest"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MacroObservation struct {
+	SeriesID  string             `json:"series_id"`
+	ObsDate   pgtype.Date        `json:"obs_date"`
+	Value     float64            `json:"value"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MacroSeries struct {
+	SeriesID     string             `json:"series_id"`
+	NameZh       string             `json:"name_zh"`
+	Section      string             `json:"section"`
+	Unit         string             `json:"unit"`
+	Frequency    string             `json:"frequency"`
+	Source       string             `json:"source"`
+	GoldRelation string             `json:"gold_relation"`
+	PlainNote    string             `json:"plain_note"`
+	DisplayOrder int32              `json:"display_order"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MacroSyncState struct {
+	SeriesID      string             `json:"series_id"`
+	Source        string             `json:"source"`
+	Status        string             `json:"status"`
+	LastSyncedAt  pgtype.Timestamptz `json:"last_synced_at"`
+	LastSuccessAt pgtype.Timestamptz `json:"last_success_at"`
+	LastError     string             `json:"last_error"`
+	RowCount      int32              `json:"row_count"`
+	LatestObsDate pgtype.Date        `json:"latest_obs_date"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MacroTemperatureDaily struct {
+	ModelVersion   string             `json:"model_version"`
+	ObsDate        pgtype.Date        `json:"obs_date"`
+	Score          float64            `json:"score"`
+	Level          string             `json:"level"`
+	Degraded       bool               `json:"degraded"`
+	MissingFactors []string           `json:"missing_factors"`
+	GoldPriceUsd   *float64           `json:"gold_price_usd"`
+	PayloadJson    []byte             `json:"payload_json"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type MarketDailyJob struct {
 	Symbol       string             `json:"symbol"`
 	CompletedDay pgtype.Date        `json:"completed_day"`
@@ -143,6 +201,38 @@ type MarketLatestQuote struct {
 	UsdCny             float64            `json:"usd_cny"`
 	AsOf               pgtype.Timestamptz `json:"as_of"`
 	SourceDelaySeconds int32              `json:"source_delay_seconds"`
+}
+
+type NotificationDeviceBaseline struct {
+	DeviceID        pgtype.UUID        `json:"device_id"`
+	Workspace       string             `json:"workspace"`
+	ConfigHash      string             `json:"config_hash"`
+	PreviousPrice   float64            `json:"previous_price"`
+	PreviousAsOf    pgtype.Timestamptz `json:"previous_as_of"`
+	Armed           bool               `json:"armed"`
+	LastTriggeredAt pgtype.Timestamptz `json:"last_triggered_at"`
+}
+
+type NotificationEvent struct {
+	ID        pgtype.UUID        `json:"id"`
+	DeviceID  pgtype.UUID        `json:"device_id"`
+	Workspace string             `json:"workspace"`
+	RequestID string             `json:"request_id"`
+	AlertID   string             `json:"alert_id"`
+	Status    string             `json:"status"`
+	Detail    string             `json:"detail"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+type NotificationGrant struct {
+	Hash       string             `json:"hash"`
+	DeviceID   pgtype.UUID        `json:"device_id"`
+	Workspace  string             `json:"workspace"`
+	UserID     *int64             `json:"user_id"`
+	TemplateID string             `json:"template_id"`
+	Openid     string             `json:"openid"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
 }
 
 type User struct {

@@ -26,3 +26,11 @@ sql:
         package: holdingssqlc
         out: internal/holdings/adapters/postgres/sqlc
         sql_package: pgx/v5
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/macro.sql
+    gen:
+      go:
+        package: macrosqlc
+        out: internal/macro/adapters/postgres/sqlc
+        sql_package: pgx/v5
