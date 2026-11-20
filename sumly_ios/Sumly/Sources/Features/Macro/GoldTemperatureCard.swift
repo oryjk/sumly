@@ -46,14 +46,17 @@ struct GoldTemperatureGauge: View {
                     AngularGradient(
                         gradient: Gradient(stops: [
                             .init(color: GoldTheme.tempFreezing, location: 0.00),
-                            .init(color: GoldTheme.tempCool, location: 0.22),
-                            .init(color: GoldTheme.tempNeutral, location: 0.44),
-                            .init(color: GoldTheme.tempWarm, location: 0.62),
-                            .init(color: GoldTheme.tempHot, location: 0.74)
+                            .init(color: GoldTheme.tempFreezing, location: 0.06),
+                            .init(color: GoldTheme.tempCool, location: 0.24),
+                            .init(color: GoldTheme.tempNeutral, location: 0.42),
+                            .init(color: GoldTheme.tempWarm, location: 0.60),
+                            .init(color: GoldTheme.tempHot, location: 0.78),
+                            .init(color: GoldTheme.tempHot, location: 0.86),
+                            .init(color: GoldTheme.tempFreezing, location: 0.96)
                         ]),
                         center: .center,
-                        startAngle: .degrees(0),
-                        endAngle: .degrees(360)
+                        startAngle: .degrees(-20),
+                        endAngle: .degrees(340)
                     ),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
