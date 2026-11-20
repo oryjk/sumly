@@ -1222,9 +1222,11 @@ struct MacroDashboardView: View {
                     }
 
                     ForEach(points) { point in
+                        let mmPlotY = cotContext.clampedPlotValue(point.mmNet)
+                        let swapPlotY = cotContext.clampedPlotValue(point.swapNet)
                         LineMark(
                             x: .value("日期", point.date),
-                            y: .value("头寸", cotContext.clampedPlotValue(point.mmNet)),
+                            y: .value("头寸", mmPlotY),
                             series: .value("阵营", "管理基金净多")
                         )
                         .foregroundStyle(GoldTheme.up)
@@ -1233,18 +1235,39 @@ struct MacroDashboardView: View {
 
                         LineMark(
                             x: .value("日期", point.date),
-                            y: .value("头寸", cotContext.clampedPlotValue(point.swapNet)),
+                            y: .value("头寸", swapPlotY),
                             series: .value("阵营", "Swap 净头寸")
                         )
                         .foregroundStyle(GoldTheme.chartSecondary)
                         .lineStyle(StrokeStyle(lineWidth: 1.8))
                         .interpolationMethod(.monotone)
+
+                        if points.count == 1 {
+                            PointMark(x: .value("日期", point.date), y: .value("头寸", mmPlotY))
+                                .foregroundStyle(GoldTheme.up)
+                                .symbolSize(36)
+                            PointMark(x: .value("日期", point.date), y: .value("头寸", swapPlotY))
+                                .foregroundStyle(GoldTheme.chartSecondary)
+                                .symbolSize(36)
+                        }
                     }
 
                     if let inspected {
                         RuleMark(x: .value("选中", inspected.date))
                             .foregroundStyle(GoldTheme.goldSoft.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        PointMark(
+                            x: .value("选中", inspected.date),
+                            y: .value("头寸", cotContext.clampedPlotValue(inspected.mmNet))
+                        )
+                        .foregroundStyle(GoldTheme.up)
+                        .symbolSize(36)
+                        PointMark(
+                            x: .value("选中", inspected.date),
+                            y: .value("头寸", cotContext.clampedPlotValue(inspected.swapNet))
+                        )
+                        .foregroundStyle(GoldTheme.chartSecondary)
+                        .symbolSize(36)
                     }
                 }
                 .chartYScale(domain: cotContext.domain)

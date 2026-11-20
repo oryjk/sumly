@@ -7,26 +7,28 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
 
     var id: String { rawValue }
 
-    /// 只有当当前可视区间内至少有 2 个点且全部有限并严格 > 0 时，才允许启用对数刻度。
-    static func supportsLogScale(_ values: [Double]) -> Bool {
-        guard values.count >= 2 else { return false }
+    /// 只有当当前可视区间内至少有 2 个时间点且全部观测值有限并严格 > 0 时，才允许启用对数刻度。
+    static func supportsLogScale(_ values: [Double], pointCount: Int? = nil) -> Bool {
+        let effectiveCount = pointCount ?? values.count
+        guard effectiveCount >= 2, !values.isEmpty else { return false }
         return values.allSatisfy { $0.isFinite && $0 > 0 }
     }
 
     /// 不可启用对数刻度时的具体原因；可用时返回 nil。
-    static func logScaleDisabledReason(for values: [Double]) -> MacroChartLogScaleDisabledReason? {
+    static func logScaleDisabledReason(for values: [Double], pointCount: Int? = nil) -> MacroChartLogScaleDisabledReason? {
         if values.contains(where: { !$0.isFinite || $0 <= 0 }) {
             return .nonPositiveValues
         }
-        if values.count < 2 {
+        let effectiveCount = pointCount ?? values.count
+        if effectiveCount < 2 || values.isEmpty {
             return .insufficientPoints
         }
         return nil
     }
 
     /// 解析实际生效的刻度：当请求对数但数据不满足严格正值条件时，安全回退为线性。
-    static func effectiveScale(requested: MacroChartScale, for values: [Double]) -> MacroChartScale {
-        guard requested == .logarithmic, supportsLogScale(values) else {
+    static func effectiveScale(requested: MacroChartScale, for values: [Double], pointCount: Int? = nil) -> MacroChartScale {
+        guard requested == .logarithmic, supportsLogScale(values, pointCount: pointCount) else {
             return .linear
         }
         return .logarithmic
@@ -156,7 +158,7 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
             if absVal >= 10_000 {
                 let wVal = absVal / 10_000
                 let wSpan = validSpan.map { $0 / 10_000 }
-                let digits = (wSpan ?? 10) < 2 ? 1 : 0
+                let digits = scaledCompactDigits(scaledSpan: wSpan)
                 return "\(sign)\(formatGrouped(wVal, digits: digits))万"
             }
             return "\(sign)\(formatGrouped(absVal, digits: 0))"
@@ -171,8 +173,8 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
     private static func percentAxisDigits(absVal: Double, span: Double?) -> Int {
         if let span {
             let step = span / 3.0
-            if step < 0.0005 { return 4 }
-            if step < 0.005 { return 3 }
+            if step < 0.005 { return 4 }
+            if step < 0.05 { return 3 }
             if step < 0.5 { return 2 }
         }
         if absVal > 0 && absVal < 0.01 { return 3 }
@@ -184,9 +186,9 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
     private static func trillionAxisDigits(absVal: Double, span: Double?) -> Int {
         if let span {
             let step = span / 3.0
-            if step < 0.0005 { return 4 }
-            if step < 0.005 { return 3 }
-            if step < 0.25 { return 2 }
+            if step < 0.005 { return 4 }
+            if step < 0.05 { return 3 }
+            if step < 0.5 { return 2 }
             if step < 2.5 { return 1 }
         }
         if absVal > 0 && absVal < 0.1 { return 3 }
@@ -198,10 +200,10 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
     private static func compactMagnitudeDigits(absVal: Double, span: Double?) -> Int {
         if let span {
             let step = span / 3.0
-            if step < 0.0005 { return 4 }
-            if step < 0.005 { return 3 }
-            if step < 0.05 { return 2 }
-            if step < 2.0 { return 1 }
+            if step < 0.005 { return 4 }
+            if step < 0.05 { return 3 }
+            if step < 0.5 { return 2 }
+            if step < 2.5 { return 1 }
         }
         if absVal > 0 && absVal < 0.1 { return 3 }
         if absVal < 1 { return 2 }
@@ -209,25 +211,35 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
         return 0
     }
 
+    private static func scaledCompactDigits(scaledSpan: Double?) -> Int {
+        guard let scaledSpan, scaledSpan.isFinite, scaledSpan > 0 else { return 0 }
+        let step = scaledSpan / 3.0
+        if step < 0.005 { return 4 }
+        if step < 0.05 { return 3 }
+        if step < 0.5 { return 2 }
+        if step < 2.5 { return 1 }
+        return 0
+    }
+
     private static func formatCurrencyMagnitude(_ absVal: Double, span: Double?, allowCompactK: Bool) -> String {
         if allowCompactK && absVal >= 1_000_000 {
             let mVal = absVal / 1_000_000
             let mSpan = span.map { $0 / 1_000_000 }
-            let digits = (mSpan ?? 10) < 2 ? 1 : 0
+            let digits = scaledCompactDigits(scaledSpan: mSpan)
             return "\(formatGrouped(mVal, digits: digits))M"
         }
         if allowCompactK && absVal >= 10_000 {
             let kVal = absVal / 1_000
             let kSpan = span.map { $0 / 1_000 }
-            let digits = (kSpan ?? 10) < 2 ? 1 : 0
+            let digits = scaledCompactDigits(scaledSpan: kSpan)
             return "\(formatGrouped(kVal, digits: digits))k"
         }
         let digits: Int
         if let span {
             let step = span / 3.0
-            if step < 0.0005 {
+            if step < 0.005 {
                 digits = 4
-            } else if step < 0.005 {
+            } else if step < 0.05 {
                 digits = 3
             } else if step < 0.5 {
                 digits = 2
@@ -254,25 +266,25 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
         if absVal >= 1_000_000 {
             let mVal = absVal / 1_000_000
             let mSpan = span.map { $0 / 1_000_000 }
-            let digits = (mSpan ?? 10) < 2 ? 1 : 0
+            let digits = scaledCompactDigits(scaledSpan: mSpan)
             return "\(formatGrouped(mVal, digits: digits))M"
         }
         if absVal >= 10_000 {
             let kVal = absVal / 1_000
             let kSpan = span.map { $0 / 1_000 }
-            let digits = (kSpan ?? 10) < 2 ? 1 : 0
+            let digits = scaledCompactDigits(scaledSpan: kSpan)
             return "\(formatGrouped(kVal, digits: digits))k"
         }
         let digits: Int
         if let span {
             let step = span / 3.0
-            if step < 0.0005 {
+            if step < 0.005 {
                 digits = 4
-            } else if step < 0.005 {
-                digits = 3
             } else if step < 0.05 {
+                digits = 3
+            } else if step < 0.5 {
                 digits = 2
-            } else if step < 2.0 {
+            } else if step < 2.5 {
                 digits = 1
             } else if absVal > 0 && absVal < 1 {
                 digits = smallPositiveDigits(absVal)
@@ -357,15 +369,16 @@ struct MacroChartScaleContext: Sendable, Equatable {
     /// 构造宏观图表的刻度上下文。
     static func make(
         values: [Double],
+        pointCount: Int? = nil,
         requestedScale: MacroChartScale,
         unit: String,
         includeZeroInLinear: Bool = false,
         minLinearPadding: Double = 0.01,
         desiredTickCount: Int = 4
     ) -> MacroChartScaleContext {
-        let supportsLog = MacroChartScale.supportsLogScale(values)
-        let disabledReason = MacroChartScale.logScaleDisabledReason(for: values)
-        let effective = MacroChartScale.effectiveScale(requested: requestedScale, for: values)
+        let supportsLog = MacroChartScale.supportsLogScale(values, pointCount: pointCount)
+        let disabledReason = MacroChartScale.logScaleDisabledReason(for: values, pointCount: pointCount)
+        let effective = MacroChartScale.effectiveScale(requested: requestedScale, for: values, pointCount: pointCount)
         let domain = effective.domain(
             for: values,
             includeZeroInLinear: includeZeroInLinear,

@@ -228,6 +228,89 @@ import Testing
     #expect(MacroChartScale.formatAxisValue(.nan, unit: "usd") == "—")
 }
 
+@Test func narrowRangesPreserveDistinctUnroundedAxisLabels() throws {
+    // 1. CNY/USD 窄区间 [7.10, 7.25]：步长 0.05 需保留至少 2 位小数，不能舍入撞车为 7.1 / 7.2 / 7.3
+    for scale in MacroChartScale.allCases {
+        let cny = MacroChartScaleContext.make(
+            values: [7.10, 7.16, 7.25],
+            requestedScale: scale,
+            unit: "ratio",
+            desiredTickCount: 4
+        )
+        #expect(cny.yAxisTicks.count >= 2)
+        let labels = cny.yAxisTicks.map { cny.axisLabel(forPlotValue: $0) }
+        #expect(Set(labels).count == labels.count)
+        for (tick, label) in zip(cny.yAxisTicks, labels) {
+            let restored = try #require(cny.originalValue(fromPlotValue: tick))
+            let parsed = try #require(Double(label))
+            // 格式化后的数值必须忠实贴合网格线真实值，不能出现 0.05 级舍入错位
+            #expect(abs(parsed - restored) < 0.01)
+        }
+    }
+
+    // 2. BTC_USD 窄区间 [90_000, 92_500]：缩放为 k 后步长约 0.5k，不能全舍入撞车为 $91k/$92k
+    for scale in MacroChartScale.allCases {
+        let btcNarrow = MacroChartScaleContext.make(
+            values: [90_000.0, 91_200.0, 92_500.0],
+            requestedScale: scale,
+            unit: "usd",
+            desiredTickCount: 4
+        )
+        #expect(btcNarrow.yAxisTicks.count >= 2)
+        let labels = btcNarrow.yAxisTicks.map { btcNarrow.axisLabel(forPlotValue: $0) }
+        #expect(Set(labels).count == labels.count)
+        for (tick, label) in zip(btcNarrow.yAxisTicks, labels) {
+            let restored = try #require(btcNarrow.originalValue(fromPlotValue: tick))
+            #expect(label.hasPrefix("$") && label.hasSuffix("k"))
+            let numeric = try #require(Double(label.dropFirst().dropLast())) * 1_000.0
+            #expect(abs(numeric - restored) < 100.0)
+        }
+    }
+
+    // 3. BTC_USD 极窄区间 [98_000, 98_050]：不得退化为单刻度 $98.0k
+    for scale in MacroChartScale.allCases {
+        let btcUltraNarrow = MacroChartScaleContext.make(
+            values: [98_000.0, 98_025.0, 98_050.0],
+            requestedScale: scale,
+            unit: "usd",
+            desiredTickCount: 4
+        )
+        #expect(btcUltraNarrow.yAxisTicks.count >= 2)
+        let labels = btcUltraNarrow.yAxisTicks.map { btcUltraNarrow.axisLabel(forPlotValue: $0) }
+        #expect(Set(labels).count == labels.count)
+        for (tick, label) in zip(btcUltraNarrow.yAxisTicks, labels) {
+            let restored = try #require(btcUltraNarrow.originalValue(fromPlotValue: tick))
+            #expect(label.hasPrefix("$") && label.hasSuffix("k"))
+            let numeric = try #require(Double(label.dropFirst().dropLast())) * 1_000.0
+            #expect(abs(numeric - restored) < 2.0)
+        }
+    }
+
+    // 4. 紧凑 contracts 窄区间 [180_000, 185_000] 同样保留足够精度不撞车
+    let contractsNarrow = MacroChartScaleContext.make(
+        values: [180_000.0, 182_500.0, 185_000.0],
+        requestedScale: .logarithmic,
+        unit: "contracts",
+        desiredTickCount: 4
+    )
+    #expect(contractsNarrow.yAxisTicks.count >= 2)
+    let contractLabels = contractsNarrow.yAxisTicks.map { contractsNarrow.axisLabel(forPlotValue: $0) }
+    #expect(Set(contractLabels).count == contractLabels.count)
+}
+
+@Test func multiSeriesSingleTimestampDisablesLogScaleEvenWhenAllValuesPositive() {
+    // 两条曲线各 1 个正值 -> 摊平数组 count == 2，但时间点数 pointCount == 1，必须禁用对数
+    let ctx = MacroChartScaleContext.make(
+        values: [160_000.0, 30_000.0],
+        pointCount: 1,
+        requestedScale: .logarithmic,
+        unit: "contracts"
+    )
+    #expect(!ctx.supportsLogScale)
+    #expect(ctx.effectiveScale == .linear)
+    #expect(ctx.disabledReason == .insufficientPoints)
+}
+
 // MARK: - 5. 区间切换自动回退线性（ViewModel 集成测试）
 
 private struct RangeSwitchingMacroService: MacroServicing {
@@ -377,6 +460,12 @@ private struct RangeSwitchingMacroService: MacroServicing {
     func fetchGoldCot(range: MacroHistoryRange) async throws -> MacroCotReport {
         let d1 = MacroDateParser.parseDay("2026-11-10")!
         let d2 = MacroDateParser.parseDay("2026-11-17")!
+        if range == .oneYear {
+            // 仅 1 个时间点且 mmNet / swapNet 均为正，用于验证单时间点不会误开对数
+            return MacroCotReport(seriesID: "GOLD_COT", range: range.rawValue, latest: nil, points: [
+                MacroCotPoint(dateString: "2026-11-17", date: d2, mmLong: 240_000, mmShort: 45_000, mmNet: 195_000, swapLong: 80_000, swapShort: 50_000, swapNet: 30_000, openInterest: 520_000, mmNetRatioPct: 37.5)
+            ])
+        }
         return MacroCotReport(seriesID: "GOLD_COT", range: range.rawValue, latest: nil, points: [
             MacroCotPoint(dateString: "2026-11-10", date: d1, mmLong: 210_000, mmShort: 50_000, mmNet: 160_000, swapLong: 30_000, swapShort: 180_000, swapNet: -150_000, openInterest: 500_000, mmNetRatioPct: 32.0),
             MacroCotPoint(dateString: "2026-11-17", date: d2, mmLong: 240_000, mmShort: 45_000, mmNet: 195_000, swapLong: 32_000, swapShort: 210_000, swapNet: -178_000, openInterest: 520_000, mmNetRatioPct: 37.5)
@@ -443,4 +532,11 @@ private struct RangeSwitchingMacroService: MacroServicing {
     model.setCotScale(.logarithmic)
     #expect(model.cotScale == .linear)
     #expect(model.cotScaleContext.disabledReason == .nonPositiveValues)
+
+    // 4. CFTC COT 单时间点即使两值均为正，仍不可启用对数且原因为数据点不足
+    await model.selectCotRange(.oneYear)
+    model.setCotScale(.logarithmic)
+    #expect(model.cotScale == .linear)
+    #expect(!model.cotScaleContext.supportsLogScale)
+    #expect(model.cotScaleContext.disabledReason == .insufficientPoints)
 }

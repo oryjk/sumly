@@ -80,8 +80,19 @@ final class MacroDashboardViewModel {
             + (treasury?.nominalYieldSeries ?? []).map(\.value)
     }
 
+    var treasuryYieldPointCount: Int {
+        Set(
+            (treasury?.realYieldSeries ?? []).map(\.date)
+                + (treasury?.nominalYieldSeries ?? []).map(\.date)
+        ).count
+    }
+
     var cotValues: [Double] {
         (cot?.points ?? []).flatMap { [$0.mmNet, $0.swapNet] }
+    }
+
+    var cotPointCount: Int {
+        cot?.points.count ?? 0
     }
 
     var temperatureGoldPriceScaleContext: MacroChartScaleContext {
@@ -107,6 +118,7 @@ final class MacroDashboardViewModel {
     var treasuryYieldScaleContext: MacroChartScaleContext {
         MacroChartScaleContext.make(
             values: treasuryYieldValues,
+            pointCount: treasuryYieldPointCount,
             requestedScale: treasuryYieldScale,
             unit: "%",
             includeZeroInLinear: true,
@@ -118,6 +130,7 @@ final class MacroDashboardViewModel {
     var cotScaleContext: MacroChartScaleContext {
         MacroChartScaleContext.make(
             values: cotValues,
+            pointCount: cotPointCount,
             requestedScale: cotScale,
             unit: "contracts",
             includeZeroInLinear: true,
@@ -143,14 +156,16 @@ final class MacroDashboardViewModel {
     func setTreasuryYieldScale(_ scale: MacroChartScale) {
         treasuryYieldScale = MacroChartScale.effectiveScale(
             requested: scale,
-            for: treasuryYieldValues
+            for: treasuryYieldValues,
+            pointCount: treasuryYieldPointCount
         )
     }
 
     func setCotScale(_ scale: MacroChartScale) {
         cotScale = MacroChartScale.effectiveScale(
             requested: scale,
-            for: cotValues
+            for: cotValues,
+            pointCount: cotPointCount
         )
     }
 
@@ -276,7 +291,8 @@ final class MacroDashboardViewModel {
             )
             treasuryYieldScale = MacroChartScale.effectiveScale(
                 requested: treasuryYieldScale,
-                for: treasuryYieldValues
+                for: treasuryYieldValues,
+                pointCount: treasuryYieldPointCount
             )
             isLoadingTreasury = false
         } catch is CancellationError {
@@ -326,7 +342,8 @@ final class MacroDashboardViewModel {
             cot = result
             cotScale = MacroChartScale.effectiveScale(
                 requested: cotScale,
-                for: cotValues
+                for: cotValues,
+                pointCount: cotPointCount
             )
             isLoadingCot = false
         } catch is CancellationError {
