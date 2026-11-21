@@ -220,7 +220,7 @@ struct HoldingAssetFormProfile: Equatable, Sendable {
                 deductionFieldTitle: "每克回收扣减",
                 discountFieldTitle: "赎回费率",
                 fixedFeeFieldTitle: "固定卖出费",
-                notePlaceholder: "记录定投计划、免手续费期限等（可选）"
+                notePlaceholder: "记录积存计划、免手续费期限等（可选）"
             )
 
         case .bean:

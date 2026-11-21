@@ -475,6 +475,7 @@ struct AddHoldingSheet: View {
     }
 
     private func selectAssetType(_ newType: GoldAssetType) {
+        guard newType != draft.assetType else { return }
         withAnimation(.easeInOut(duration: 0.16)) {
             if editing == nil, let previousPreset = selectedSubPreset, previousPreset.assetType != newType {
                 if draft.deductionText == previousPreset.deductionText { draft.deductionText = "" }

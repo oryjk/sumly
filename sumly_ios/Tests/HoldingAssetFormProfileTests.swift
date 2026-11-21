@@ -27,6 +27,7 @@ import Testing
     #expect(accumulation.showsFixedFee)
     #expect(accumulation.showsOtherCost)
     #expect(accumulation.subPresets.map(\.title) == ["银行积存金", "支付宝黄金"])
+    #expect(!accumulation.notePlaceholder.contains("定投"))
 
     let bean = HoldingAssetFormProfile.profile(for: .bean)
     #expect(bean.drawerSubtitle == "品牌/金店、工费、纯度、回购扣减、日期、账本、备注")
@@ -78,7 +79,7 @@ import Testing
     accDraft.selectAssetType(.accumulation)
     accDraft.gramsText = "10"
     accDraft.priceText = "680.00"
-    accDraft.note = "每月定投"
+    accDraft.note = "每月积存"
 
     let accPresets = HoldingAssetFormProfile.profile(for: .accumulation).subPresets
     let bankPreset = try #require(accPresets.first { $0.id == "accumulation.bank" })
@@ -89,7 +90,7 @@ import Testing
     #expect(accDraft.channel == "工商银行")
     #expect(accDraft.gramsText == "10")
     #expect(accDraft.priceText == "680.00")
-    #expect(accDraft.note == "每月定投")
+    #expect(accDraft.note == "每月积存")
     #expect(accDraft.totalText == "6800.00")
     #expect(accDraft.defaultsSummaryText == "99.99% · 赎回0.5%")
 
