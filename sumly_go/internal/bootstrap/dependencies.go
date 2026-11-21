@@ -28,10 +28,10 @@ import (
 	macrotreasury "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/treasury"
 	macroyahoo "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/yahoo"
 	macroapplication "gitee.com/oryjk/sumly/sumly_go/internal/macro/application"
-	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/eastmoney"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/feed"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/historical"
 	markethttp "gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/http"
+	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/jijinhao"
 	marketpostgres "gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/postgres"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/sge"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/sina"
@@ -128,7 +128,7 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 	domesticSource := feed.Source{
 		Quote:    domesticQuote,
 		Daily:    &sge.Client{HTTP: &http.Client{Timeout: 20 * time.Second}},
-		Intraday: eastmoney.NewClient(&http.Client{Timeout: 10 * time.Second}, "118.AU9999"),
+		Intraday: jijinhao.NewClient(&http.Client{Timeout: 10 * time.Second}, "JO_71"),
 	}
 	comexSource := &yahoo.Client{HTTP: &http.Client{Timeout: 10 * time.Second}, Symbol: "GCZ26.CMX", FX: londonSource}
 	markets := []marketapplication.InstrumentMarket{

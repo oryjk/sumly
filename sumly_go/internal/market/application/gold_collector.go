@@ -49,14 +49,27 @@ func (c *GoldCollector) Sample(ctx context.Context) error {
 	}
 	return c.store.PruneRealtime(ctx)
 }
+const (
+	intradayActiveInterval = time.Minute
+	intradayIdleInterval   = 5 * time.Minute
+	intradayMaxBackoff     = 5 * time.Minute
+	intradayStaleThreshold = 10 * time.Minute
+	intradayTimeout        = 10 * time.Second
+)
+
 func (c *GoldCollector) SyncIntraday(ctx context.Context) error {
+	_, err := c.syncIntraday(ctx)
+	return err
+}
+
+func (c *GoldCollector) syncIntraday(ctx context.Context) (time.Time, error) {
 	source, ok := c.source.(ports.GoldIntradaySource)
 	if !ok {
-		return nil
+		return time.Time{}, nil
 	}
 	points, err := source.FetchGoldIntraday(ctx)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 	now := c.now()
 	valid := make([]domain.IntradayPoint, 0, len(points))
@@ -72,9 +85,30 @@ func (c *GoldCollector) SyncIntraday(ctx context.Context) error {
 		valid = append(valid, p)
 	}
 	if len(valid) == 0 {
-		return fmt.Errorf("source returned no valid intraday points")
+		return time.Time{}, fmt.Errorf("source returned no valid intraday points")
 	}
-	return c.store.SaveIntraday(ctx, valid)
+	if err := c.store.SaveIntraday(ctx, valid); err != nil {
+		return time.Time{}, err
+	}
+	return valid[len(valid)-1].Time, nil
+}
+
+func nextIntradayDelay(now, latestEvent time.Time, consecutiveErrs int) time.Duration {
+	if consecutiveErrs > 0 {
+		shift := consecutiveErrs - 1
+		if shift > 4 {
+			shift = 4
+		}
+		delay := intradayActiveInterval << shift
+		if delay > intradayMaxBackoff {
+			return intradayMaxBackoff
+		}
+		return delay
+	}
+	if !latestEvent.IsZero() && now.Sub(latestEvent) > intradayStaleThreshold {
+		return intradayIdleInterval
+	}
+	return intradayActiveInterval
 }
 func collect(ctx context.Context, interval, timeout time.Duration, name string, run func(context.Context) error) {
 	tick := time.NewTicker(interval)
@@ -106,5 +140,28 @@ func (c *GoldCollector) CollectIntraday(ctx context.Context) {
 	if _, ok := c.source.(ports.GoldIntradaySource); !ok {
 		return
 	}
-	collect(ctx, 15*time.Second, 10*time.Second, "collect gold intraday failed", c.SyncIntraday)
+	consecutiveErrs := 0
+	for {
+		request, cancel := context.WithTimeout(ctx, intradayTimeout)
+		latestEvent, err := c.syncIntraday(request)
+		cancel()
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			consecutiveErrs++
+			slog.Warn("collect gold intraday failed", "error", err, "consecutive_errors", consecutiveErrs)
+		} else {
+			consecutiveErrs = 0
+		}
+
+		delay := nextIntradayDelay(c.now(), latestEvent, consecutiveErrs)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
 }

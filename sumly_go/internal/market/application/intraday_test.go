@@ -77,3 +77,20 @@ func TestIntradayCollectorClampsModerateFutureSkewAndDropsExtremeFuture(t *testi
 		t.Fatalf("expected +30s intraday point clamped to now, got %+v", writer.minutes[1])
 	}
 }
+
+func TestNextIntradayDelayThrottlesIdleAndBacksOffErrors(t *testing.T) {
+	now := time.Date(2026, 11, 21, 14, 0, 0, 0, time.UTC)
+
+	if got := nextIntradayDelay(now, now.Add(-2*time.Minute), 0); got != time.Minute {
+		t.Fatalf("active market delay = %v, want 1m", got)
+	}
+	if got := nextIntradayDelay(now, now.Add(-30*time.Minute), 0); got != 5*time.Minute {
+		t.Fatalf("closed market delay = %v, want 5m", got)
+	}
+	wantBackoff := []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute, 5 * time.Minute, 5 * time.Minute}
+	for i, want := range wantBackoff {
+		if got := nextIntradayDelay(now, time.Time{}, i+1); got != want {
+			t.Fatalf("err=%d delay = %v, want %v", i+1, got, want)
+		}
+	}
+}

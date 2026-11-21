@@ -283,4 +283,65 @@ func TestRealtimeClosedMarketIncompleteSecondsFallsBackToMinutes(t *testing.T) {
 			t.Fatalf("expected partial 5s with longer span to win, got interval=%d len=%d", interval, len(got))
 		}
 	})
+
+	t.Run("sparse SGE AU9999 night minutes carry forward same-session price without bridging market breaks", func(t *testing.T) {
+		tz := time.FixedZone("CST", 8*3600)
+		closeAt := time.Date(2026, 11, 21, 2, 30, 0, 0, tz)
+		bar0204 := time.Date(2026, 11, 21, 2, 4, 0, 0, tz)
+		bar0228 := time.Date(2026, 11, 21, 2, 28, 0, 0, tz)
+
+		store := &readOnlyMarket{
+			found: true,
+			quote: domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 755.01, AsOf: closeAt},
+			points: []domain.RealtimePoint{
+				{Time: closeAt.Add(-5 * time.Second), SourceTime: closeAt, Price: 755.01},
+				{Time: closeAt, SourceTime: closeAt, Price: 755.01},
+			},
+			minutes: []domain.IntradayPoint{
+				{Time: bar0204, Price: 760.00},
+				{Time: bar0228, Price: 755.01},
+			},
+		}
+		q := NewNativeGoldQuery(store)
+		q.now = func() time.Time { return closeAt.Add(18 * time.Hour) }
+
+		got, interval, err := q.GetGoldRealtime(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if interval != 60 || len(got) != 21 {
+			t.Fatalf("expected 60s carried minute window with 21 points, got interval=%d len=%d", interval, len(got))
+		}
+		if !got[0].Time.Equal(closeAt.Add(-RealtimeWindow)) || !got[0].SourceTime.Equal(bar0204) || got[0].Price != 760.00 {
+			t.Fatalf("unexpected first point: %+v", got[0])
+		}
+		if !got[18].Time.Equal(bar0228) || !got[18].SourceTime.Equal(bar0228) || got[18].Price != 755.01 {
+			t.Fatalf("unexpected 02:28 point: %+v", got[18])
+		}
+		if !got[20].Time.Equal(closeAt) || got[20].Price != 755.01 {
+			t.Fatalf("unexpected close point: %+v", got[20])
+		}
+
+		// 若上一笔成交在休市前（超过 60 分钟），不跨休市顺延。
+		staleStore := &readOnlyMarket{
+			found: true,
+			quote: domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 755.01, AsOf: closeAt},
+			points: []domain.RealtimePoint{
+				{Time: closeAt.Add(-5 * time.Second), SourceTime: closeAt, Price: 755.01},
+				{Time: closeAt, SourceTime: closeAt, Price: 755.01},
+			},
+			minutes: []domain.IntradayPoint{
+				{Time: closeAt.Add(-4 * time.Hour), Price: 770.00},
+			},
+		}
+		staleQuery := NewNativeGoldQuery(staleStore)
+		staleQuery.now = func() time.Time { return closeAt.Add(18 * time.Hour) }
+		staleGot, staleInterval, err := staleQuery.GetGoldRealtime(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if staleInterval != 5 || len(staleGot) != 2 {
+			t.Fatalf("expected stale pre-break bar not to be carried across break, got interval=%d len=%d", staleInterval, len(staleGot))
+		}
+	})
 }
