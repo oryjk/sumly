@@ -75,6 +75,78 @@ private func timingDate(_ value: String) -> Date { BackendGoldPriceService.parse
     #expect(RealtimeChartTiming(latestSample: now, latestQuote: now.addingTimeInterval(-181), intervalSeconds: 60, now: now).state == .paused)
 }
 
+@Test func sessionIntradayCaptionsSwitchAtThirtyMinuteThreshold() {
+    let now = timingDate("2026-11-21T02:30:00+08:00")
+    let calendar = timingCalendar()
+
+    // <= 30 minutes keeps compact 20-minute copy.
+    let shortLive = RealtimeChartTiming(latestSample: now, latestQuote: now, intervalSeconds: 5, windowSpan: 1800, now: now, calendar: calendar)
+    let shortPaused = RealtimeChartTiming(latestSample: now.addingTimeInterval(-3600), latestQuote: now.addingTimeInterval(-3600), intervalSeconds: 60, windowSpan: 1800, now: now, calendar: calendar)
+    #expect(shortLive.caption == "最近 20 分钟")
+    #expect(shortPaused.caption == "更新暂停 · 最近可用 20 分钟")
+
+    // > 30 minutes switches to full trading-session intraday copy.
+    let sessionLive = RealtimeChartTiming(latestSample: now, latestQuote: now, intervalSeconds: 60, windowSpan: 23400, now: now, calendar: calendar)
+    let sessionPaused = RealtimeChartTiming(latestSample: now.addingTimeInterval(-3600), latestQuote: now.addingTimeInterval(-3600), intervalSeconds: 60, windowSpan: 23400, now: now, calendar: calendar)
+    let sessionEmpty = RealtimeChartTiming(latestSample: nil, latestQuote: nil, intervalSeconds: 60, windowSpan: 23400, now: now, calendar: calendar)
+    #expect(sessionLive.state == .live)
+    #expect(sessionLive.caption == "实时更新 · 本交易时段分时")
+    #expect(sessionPaused.state == .paused)
+    #expect(sessionPaused.caption == "休市停盘 · 最近交易时段分时")
+    #expect(sessionEmpty.caption == "暂无实时走势")
+}
+
+@Test func crossMidnightAndMultiHourSessionLabelsFormatCleanly() {
+    let calendar = timingCalendar()
+    let nightStart = timingDate("2026-11-20T20:00:00+08:00")
+    let nightEnd = timingDate("2026-11-21T02:30:00+08:00")
+    let weekendNow = timingDate("2026-11-21T14:00:00+08:00")
+    let nightWindow = nightStart...nightEnd
+    let nightTiming = RealtimeChartTiming(
+        latestSample: nightEnd,
+        latestQuote: nightEnd,
+        intervalSeconds: 60,
+        windowSpan: nightEnd.timeIntervalSince(nightStart),
+        now: weekendNow,
+        calendar: calendar
+    )
+    #expect(nightTiming.windowLabel(nightWindow) == "11/20 20:00 — 11/21 02:30")
+    #expect(nightTiming.axisLabel(nightStart, window: nightWindow) == "11/20\n20:00")
+    #expect(nightTiming.axisLabel(nightEnd, window: nightWindow) == "11/21\n02:30")
+    #expect(nightTiming.boundaryLabel(nightStart, window: nightWindow) == "11/20 20:00")
+    #expect(nightTiming.boundaryLabel(nightEnd, window: nightWindow) == "11/21 02:30")
+
+    // Same-day multi-hour session viewed on the same day omits redundant date prefix.
+    let dayStart = timingDate("2026-11-20T09:00:00+08:00")
+    let dayEnd = timingDate("2026-11-20T15:30:00+08:00")
+    let dayWindow = dayStart...dayEnd
+    let sameDayTiming = RealtimeChartTiming(
+        latestSample: dayEnd,
+        latestQuote: dayEnd,
+        intervalSeconds: 60,
+        windowSpan: dayEnd.timeIntervalSince(dayStart),
+        now: dayEnd,
+        calendar: calendar
+    )
+    #expect(sameDayTiming.windowLabel(dayWindow) == "09:00 — 15:30")
+    #expect(sameDayTiming.axisLabel(dayStart, window: dayWindow) == "09:00")
+    #expect(sameDayTiming.axisLabel(dayEnd, window: dayWindow) == "15:30")
+    #expect(sameDayTiming.boundaryLabel(dayStart, window: dayWindow) == "09:00")
+
+    // Same-day multi-hour session viewed on a later day shows compact MM/dd once in windowLabel.
+    let nextDayTiming = RealtimeChartTiming(
+        latestSample: dayEnd,
+        latestQuote: dayEnd,
+        intervalSeconds: 60,
+        windowSpan: dayEnd.timeIntervalSince(dayStart),
+        now: weekendNow,
+        calendar: calendar
+    )
+    #expect(nextDayTiming.windowLabel(dayWindow) == "11/20 09:00 — 15:30")
+    #expect(nextDayTiming.axisLabel(dayStart, window: dayWindow) == "11/20\n09:00")
+    #expect(nextDayTiming.boundaryLabel(dayEnd, window: dayWindow) == "11/20 15:30")
+}
+
 @MainActor @Test func renderRealtimeDatesAndFreshnessForVisualReview() async throws {
     let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first { $0.isKeyWindow }

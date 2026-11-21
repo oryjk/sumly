@@ -84,8 +84,18 @@ import Foundation
 }
 
 @Test func realtimeEndpointFollowsSelectedMarketBasis() {
-    #expect(BackendGoldPriceService.realtimePath(instrumentID: "au9999") == "app/market/gold/instruments/au9999/realtime")
-    #expect(BackendGoldPriceService.realtimePath(instrumentID: nil) == "app/market/gold/realtime")
+    let domesticPath = BackendGoldPriceService.realtimePath(instrumentID: "au9999")
+    let internationalPath = BackendGoldPriceService.realtimePath(instrumentID: nil)
+    #expect(domesticPath == "app/market/gold/instruments/au9999/realtime?window=session")
+    #expect(internationalPath == "app/market/gold/realtime?window=session")
+
+    let baseURL = URL(string: "https://oryjk.cn/sumly/api/v1")!
+    let domesticURL = BackendGoldPriceService.requestURL(baseURL: baseURL, path: domesticPath)
+    let internationalURL = BackendGoldPriceService.requestURL(baseURL: baseURL, path: internationalPath)
+    #expect(domesticURL.absoluteString == "https://oryjk.cn/sumly/api/v1/app/market/gold/instruments/au9999/realtime?window=session")
+    #expect(internationalURL.absoluteString == "https://oryjk.cn/sumly/api/v1/app/market/gold/realtime?window=session")
+    #expect(URLComponents(url: domesticURL, resolvingAgainstBaseURL: false)?.queryItems == [URLQueryItem(name: "window", value: "session")])
+    #expect(URLComponents(url: internationalURL, resolvingAgainstBaseURL: false)?.queryItems == [URLQueryItem(name: "window", value: "session")])
 }
 
 @Test func realtimeDecodePreservesCadenceAndValidatesContract() throws {
@@ -103,10 +113,22 @@ import Foundation
         #expect(values.map(\.intervalSeconds) == [cadence, cadence])
         #expect(values.map(\.price) == [907.5, 907.61])
     }
-    for invalid in [try dto(interval: 10), try dto(interval: 5, unit: "USD/troy_oz"), try dto(interval: 5, window: 600)] {
+    for acceptedWindow in [1200, 21600, 23400, 86400] {
+        let domestic = try BackendGoldPriceService.decodeRealtime(dto(interval: 60, window: acceptedWindow), instrumentID: "au9999")
+        let international = try BackendGoldPriceService.decodeRealtime(dto(interval: 60, window: acceptedWindow), instrumentID: nil)
+        #expect(domestic.count == 2)
+        #expect(international.count == 2)
+    }
+    for invalid in [
+        try dto(interval: 10),
+        try dto(interval: 5, unit: "USD/troy_oz"),
+        try dto(interval: 5, window: 600),
+        try dto(interval: 60, window: 1199),
+        try dto(interval: 60, window: 86401)
+    ] {
         #expect(throws: BackendGoldPriceService.ServiceError.malformedPayload) {
             try BackendGoldPriceService.decodeRealtime(invalid, instrumentID: nil)
         }
     }
-    #expect(try BackendGoldPriceService.decodeRealtime(dto(interval: 5, unit: "USD/troy_oz"), instrumentID: "xauusd").count == 2)
+    #expect(try BackendGoldPriceService.decodeRealtime(dto(interval: 5, unit: "USD/troy_oz", window: 21600), instrumentID: "xauusd").count == 2)
 }

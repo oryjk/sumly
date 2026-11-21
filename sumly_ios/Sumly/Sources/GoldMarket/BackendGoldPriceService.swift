@@ -180,7 +180,18 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
     }
 
     static func realtimePath(instrumentID: String?) -> String {
-        instrumentID.map { "app/market/gold/instruments/\($0)/realtime" } ?? "app/market/gold/realtime"
+        instrumentID.map { "app/market/gold/instruments/\($0)/realtime?window=session" } ?? "app/market/gold/realtime?window=session"
+    }
+
+    static func requestURL(baseURL: URL, path: String) -> URL {
+        guard let queryIndex = path.firstIndex(of: "?") else {
+            return baseURL.appending(path: path)
+        }
+        let cleanPath = String(path[..<queryIndex])
+        let query = String(path[path.index(after: queryIndex)...])
+        var components = URLComponents(url: baseURL.appending(path: cleanPath), resolvingAgainstBaseURL: false)
+        components?.percentEncodedQuery = query
+        return components?.url ?? baseURL.appending(path: cleanPath)
     }
 
     func fetchRealtime() async throws -> [MarketChartPoint] {
@@ -190,7 +201,9 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
 
     static func decodeRealtime(_ dto: RealtimeDTO, instrumentID: String?) throws -> [MarketChartPoint] {
         let expectedUnit = instrumentID == nil || instrumentID == "au9999" ? "CNY/g" : "USD/troy_oz"
-        guard dto.unit == expectedUnit, [5, 60].contains(dto.intervalSeconds), dto.windowSeconds == 1200 else {
+        guard dto.unit == expectedUnit,
+              [5, 60].contains(dto.intervalSeconds),
+              (1200...86400).contains(dto.windowSeconds) else {
             throw ServiceError.malformedPayload
         }
         // 后端明确标记五秒采样或真实分钟回退；客户端不生成缺失点。
@@ -237,7 +250,7 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
     // MARK: - 请求
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
-        var request = URLRequest(url: baseURL.appending(path: path))
+        var request = URLRequest(url: Self.requestURL(baseURL: baseURL, path: path))
         request.timeoutInterval = 10
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ServiceError.badResponse }

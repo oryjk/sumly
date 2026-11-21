@@ -459,7 +459,11 @@ struct MarketHomeChartContent: View {
                 AxisMarks(values: model.axisDates) { value in
                     AxisValueLabel(anchor: value.index == 0 ? .topLeading : (value.index == model.axisDates.count - 1 ? .topTrailing : .top)) {
                         if let date = value.as(Date.self) {
-                            Text(axisLabel(date)).font(.system(size: 10)).foregroundStyle(GoldTheme.textSecondary)
+                            Text(axisLabel(date))
+                                .font(.system(size: 10))
+                                .monospacedDigit()
+                                .multilineTextAlignment(value.index == 0 ? .leading : (value.index == model.axisDates.count - 1 ? .trailing : .center))
+                                .foregroundStyle(GoldTheme.textSecondary)
                         }
                     }
                 }
@@ -715,7 +719,7 @@ struct MarketHomeChartContent: View {
 
     private func overviewLabel(_ date: Date) -> String {
         if model.range != .realtime { return date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits)) }
-        return axisLabel(date)
+        return model.realtimeTiming.boundaryLabel(date, window: model.fullDomain)
     }
     private func axisLabel(_ date: Date) -> String {
         let span = model.xDomain.upperBound.timeIntervalSince(model.xDomain.lowerBound)

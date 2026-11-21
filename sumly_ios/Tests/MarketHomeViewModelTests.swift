@@ -189,16 +189,44 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
     #expect(model.message != nil)
 }
 
-@Test func realtimeWindowKeepsFiveSecondSamplesAndExcludesWholeDayHistory() {
+@Test func realtimeWindowKeepsFullContinuousSessionAndExcludesPriorSessionOrOver12hHistory() {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let samples = (0..<300).map {
+    // Prior session separated by a 4.5h day/night break must be excluded.
+    let priorSession = [
+        MarketChartPoint(date: now.addingTimeInterval(-9 * 3600), price: 880, intervalSeconds: 60),
+        MarketChartPoint(date: now.addingTimeInterval(-6 * 3600), price: 885, intervalSeconds: 60)
+    ]
+    // Current session spans 1.5h with a 2h lunch-like break? Here continuous 25m of 5s samples.
+    let currentSamples = (0..<300).map {
         MarketChartPoint(date: now.addingTimeInterval(Double(-$0 * 5)), price: Double(900 + $0))
     }
-    let window = MarketHomeViewModel.realtimeWindow(samples, now: now)
-    #expect(window.count == 241)
-    #expect(window.first?.date == now.addingTimeInterval(-1200))
+    let window = MarketHomeViewModel.realtimeWindow(priorSession + currentSamples, now: now)
+    #expect(window.count == 300)
+    #expect(window.first?.date == now.addingTimeInterval(-1495))
     #expect(window.last?.price == 900)
     #expect(window.last?.date == now)
+
+    // Continuous 15-hour stream without gaps is capped at 12 hours.
+    let longStream = (0...180).map {
+        MarketChartPoint(date: now.addingTimeInterval(Double($0 - 180) * 300), price: 910, intervalSeconds: 60)
+    }
+    let capped = MarketHomeViewModel.realtimeWindow(longStream, now: now)
+    #expect(capped.first?.date == now.addingTimeInterval(-12 * 3600))
+    #expect(capped.last?.date == now)
+
+    // SGE day session 2h lunch break (11:30–13:30) stays intact as one session.
+    let dayStart = now.addingTimeInterval(-6.5 * 3600)
+    let dayMorning = [
+        MarketChartPoint(date: dayStart, price: 920, intervalSeconds: 60),
+        MarketChartPoint(date: dayStart.addingTimeInterval(2.5 * 3600), price: 922, intervalSeconds: 60)
+    ]
+    let dayAfternoon = [
+        MarketChartPoint(date: dayStart.addingTimeInterval(4.5 * 3600), price: 923, intervalSeconds: 60),
+        MarketChartPoint(date: now, price: 925, intervalSeconds: 60)
+    ]
+    let daySession = MarketHomeViewModel.realtimeWindow(dayMorning + dayAfternoon, now: now)
+    #expect(daySession.count == 4)
+    #expect(daySession.first?.date == dayStart)
 }
 
 @Test func realtimeWindowDoesNotSynthesizeMissingSamples() {
@@ -278,12 +306,16 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
     }
 }
 
-@Test func realtimeWindowRemainsAtLastAvailableQuoteDuringClosure() {
+@Test func realtimeWindowRemainsAtLastAvailableSessionDuringClosure() {
     let last = Date(timeIntervalSince1970: 1_789_764_840)
-    let points = (0...300).map { MarketChartPoint(date: last.addingTimeInterval(Double($0 - 300) * 5), price: 942.8) }
+    let start = last.addingTimeInterval(-23400) // 6.5h trading session
+    let points = (0..<256).map { index in
+        let date = start.addingTimeInterval(Double(index) * (23400.0 / 255.0))
+        return MarketChartPoint(date: date, price: 773.48 - Double(index) * 0.05, intervalSeconds: 60)
+    }
     let result = MarketHomeViewModel.realtimeWindow(points, now: last.addingTimeInterval(48 * 3600))
-    #expect(result.count == 241)
-    #expect(result.first?.date == last.addingTimeInterval(-1200))
+    #expect(result.count == 256)
+    #expect(result.first?.date == start)
     #expect(result.last?.date == last)
 }
 
@@ -806,4 +838,114 @@ private actor DelayedFailingHistory: GoldHistoryServicing {
     #expect(model.basis == .domestic)
     #expect(model.price == 945.2)
     #expect(!model.isSwitchingBasis)
+}
+
+private actor SessionAppendRealtimeFixture: GoldPriceServicing, GoldQuoteServicing, GoldRealtimeServicing {
+    private var samples: [MarketChartPoint]
+    private var quoteTime: Date
+
+    init(initialSamples: [MarketChartPoint], quoteTime: Date) {
+        self.samples = initialSamples
+        self.quoteTime = quoteTime
+    }
+
+    func setSamples(_ next: [MarketChartPoint], quoteTime: Date) {
+        self.samples = next
+        self.quoteTime = quoteTime
+    }
+
+    func fetchDailyPrices() async throws -> [GoldDailyPrice] { [] }
+    func fetchQuote() async throws -> GoldQuote {
+        let lastPrice = samples.last?.price ?? 755.01
+        return GoldQuote(symbol: "AU9999", price: lastPrice, open: 773.48, high: 775, low: 754,
+                         prevClose: 770, usdCNY: 0, cnyPerGram: lastPrice, asOf: quoteTime)
+    }
+    func fetchRealtime() async throws -> [MarketChartPoint] { samples }
+}
+
+@MainActor @Test func nightSessionLoadsFullCrossMidnightPointsAndPreservesEarlyPointsOnLiveAppend() async {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+    // Build a 6.5h cross-midnight night session (20:00 -> 02:30, 256 points) anchored safely in the past.
+    let anchorDay = calendar.date(byAdding: .day, value: -2, to: .now)!
+    let sessionStart = calendar.date(bySettingHour: 20, minute: 0, second: 0, of: anchorDay)!
+    let sessionSpan: TimeInterval = 6.5 * 3600 // 23400s -> next day 02:30
+    let sessionEnd = sessionStart.addingTimeInterval(sessionSpan)
+    let nightSession: [MarketChartPoint] = (0..<256).map { index in
+        let offset = sessionSpan * Double(index) / 255.0
+        return MarketChartPoint(
+            date: sessionStart.addingTimeInterval(offset),
+            price: 773.48 - Double(index) * 0.072,
+            intervalSeconds: 60
+        )
+    }
+    let fixture = SessionAppendRealtimeFixture(initialSamples: nightSession, quoteTime: sessionEnd)
+    let model = MarketHomeViewModel(basis: .domestic, dailyService: fixture, quoteService: fixture, realtimeService: fixture)
+    model.range = .realtime
+
+    await model.refresh()
+    #expect(model.points.count == 256)
+    #expect(model.points.first?.date == sessionStart)
+    #expect(model.points.last?.date == sessionEnd)
+    #expect(model.fullDomain.lowerBound == sessionStart)
+    #expect(model.fullDomain.upperBound == sessionEnd)
+    #expect(model.realtimeTiming.isSessionWindow)
+
+    // Subsequent live poll appends a trailing 5s tick (even if server returned only the incremental tail);
+    // early session points from 20:00 must stay intact.
+    let tailTick1 = MarketChartPoint(date: sessionEnd.addingTimeInterval(5), price: 755.30, intervalSeconds: 5)
+    await fixture.setSamples([tailTick1], quoteTime: tailTick1.date)
+    await model.refresh()
+    #expect(model.points.count == 257)
+    #expect(model.points.first?.date == sessionStart)
+    #expect(model.points.last == tailTick1)
+    #expect(model.fullDomain == sessionStart...tailTick1.date)
+
+    // Full-session refresh with another trailing tick keeps all 258 points cleanly.
+    let tailTick2 = MarketChartPoint(date: sessionEnd.addingTimeInterval(10), price: 755.45, intervalSeconds: 5)
+    await fixture.setSamples(nightSession + [tailTick1, tailTick2], quoteTime: tailTick2.date)
+    await model.refresh()
+    #expect(model.points.count == 258)
+    #expect(model.points.first?.date == sessionStart)
+    #expect(model.points.last == tailTick2)
+}
+
+@MainActor @Test func newlyOpenedSessionKeepsMinimumTwentyMinuteDomainFloor() async {
+    let end = Date.now.addingTimeInterval(-2)
+    let openingTicks = [
+        MarketChartPoint(date: end.addingTimeInterval(-5), price: 760.0, intervalSeconds: 5),
+        MarketChartPoint(date: end, price: 760.2, intervalSeconds: 5)
+    ]
+    let fixture = SessionAppendRealtimeFixture(initialSamples: openingTicks, quoteTime: end)
+    let model = MarketHomeViewModel(basis: .domestic, dailyService: fixture, quoteService: fixture, realtimeService: fixture)
+    model.range = .realtime
+
+    await model.refresh()
+    #expect(model.points.count == 2)
+    #expect(model.fullDomain.upperBound == end)
+    #expect(abs(model.fullDomain.upperBound.timeIntervalSince(model.fullDomain.lowerBound) - 1200) < 0.001)
+}
+
+@MainActor @Test func pausedRealtimeThrottlesPollIntervalAndRestoresLiveCadence() async {
+    let staleEnd = Date.now.addingTimeInterval(-3600)
+    let staleSample = MarketChartPoint(date: staleEnd, price: 755.01, intervalSeconds: 60)
+    let fixture = SessionAppendRealtimeFixture(initialSamples: [staleSample], quoteTime: staleEnd)
+    let model = MarketHomeViewModel(basis: .domestic, dailyService: fixture, quoteService: fixture, realtimeService: fixture)
+    model.range = .realtime
+
+    // Before first load (.empty): keep responsive 5s schedule.
+    #expect(model.realtimeTiming.state == .empty)
+    #expect(model.liveStreamPollInterval == MarketHomeViewModel.livePollInterval)
+
+    // After loading closed market data (.paused): throttle to 30s.
+    await model.refresh()
+    #expect(model.realtimeTiming.state == .paused)
+    #expect(model.liveStreamPollInterval == MarketHomeViewModel.pausedPollInterval)
+
+    // Once fresh live ticks arrive (.live): immediately restore 5s cadence.
+    let liveNow = Date.now.addingTimeInterval(-2)
+    await fixture.setSamples([MarketChartPoint(date: liveNow, price: 758.50, intervalSeconds: 5)], quoteTime: liveNow)
+    await model.refresh()
+    #expect(model.realtimeTiming.state == .live)
+    #expect(model.liveStreamPollInterval == MarketHomeViewModel.livePollInterval)
 }

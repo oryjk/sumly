@@ -195,9 +195,18 @@ final class MarketHomeViewModel {
 
     var realtimeTiming: RealtimeChartTiming {
         let now = Date.now
-        let latest = Self.realtimeWindow(realtime, now: now).last
+        let window = Self.realtimeWindow(realtime, now: now)
+        let latest = window.last
+        let span: TimeInterval = {
+            guard let first = window.first?.date, let last = latest?.date else { return 0 }
+            return max(0, last.timeIntervalSince(first))
+        }()
         return RealtimeChartTiming(latestSample: latest?.date, latestQuote: quote?.asOf,
-            intervalSeconds: latest?.intervalSeconds ?? 5, now: now)
+            intervalSeconds: latest?.intervalSeconds ?? 5, windowSpan: span, now: now)
+    }
+
+    var liveStreamPollInterval: Duration {
+        realtimeTiming.state == .paused ? Self.pausedPollInterval : Self.livePollInterval
     }
 
     var message: String? {
@@ -220,12 +229,64 @@ final class MarketHomeViewModel {
         return nil
     }
 
+    nonisolated static let realtimeMinimumSpan: TimeInterval = 1200
+    nonisolated static let realtimeMaximumSpan: TimeInterval = 12 * 3600
+    nonisolated static let realtimeSessionGap: TimeInterval = 3 * 3600
+    static let livePollInterval: Duration = .seconds(5)
+    static let pausedPollInterval: Duration = .seconds(30)
+
+    /// 保留完整当前交易时段分时（限制最大 12 小时且不跨日盘/夜盘或周末长停盘跳空）。
     nonisolated static func realtimeWindow(_ points: [MarketChartPoint], now: Date) -> [MarketChartPoint] {
         let valid = points.filter { $0.date <= now && $0.price.isFinite && $0.price > 0 }
             .sorted { $0.date < $1.date }
-        guard let latest = valid.last else { return [] }
-        let cutoff = latest.date.addingTimeInterval(-1200)
-        return valid.filter { $0.date >= cutoff }
+        guard !valid.isEmpty else { return [] }
+
+        var deduped: [MarketChartPoint] = []
+        deduped.reserveCapacity(valid.count)
+        for point in valid {
+            if let last = deduped.last, last.date == point.date {
+                deduped[deduped.count - 1] = point
+            } else {
+                deduped.append(point)
+            }
+        }
+        guard let latest = deduped.last else { return [] }
+
+        let maxCutoff = latest.date.addingTimeInterval(-realtimeMaximumSpan)
+        let bounded = deduped.filter { $0.date >= maxCutoff }
+        guard !bounded.isEmpty else { return [] }
+
+        // 保留最近一个连续交易时段：相邻点间隔 > 3h 视为跨日/夜盘或周末停盘，
+        // 既完整保留上金所日盘 11:30–13:30 两小时午休，又避免拼接前一时段旧曲线。
+        var sessionStartIndex = 0
+        if bounded.count > 1 {
+            for index in stride(from: bounded.count - 1, through: 1, by: -1) {
+                let gap = bounded[index].date.timeIntervalSince(bounded[index - 1].date)
+                if gap > realtimeSessionGap {
+                    sessionStartIndex = index
+                    break
+                }
+            }
+        }
+        return Array(bounded[sessionStartIndex...])
+    }
+
+    /// 盘中追加实时新点时保留同一交易时段早期的分时点，并由 `realtimeWindow` 保证最大 12h 与不跨休市跳空。
+    nonisolated static func mergeRealtimeSession(
+        existing: [MarketChartPoint],
+        incoming: [MarketChartPoint],
+        now: Date
+    ) -> [MarketChartPoint] {
+        let cleanedIncoming = realtimeWindow(incoming, now: now)
+        guard let firstIncoming = cleanedIncoming.first, let lastIncoming = cleanedIncoming.last else {
+            return []
+        }
+        let cleanedExisting = realtimeWindow(existing, now: now)
+        guard let lastExisting = cleanedExisting.last else { return cleanedIncoming }
+        guard lastIncoming.date >= lastExisting.date else { return cleanedIncoming }
+        let earlierSameSession = cleanedExisting.filter { $0.date < firstIncoming.date }
+        guard !earlierSameSession.isEmpty else { return cleanedIncoming }
+        return realtimeWindow(earlierSameSession + cleanedIncoming, now: now)
     }
 
     /// 纵轴保留呼吸空间，以半元为刻度边界，避免每次尾点变化都拉伸整条曲线。
@@ -268,19 +329,19 @@ final class MarketHomeViewModel {
     func start() async {
         // Each stream owns its retry schedule: slow historical sync must not
         // prevent live prices recovering after a foreground/network transition.
-        async let quotes: Void = poll(every: .seconds(5)) { await self.loadQuote() }
-        async let realtime: Void = poll(every: .seconds(5)) { await self.loadRealtime() }
-        async let history: Void = poll(every: .seconds(60)) {
+        async let quotes: Void = poll(interval: { self.liveStreamPollInterval }) { await self.loadQuote() }
+        async let realtime: Void = poll(interval: { self.liveStreamPollInterval }) { await self.loadRealtime() }
+        async let history: Void = poll(interval: { .seconds(60) }) {
             await self.loadDaily()
             if self.range != .realtime { await self.loadHistory() }
         }
         _ = await (quotes, realtime, history)
     }
 
-    private func poll(every interval: Duration, operation: @MainActor () async -> Void) async {
+    private func poll(interval: @MainActor () -> Duration, operation: @MainActor () async -> Void) async {
         while !Task.isCancelled {
             await operation()
-            do { try await Task.sleep(for: interval) } catch { return }
+            do { try await Task.sleep(for: interval()) } catch { return }
         }
     }
 
@@ -402,8 +463,9 @@ final class MarketHomeViewModel {
         let values = points
         if range == .realtime {
             let end = values.last?.date ?? .now
-            let start = values.first?.date ?? end.addingTimeInterval(-1200)
-            return start...max(end, start.addingTimeInterval(1))
+            let earliest = values.first?.date ?? end
+            let start = min(earliest, end.addingTimeInterval(-Self.realtimeMinimumSpan))
+            return start...end
         }
         if range == .history, basis == .domestic, let first = values.first?.date, let last = values.last?.date {
             return first...last
@@ -570,11 +632,13 @@ final class MarketHomeViewModel {
             let fetched = try await realtimeService.fetchRealtime()
             guard generation == cacheGeneration, realtimeRequest == request, !Task.isCancelled else { return }
             // An empty/invalid refresh is not a replacement for a usable curve.
-            guard !Self.realtimeWindow(fetched, now: .now).isEmpty else {
+            let now = Date.now
+            let merged = Self.mergeRealtimeSession(existing: realtime, incoming: fetched, now: now)
+            guard !merged.isEmpty else {
                 realtimeFailed = true
                 return
             }
-            realtime = fetched; realtimeFailed = false
+            realtime = merged; realtimeFailed = false
         }
         catch { if generation == cacheGeneration, realtimeRequest == request, !Task.isCancelled { realtimeFailed = true } }
     }
