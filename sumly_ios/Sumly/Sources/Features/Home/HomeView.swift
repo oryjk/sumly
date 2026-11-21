@@ -21,6 +21,7 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingHistorySources = false
     @State private var showingDates = false
+    @State private var selectedPurchaseMarker: ChartHoldingMarkerResolver.ResolvedMarker?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var basisHighlight
     @State private var highlightedBasis: GoldMarketBasis
@@ -118,6 +119,17 @@ struct HomeView: View {
         .sheet(isPresented: $showingDates) {
             ChartDateRangeSheet(bounds: model.fullDomain, window: model.xDomain, apply: model.setDateWindow)
         }
+        .sheet(item: $selectedPurchaseMarker) { resolved in
+            ChartPurchaseMarkerSheet(
+                resolvedMarker: resolved,
+                marketBasis: model.basis,
+                hideAmounts: hideAmounts,
+                currentQuote: model.quote ?? quoteStore?.quote(for: model.basis),
+                recordLookup: { id in
+                    activeBookRecords.first(where: { $0.id == id }) ?? records.first(where: { $0.id == id })
+                }
+            )
+        }
         .sheet(isPresented: $showingHistorySources) {
             NavigationStack {
                 ScrollView {
@@ -214,8 +226,14 @@ struct HomeView: View {
                         showingDates: $showingDates,
                         holdingOverlay: holdingOverlay,
                         showHoldingOverlay: showHoldingOverlay,
+                        hideAmounts: hideAmounts,
+                        highlightedMarkerID: selectedPurchaseMarker?.id,
                         onToggleHoldingOverlay: {
                             withAnimation(.easeInOut(duration: 0.18)) { showHoldingOverlay.toggle() }
+                        },
+                        onSelectPurchaseMarker: { resolved in
+                            model.selectedDate = nil
+                            selectedPurchaseMarker = resolved
                         }
                     )
                         .transaction { $0.animation = nil }
@@ -408,6 +426,7 @@ struct HomeView: View {
 
     private func switchBasis(to basis: GoldMarketBasis) {
         guard pendingBasis == nil, basis != model.basis else { return }
+        selectedPurchaseMarker = nil
         pendingBasis = basis
         transitionID = UUID()
         basisSwitchTask = Task { @MainActor in

@@ -48,12 +48,59 @@ struct GoldSavingGoalProgress: Equatable, Sendable {
 
 /// 行情走势图上的持仓叠加信息：组合保本线、加权成本均线与区间内买入打点。
 struct MarketHoldingOverlay: Equatable, Sendable {
+    struct PurchaseItem: Identifiable, Equatable, Sendable {
+        let id: UUID
+        let assetType: String
+        let brand: String
+        let grams: Double
+        let unitPrice: Double
+        let effectiveUnitCost: Double
+        let totalCost: Double
+        let laborFee: Double
+        let timestamp: Date
+        let note: String
+
+        var resolvedAssetType: GoldAssetType {
+            GoldAssetType(rawValue: assetType.trimmingCharacters(in: .whitespacesAndNewlines)) ?? .other
+        }
+
+        var displayName: String {
+            let trimmedBrand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedBrand.isEmpty { return trimmedBrand }
+            let trimmedType = assetType.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedType.isEmpty || trimmedType == "其他" ? "黄金记录" : trimmedType
+        }
+    }
+
     struct PurchaseMarker: Identifiable, Equatable, Sendable {
         let date: Date
         let totalGrams: Double
         let averageUnitPrice: Double
         let count: Int
+        let items: [PurchaseItem]
+        let minUnitCost: Double
+        let maxUnitCost: Double
+
         var id: Date { date }
+
+        init(
+            date: Date,
+            totalGrams: Double,
+            averageUnitPrice: Double,
+            count: Int,
+            items: [PurchaseItem] = [],
+            minUnitCost: Double? = nil,
+            maxUnitCost: Double? = nil
+        ) {
+            self.date = date
+            self.totalGrams = totalGrams
+            self.averageUnitPrice = averageUnitPrice
+            self.count = count
+            self.items = items
+            let validCosts = items.map(\.effectiveUnitCost).filter { $0.isFinite && $0 > 0 }
+            self.minUnitCost = minUnitCost ?? validCosts.min() ?? averageUnitPrice
+            self.maxUnitCost = maxUnitCost ?? validCosts.max() ?? averageUnitPrice
+        }
     }
 
     let breakEvenPrice: Double?
@@ -135,14 +182,43 @@ enum HoldingQuickPreset: String, CaseIterable, Identifiable, Sendable {
 /// 持仓洞察纯逻辑汇总。
 enum HoldingsInsights {
     struct Entry: Sendable {
+        let id: UUID?
         let assetType: String
         let brand: String
         let channel: String
         let grams: Double
         let totalCost: Double
         let unitPrice: Double
+        let laborFee: Double
         let timestamp: Date
+        let note: String
         let input: GoldReturnInput
+
+        init(
+            id: UUID? = nil,
+            assetType: String,
+            brand: String,
+            channel: String,
+            grams: Double,
+            totalCost: Double,
+            unitPrice: Double,
+            laborFee: Double = 0,
+            timestamp: Date,
+            note: String = "",
+            input: GoldReturnInput
+        ) {
+            self.id = id
+            self.assetType = assetType
+            self.brand = brand
+            self.channel = channel
+            self.grams = grams
+            self.totalCost = totalCost
+            self.unitPrice = unitPrice
+            self.laborFee = laborFee
+            self.timestamp = timestamp
+            self.note = note
+            self.input = input
+        }
     }
 
     enum Grouping: String, CaseIterable, Identifiable {
@@ -214,23 +290,44 @@ enum HoldingsInsights {
         let totalCost = valid.reduce(0) { $0 + $1.totalCost }
         let averageCost = totalGrams > 0 ? totalCost / totalGrams : nil
 
-        var dayBuckets: [Date: (grams: Double, weightedCost: Double, count: Int)] = [:]
+        var dayBuckets: [Date: (grams: Double, weightedCost: Double, items: [MarketHoldingOverlay.PurchaseItem])] = [:]
         for entry in valid {
             let day = ChartViewport.noon(entry.timestamp, calendar: calendar)
             guard window.contains(day) else { continue }
-            var bucket = dayBuckets[day] ?? (0, 0, 0)
+            var bucket = dayBuckets[day] ?? (0, 0, [])
+            let effectiveUnitCost = entry.grams > 0 ? entry.totalCost / entry.grams : entry.unitPrice
+            let resolvedLaborFee = entry.laborFee > 0 ? entry.laborFee : entry.input.laborFee
+            let item = MarketHoldingOverlay.PurchaseItem(
+                id: entry.id ?? UUID(),
+                assetType: entry.assetType,
+                brand: entry.brand,
+                grams: entry.grams,
+                unitPrice: entry.unitPrice,
+                effectiveUnitCost: effectiveUnitCost,
+                totalCost: entry.totalCost,
+                laborFee: resolvedLaborFee,
+                timestamp: entry.timestamp,
+                note: entry.note
+            )
             bucket.grams += entry.grams
             bucket.weightedCost += entry.totalCost
-            bucket.count += 1
+            bucket.items.append(item)
             dayBuckets[day] = bucket
         }
 
         let markers = dayBuckets.map { day, bucket in
-            MarketHoldingOverlay.PurchaseMarker(
+            let sortedItems = bucket.items.sorted { lhs, rhs in
+                if lhs.timestamp != rhs.timestamp { return lhs.timestamp < rhs.timestamp }
+                if lhs.effectiveUnitCost != rhs.effectiveUnitCost { return lhs.effectiveUnitCost > rhs.effectiveUnitCost }
+                return lhs.displayName < rhs.displayName
+            }
+            let averageUnitPrice = bucket.grams > 0 ? bucket.weightedCost / bucket.grams : 0
+            return MarketHoldingOverlay.PurchaseMarker(
                 date: day,
                 totalGrams: bucket.grams,
-                averageUnitPrice: bucket.grams > 0 ? bucket.weightedCost / bucket.grams : 0,
-                count: bucket.count
+                averageUnitPrice: averageUnitPrice,
+                count: sortedItems.count,
+                items: sortedItems
             )
         }.sorted { $0.date < $1.date }
 
@@ -247,13 +344,16 @@ enum HoldingsInsights {
 extension HoldingRecord {
     var insightEntry: HoldingsInsights.Entry {
         HoldingsInsights.Entry(
+            id: id,
             assetType: assetType,
             brand: brand,
             channel: purchaseChannel,
             grams: grams,
             totalCost: totalPurchaseCost,
             unitPrice: unitPriceCNY,
+            laborFee: laborFee,
             timestamp: timestamp,
+            note: note,
             input: returnInput
         )
     }

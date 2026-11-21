@@ -10,7 +10,11 @@ struct MarketHomeChartContent: View {
     @Binding var showingDates: Bool
     var holdingOverlay: MarketHoldingOverlay? = nil
     var showHoldingOverlay: Bool = false
+    var hideAmounts: Bool = false
+    var highlightedMarkerID: Date? = nil
     var onToggleHoldingOverlay: (() -> Void)? = nil
+    var onSelectPurchaseMarker: ((ChartHoldingMarkerResolver.ResolvedMarker) -> Void)? = nil
+    @State private var markerTapFeedbackTrigger = 0
 
     private static let quickRanges: [MarketRange] = [.realtime, .month, .quarter, .year, .fiveYears]
 
@@ -19,12 +23,23 @@ struct MarketHomeChartContent: View {
     }
 
     var body: some View {
+        let visibleData = model.visiblePoints
+        let priceDomain = model.priceScale.domain(visibleData.map(\.price))
+        let resolvedMarkers: [ChartHoldingMarkerResolver.ResolvedMarker] = {
+            guard showHoldingOverlay, let overlay = holdingOverlay, model.range != .realtime else { return [] }
+            return ChartHoldingMarkerResolver.resolve(
+                markers: overlay.markers,
+                curvePoints: visibleData,
+                scale: model.priceScale,
+                domain: priceDomain
+            )
+        }()
         MarketDashboardLayout(availableHeight: availableHeight) {
             quoteHeader
             chartControls
             VStack(alignment: .leading, spacing: 6) {
                 chartCaption
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     ChartWindowSummary(statistics: model.windowStatistics)
                     if showHoldingOverlay, let breakEven = holdingOverlay?.breakEvenPrice {
                         Text("· 保本 ¥\(breakEven.moneyText)")
@@ -32,11 +47,27 @@ struct MarketHomeChartContent: View {
                             .foregroundStyle(GoldTheme.goldSoft)
                             .lineLimit(1)
                     }
+                    if showHoldingOverlay, !resolvedMarkers.isEmpty {
+                        HStack(spacing: 4) {
+                            Text("·")
+                                .foregroundStyle(GoldTheme.textSecondary)
+                            Circle()
+                                .fill(GoldTheme.up)
+                                .frame(width: 6, height: 6)
+                            Text("买入点")
+                                .foregroundStyle(GoldTheme.textSecondary)
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("红点代表历史买入成本")
+                    }
                 }
+                .minimumScaleFactor(0.82)
             }.frame(maxWidth: .infinity, alignment: .leading)
 
             if model.range == .realtime || model.range.dateBounds() != nil {
-                trendChart
+                trendChart(data: visibleData, domain: priceDomain, resolvedMarkers: resolvedMarkers)
                     .accessibilityLabel("\(rangeTitle(model.range))黄金价格走势图，当前区间\(model.windowPoints.count)个行情点")
             } else {
                 Text("今年暂无已收盘数据，首个交易日收盘后更新")
@@ -48,6 +79,7 @@ struct MarketHomeChartContent: View {
         .sensoryFeedback(.selection, trigger: model.selectedPoint?.date)
         .sensoryFeedback(.selection, trigger: model.range)
         .sensoryFeedback(.selection, trigger: model.priceScale)
+        .sensoryFeedback(.impact(weight: .light), trigger: markerTapFeedbackTrigger)
     }
 
     private var quoteHeader: some View {
@@ -157,7 +189,7 @@ struct MarketHomeChartContent: View {
                 HStack(spacing: 3) {
                     Image(systemName: showHoldingOverlay ? "checkmark.circle.fill" : "circle")
                         .font(.caption2)
-                    Text("保本线")
+                    Text("持仓")
                         .font(.system(.caption, design: .rounded).weight(.semibold))
                 }
                 .lineLimit(1)
@@ -168,7 +200,7 @@ struct MarketHomeChartContent: View {
             }
             .buttonStyle(.plain)
             .fixedSize()
-            .accessibilityLabel("在走势图叠加持仓保本线")
+            .accessibilityLabel("在走势图叠加持仓保本线与买入点")
             .accessibilityValue(showHoldingOverlay ? "已开启" : "已关闭")
         }
     }
@@ -320,20 +352,23 @@ struct MarketHomeChartContent: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var trendChart: some View {
-        let data = model.visiblePoints
-        let domain = model.priceScale.domain(data.map(\.price))
+    private func trendChart(
+        data: [MarketChartPoint],
+        domain: ClosedRange<Double>,
+        resolvedMarkers: [ChartHoldingMarkerResolver.ResolvedMarker]
+    ) -> some View {
         let baseline = domain.lowerBound
         let statistics = model.windowStatistics
-        let resolvedMarkers: [ChartHoldingMarkerResolver.ResolvedMarker] = {
-            guard showHoldingOverlay, let overlay = holdingOverlay, model.range != .realtime else { return [] }
-            return ChartHoldingMarkerResolver.resolve(
-                markers: overlay.markers,
+        let inspectedMarkerMatch: ChartHoldingMarkerResolver.MatchedInspectionMarker? = {
+            guard showHoldingOverlay, let point = model.selectedPoint, !resolvedMarkers.isEmpty else { return nil }
+            return ChartHoldingMarkerResolver.matchForInspection(
+                selectedDate: point.date,
                 curvePoints: data,
-                scale: model.priceScale,
-                domain: domain
+                resolvedMarkers: resolvedMarkers
             )
         }()
+        let activeMarkerID = highlightedMarkerID ?? inspectedMarkerMatch?.resolved.id
+
         return ZStack {
             Chart {
                 ForEach(data, id: \.date) { point in
@@ -379,28 +414,33 @@ struct MarketHomeChartContent: View {
                             }
                     }
                     ForEach(resolvedMarkers) { item in
+                        let isActive = item.id == activeMarkerID
                         if let range = item.connectorRange, let anchor = item.scaledMarketAnchor {
                             RuleMark(
                                 x: .value("时间", item.marker.date),
                                 yStart: .value("价格刻度", range.lowerBound),
                                 yEnd: .value("价格刻度", range.upperBound)
                             )
-                            .foregroundStyle(GoldTheme.up.opacity(0.45))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2.5, 2.5]))
+                            .foregroundStyle(GoldTheme.up.opacity(isActive ? 0.9 : 0.45))
+                            .lineStyle(StrokeStyle(
+                                lineWidth: isActive ? 1.8 : 1,
+                                dash: isActive ? [3, 2.5] : [2.5, 2.5]
+                            ))
 
                             PointMark(
                                 x: .value("时间", item.marker.date),
                                 y: .value("价格刻度", anchor)
                             )
-                            .foregroundStyle(GoldTheme.up.opacity(0.55))
-                            .symbolSize(16)
+                            .foregroundStyle(GoldTheme.up.opacity(isActive ? 0.92 : 0.55))
+                            .symbolSize(isActive ? 28 : 16)
                         }
                         PointMark(
                             x: .value("时间", item.marker.date),
                             y: .value("价格刻度", item.scaledCost)
                         )
-                        .foregroundStyle(GoldTheme.up)
-                        .symbolSize(46)
+                        .symbol {
+                            purchaseMarkerSymbol(count: item.marker.count, isActive: isActive)
+                        }
                     }
                 }
                 if let point = model.selectedPoint {
@@ -430,6 +470,19 @@ struct MarketHomeChartContent: View {
                 GeometryReader { geometry in
                     if let plotFrame = proxy.plotFrame {
                         let frame = geometry[plotFrame]
+                        let markerScreenPoints: [ChartHoldingMarkerResolver.MarkerScreenPoint] = resolvedMarkers.compactMap { item in
+                            guard let x = proxy.position(forX: item.marker.date),
+                                  let y = proxy.position(forY: item.scaledCost),
+                                  x >= 0, x <= frame.width,
+                                  y >= 0, y <= frame.height else {
+                                return nil
+                            }
+                            return ChartHoldingMarkerResolver.MarkerScreenPoint(
+                                resolved: item,
+                                point: CGPoint(x: x, y: y)
+                            )
+                        }
+
                         if model.selectedPoint == nil {
                             if let high = statistics.high {
                                 extremumLabel(high, title: high.price == statistics.low?.price ? "最高 / 最低" : "最高", above: true, other: high.price == statistics.low?.price ? nil : statistics.low, proxy: proxy, frame: frame)
@@ -438,11 +491,44 @@ struct MarketHomeChartContent: View {
                                 extremumLabel(low, title: "最低", above: false, other: statistics.high, proxy: proxy, frame: frame)
                             }
                         }
-                        ChartGestureSurface(begin: model.beginChartGesture,
-                                            transform: model.transformChart,
-                                            end: model.endChartGesture,
-                                            select: model.selectChart,
-                                            reset: model.resetViewport)
+
+                        ForEach(markerScreenPoints, id: \.resolved.id) { screenPoint in
+                            if let badge = ChartPurchaseMarkerPresentation.badgeText(for: screenPoint.resolved.marker.count) {
+                                let isActive = screenPoint.resolved.id == activeMarkerID
+                                let badgeCenterX = min(max(frame.minX + screenPoint.point.x + 10, frame.minX + 10), frame.maxX - 10)
+                                let badgeCenterY = min(max(frame.minY + screenPoint.point.y - 10, frame.minY + 9), frame.maxY - 9)
+                                Text(badge)
+                                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundStyle(isActive ? GoldTheme.onGold : GoldTheme.text)
+                                    .padding(.horizontal, badge.count > 1 ? 4 : 0)
+                                    .frame(minWidth: 15, minHeight: 15)
+                                    .background(isActive ? GoldTheme.goldSoft : GoldTheme.card, in: GoldTheme.capsuleShape)
+                                    .overlay(GoldTheme.capsuleShape.strokeBorder(isActive ? GoldTheme.gold : GoldTheme.up, lineWidth: 1))
+                                    .position(x: badgeCenterX, y: badgeCenterY)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+
+                        ChartGestureSurface(
+                            begin: model.beginChartGesture,
+                            transform: model.transformChart,
+                            end: model.endChartGesture,
+                            select: model.selectChart,
+                            reset: model.resetViewport,
+                            tapPoint: { location in
+                                guard onSelectPurchaseMarker != nil,
+                                      let hit = ChartHoldingMarkerResolver.hitTest(
+                                          tapPoint: location,
+                                          markerPoints: markerScreenPoints
+                                      ) else {
+                                    return false
+                                }
+                                markerTapFeedbackTrigger &+= 1
+                                onSelectPurchaseMarker?(hit)
+                                return true
+                            }
+                        )
                             .frame(width: frame.width, height: frame.height)
                             .position(x: frame.midX, y: frame.midY)
                             .accessibilityLabel("走势图时间轴")
@@ -452,18 +538,13 @@ struct MarketHomeChartContent: View {
                             .accessibilityAction(named: "复位") { model.resetViewport() }
                     }
                     if let point = model.selectedPoint, let x = proxy.position(forX: point.date) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("¥ " + point.price.formatted(.number.precision(.fractionLength(2))))
-                                .font(.system(size: 14, weight: .semibold))
-                            Text(pointLabel(point))
-                                .font(.system(size: 11))
-                        }
-                        .foregroundStyle(GoldTheme.gold)
-                        .padding(10)
-                        .frame(width: 162, alignment: .leading)
-                        .background(GoldTheme.card, in: GoldTheme.rangeShape)
-                        .position(x: min(max(x + (proxy.plotFrame.map { geometry[$0].minX } ?? 0) + 82, 81), max(81, geometry.size.width - 81)), y: 32)
-                        .allowsHitTesting(false)
+                        inspectionTooltip(
+                            for: point,
+                            markerMatch: inspectedMarkerMatch,
+                            pointXInPlot: x,
+                            plotMinX: proxy.plotFrame.map { geometry[$0].minX } ?? 0,
+                            containerSize: geometry.size
+                        )
                     }
                 }
             }
@@ -473,6 +554,137 @@ struct MarketHomeChartContent: View {
                     .foregroundStyle(GoldTheme.textSecondary)
             }
         }
+    }
+
+    @ViewBuilder
+    private func purchaseMarkerSymbol(count: Int, isActive: Bool) -> some View {
+        let isMultiple = count >= 2
+        let coreSize: CGFloat = isMultiple ? (isActive ? 11 : 9) : (isActive ? 10 : 7.5)
+        ZStack {
+            if isActive {
+                Circle()
+                    .fill(GoldTheme.up.opacity(0.28))
+                    .frame(width: coreSize + 10, height: coreSize + 10)
+            }
+            if isMultiple {
+                Circle()
+                    .fill(GoldTheme.background)
+                    .frame(width: coreSize + 4.5, height: coreSize + 4.5)
+                Circle()
+                    .strokeBorder(isActive ? GoldTheme.gold : GoldTheme.goldSoft, lineWidth: isActive ? 1.5 : 1.2)
+                    .frame(width: coreSize + 4.5, height: coreSize + 4.5)
+            } else if isActive {
+                Circle()
+                    .strokeBorder(GoldTheme.text.opacity(0.9), lineWidth: 1.3)
+                    .frame(width: coreSize + 2.5, height: coreSize + 2.5)
+            }
+            Circle()
+                .fill(GoldTheme.up)
+                .frame(width: coreSize, height: coreSize)
+        }
+    }
+
+    @ViewBuilder
+    private func inspectionTooltip(
+        for point: MarketChartPoint,
+        markerMatch: ChartHoldingMarkerResolver.MatchedInspectionMarker?,
+        pointXInPlot: CGFloat,
+        plotMinX: CGFloat,
+        containerSize: CGSize
+    ) -> some View {
+        let tooltipContent = markerMatch.map {
+            ChartPurchaseMarkerPresentation.inspectionTooltip(
+                match: $0,
+                selectedPoint: point,
+                hideAmounts: hideAmounts
+            )
+        }
+        let targetWidth: CGFloat = tooltipContent == nil ? 162 : min(196, max(168, containerSize.width - 12))
+        let anchorX = plotMinX + pointXInPlot
+        let preferredLeft: CGFloat = {
+            let rightCandidate = anchorX + 10
+            if rightCandidate + targetWidth <= containerSize.width - 4 {
+                return rightCandidate
+            }
+            return anchorX - 10 - targetWidth
+        }()
+        let clampedLeft = min(max(preferredLeft, 4), max(4, containerSize.width - targetWidth - 4))
+
+        VStack(alignment: .leading, spacing: 4) {
+            Text("¥ " + point.price.formatted(.number.precision(.fractionLength(2))))
+                .font(.system(size: 14, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(GoldTheme.gold)
+            Text(pointLabel(point))
+                .font(.system(size: 11))
+                .foregroundStyle(GoldTheme.goldSoft)
+                .lineLimit(1)
+
+            if let tooltipContent {
+                GoldTheme.cardStroke.frame(height: 1)
+                    .padding(.vertical, 2)
+
+                if let dateBadge = tooltipContent.dateBadge {
+                    Text(dateBadge)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(GoldTheme.goldSoft)
+                        .lineLimit(1)
+                }
+
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(GoldTheme.up)
+                        .frame(width: 6, height: 6)
+                    Text(tooltipContent.headline)
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(GoldTheme.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+
+                HStack(spacing: 6) {
+                    Text(tooltipContent.primaryMetric)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(GoldTheme.text)
+                    if let spread = tooltipContent.spread {
+                        Text(spread.compactText)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(spread.isPremium ? GoldTheme.up : (spread.isDiscount ? GoldTheme.down : GoldTheme.textSecondary))
+                            .lineLimit(1)
+                    }
+                }
+
+                if let secondary = tooltipContent.secondaryMetric {
+                    Text(secondary)
+                        .font(.system(size: 10))
+                        .monospacedDigit()
+                        .foregroundStyle(GoldTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+
+                if let footerHint = tooltipContent.footerHint {
+                    HStack(spacing: 3) {
+                        Text(footerHint)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8, weight: .bold))
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(GoldTheme.goldSoft)
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(width: targetWidth, alignment: .leading)
+        .background(GoldTheme.card.opacity(0.96), in: GoldTheme.rangeShape)
+        .overlay(GoldTheme.rangeShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .offset(x: clampedLeft, y: 4)
+        .allowsHitTesting(false)
     }
     @ViewBuilder
     private func extremumLabel(_ point: MarketChartPoint, title: String, above: Bool, other: MarketChartPoint?, proxy: ChartProxy, frame: CGRect) -> some View {
@@ -563,6 +775,22 @@ enum ChartHoldingMarkerResolver: Sendable {
         let marketAnchorPrice: Double?
         /// 大盘参考金价在当前价格刻度下的纵坐标（仅当落在 domain 内时有效）。
         let scaledMarketAnchor: Double?
+        /// 当日是否为非交易日（周末/休市），大盘参考价由临近交易日插值或回退得出。
+        let isInterpolatedMarketAnchor: Bool
+
+        init(
+            marker: MarketHoldingOverlay.PurchaseMarker,
+            scaledCost: Double,
+            marketAnchorPrice: Double?,
+            scaledMarketAnchor: Double?,
+            isInterpolatedMarketAnchor: Bool = false
+        ) {
+            self.marker = marker
+            self.scaledCost = scaledCost
+            self.marketAnchorPrice = marketAnchorPrice
+            self.scaledMarketAnchor = scaledMarketAnchor
+            self.isInterpolatedMarketAnchor = isInterpolatedMarketAnchor
+        }
 
         var id: Date { marker.id }
 
@@ -575,6 +803,23 @@ enum ChartHoldingMarkerResolver: Sendable {
             return low...high
         }
     }
+
+    struct MatchedInspectionMarker: Equatable, Sendable {
+        let resolved: ResolvedMarker
+        /// 是否精确匹配同一自然日；false 表示买入日为休市/周末并吸附到了临近交易日。
+        let isSameDay: Bool
+        /// 与当前滑动查价日期相差的自然日数（同日为 0，临近吸附为 1 或 2）。
+        let dayDistance: Int
+    }
+
+    struct MarkerScreenPoint: Equatable, Sendable {
+        let resolved: ResolvedMarker
+        /// 相对于图表 plotFrame 左上角的坐标点。
+        let point: CGPoint
+    }
+
+    /// 44pt 隐形命中热区半径（直径 44pt）。
+    static let defaultHitRadius: CGFloat = 22
 
     /// 为指定买入日期匹配大盘金价：
     /// 1. 优先精确命中同一自然日的交易日收盘价；
@@ -611,6 +856,7 @@ enum ChartHoldingMarkerResolver: Sendable {
                   domain.contains(scaledCost) else {
                 return nil
             }
+            let hasExactTradingDay = validPoints.contains { calendar.isDate($0.date, inSameDayAs: marker.date) }
             let anchorPrice = marketAnchorPriceSorted(for: marker.date, in: validPoints, calendar: calendar)
             let scaledAnchor: Double? = anchorPrice.flatMap { price in
                 guard let scaled = scale.value(price), domain.contains(scaled) else { return nil }
@@ -620,9 +866,98 @@ enum ChartHoldingMarkerResolver: Sendable {
                 marker: marker,
                 scaledCost: scaledCost,
                 marketAnchorPrice: anchorPrice,
-                scaledMarketAnchor: scaledAnchor
+                scaledMarketAnchor: scaledAnchor,
+                isInterpolatedMarketAnchor: anchorPrice != nil && !hasExactTradingDay
             )
         }
+    }
+
+    /// 单指滑动查价自动匹配买入红点：
+    /// 1. 优先精确命中与 `selectedDate` 同一自然日的买入红点；
+    /// 2. 若无同日红点，仅对本身在 `curvePoints` 中无同日交易数据的休市/周末红点，在临近 2 个自然日内匹配最靠近且无冲突的红点
+    ///    （每个休市红点仅唯一吸附到距离其最近的交易日，若等距则优先吸附至更早的节前收盘日）。
+    static func matchForInspection(
+        selectedDate: Date,
+        curvePoints: [MarketChartPoint],
+        resolvedMarkers: [ResolvedMarker],
+        maxCalendarDayDistance: Int = 2,
+        calendar: Calendar = .current
+    ) -> MatchedInspectionMarker? {
+        guard !resolvedMarkers.isEmpty else { return nil }
+
+        if let exact = resolvedMarkers.first(where: { calendar.isDate($0.marker.date, inSameDayAs: selectedDate) }) {
+            return MatchedInspectionMarker(resolved: exact, isSameDay: true, dayDistance: 0)
+        }
+
+        guard maxCalendarDayDistance > 0 else { return nil }
+        let selectedDayStart = calendar.startOfDay(for: selectedDate)
+        let tradingDayStarts = Array(Set(
+            curvePoints
+                .filter { $0.price.isFinite && $0.price > 0 }
+                .map { calendar.startOfDay(for: $0.date) }
+        )).sorted()
+
+        var bestCandidate: (resolved: ResolvedMarker, dayDistance: Int)?
+        for item in resolvedMarkers {
+            let markerDayStart = calendar.startOfDay(for: item.marker.date)
+            // 本身就在交易日上的红点只应由对应交易日触发，不跨日抢占相邻交易日。
+            if tradingDayStarts.contains(markerDayStart) { continue }
+
+            let dayDistance = abs(calendar.dateComponents([.day], from: selectedDayStart, to: markerDayStart).day ?? Int.max)
+            guard dayDistance > 0, dayDistance <= maxCalendarDayDistance else { continue }
+
+            // 若曲线上存在交易日，仅当 selectedDayStart 是距离该休市红点最近的交易日（等距取更早交易日）时才允许吸附，确保唯一无冲突。
+            if !tradingDayStarts.isEmpty {
+                let nearestTradingDay = tradingDayStarts.min { lhs, rhs in
+                    let dl = abs(calendar.dateComponents([.day], from: lhs, to: markerDayStart).day ?? Int.max)
+                    let dr = abs(calendar.dateComponents([.day], from: rhs, to: markerDayStart).day ?? Int.max)
+                    if dl != dr { return dl < dr }
+                    return lhs < rhs
+                }
+                guard nearestTradingDay == selectedDayStart else { continue }
+            }
+
+            if let current = bestCandidate {
+                if dayDistance < current.dayDistance || (dayDistance == current.dayDistance && item.marker.date > current.resolved.marker.date) {
+                    bestCandidate = (item, dayDistance)
+                }
+            } else {
+                bestCandidate = (item, dayDistance)
+            }
+        }
+
+        guard let bestCandidate else { return nil }
+        return MatchedInspectionMarker(
+            resolved: bestCandidate.resolved,
+            isSameDay: false,
+            dayDistance: bestCandidate.dayDistance
+        )
+    }
+
+    /// 44pt 隐形命中热区判定：返回欧氏距离 ≤ `hitRadius`（默认 22pt）内的最近红点；未命中返回 nil。
+    static func hitTest(
+        tapPoint: CGPoint,
+        markerPoints: [MarkerScreenPoint],
+        hitRadius: CGFloat = defaultHitRadius
+    ) -> ResolvedMarker? {
+        guard hitRadius >= 0, tapPoint.x.isFinite, tapPoint.y.isFinite else { return nil }
+        let maxDistanceSquared = hitRadius * hitRadius
+        var best: (resolved: ResolvedMarker, distanceSquared: CGFloat)?
+        for candidate in markerPoints {
+            guard candidate.point.x.isFinite, candidate.point.y.isFinite else { continue }
+            let dx = candidate.point.x - tapPoint.x
+            let dy = candidate.point.y - tapPoint.y
+            let distSq = dx * dx + dy * dy
+            guard distSq <= maxDistanceSquared else { continue }
+            if let current = best {
+                if distSq < current.distanceSquared || (distSq == current.distanceSquared && candidate.resolved.marker.date > current.resolved.marker.date) {
+                    best = (candidate.resolved, distSq)
+                }
+            } else {
+                best = (candidate.resolved, distSq)
+            }
+        }
+        return best?.resolved
     }
 
     private static func marketAnchorPriceSorted(

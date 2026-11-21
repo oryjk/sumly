@@ -8,6 +8,8 @@ struct ChartGestureSurface: UIViewRepresentable {
     var end: () -> Void
     var select: (Double) -> Void
     var reset: () -> Void
+    /// 单击命中局部坐标回调；返回 true 表示已消费（例如命中买入红点热区），否则继续执行原有查价选择。
+    var tapPoint: ((CGPoint) -> Bool)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> UIView {
@@ -94,7 +96,15 @@ struct ChartGestureSurface: UIViewRepresentable {
         @objc func inspect(_ gesture: UIPanGestureRecognizer) {
             if active.isEmpty && [.began, .changed].contains(gesture.state) { owner.select(fraction(gesture)) }
         }
-        @objc func tap(_ gesture: UITapGestureRecognizer) { if active.isEmpty { owner.select(fraction(gesture)) } }
+        @objc func tap(_ gesture: UITapGestureRecognizer) {
+            guard active.isEmpty else { return }
+            if let view = gesture.view,
+               let tapPoint = owner.tapPoint,
+               tapPoint(gesture.location(in: view)) {
+                return
+            }
+            owner.select(fraction(gesture))
+        }
         @objc func reset(_ gesture: UITapGestureRecognizer) { finish(); owner.reset() }
     }
 }
