@@ -9,12 +9,16 @@ struct AddHoldingSheet: View {
     @State private var draft: HoldingDraft
     @State private var purchasePrice: HoldingPurchasePriceModel
     @State private var timestamp: Date
-    @State private var advanced = false
+    @State private var advanced: Bool
     @State private var selectedPreset: HoldingQuickPreset?
+    @State private var selectedBook: String
+    @State private var quickGramPulse = 0
+    @State private var receipt: HoldingReceiptSnapshot?
     private let targetBook: String?
     private let editing: HoldingRecord?
     private let onSaved: (() -> Void)?
     @AppStorage("holdings.currentBook") private var book = "默认账本"
+    @AppStorage("holdings.books") private var savedBooks = "默认账本"
     @State private var errorMessage: String?
 
     private var recentBrands: [String] {
@@ -23,83 +27,522 @@ struct AddHoldingSheet: View {
     private var recentChannels: [String] {
         HoldingsInsights.recentTags(from: existingRecords.map(\.insightEntry), keyPath: \.channel)
     }
+    private var availableBooks: [String] {
+        Array(Set(savedBooks.components(separatedBy: "\n") + existingRecords.map(\.bookName) + [selectedBook, book, "默认账本"]))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()
+    }
 
     init(defaultUnitPrice: Double?, date: Date = .now, book: String? = nil, marketBasis: GoldMarketBasis = .domestic,
          editing: HoldingRecord? = nil, seed: HoldingDraft? = nil, onSaved: (() -> Void)? = nil) {
-        targetBook = book; self.editing = editing; self.onSaved = onSaved; self.marketBasis = marketBasis
+        targetBook = book
+        self.editing = editing
+        self.onSaved = onSaved
+        self.marketBasis = marketBasis
+
         let day = editing?.timestamp ?? min(date, .now)
         _timestamp = State(initialValue: day)
-        let values = editing.map(HoldingDraft.init(record:)) ?? seed ?? HoldingDraft()
+        _advanced = State(initialValue: editing != nil)
+
+        var values: HoldingDraft
+        if let editing {
+            values = HoldingDraft(record: editing)
+        } else if let seed {
+            values = seed
+        } else {
+            values = HoldingDraft()
+            values.selectAssetType(.bean, applyDefaults: true)
+        }
+
+        let priceModel = HoldingPurchasePriceModel(
+            date: day,
+            basis: marketBasis,
+            initialPrice: defaultUnitPrice,
+            service: BackendGoldPriceService(instrumentID: marketBasis.instrumentID)
+        )
+        if editing != nil || seed != nil {
+            priceModel.editPrice(values.priceText)
+        } else if !priceModel.priceText.isEmpty {
+            values.priceText = priceModel.priceText
+            values.syncCalculatedTotal()
+        }
         _draft = State(initialValue: values)
-        let priceModel = HoldingPurchasePriceModel(date: day, basis: marketBasis, initialPrice: defaultUnitPrice,
-            service: BackendGoldPriceService(instrumentID: marketBasis.instrumentID))
-        if editing != nil || seed != nil { priceModel.editPrice(values.priceText) }
         _purchasePrice = State(initialValue: priceModel)
+
+        let initialBook = editing?.bookName
+            ?? book
+            ?? UserDefaults.standard.string(forKey: "holdings.currentBook")
+            ?? "默认账本"
+        _selectedBook = State(initialValue: initialBook)
     }
 
     private var result: GoldReturnResult? {
         draft.input.flatMap { GoldReturnCalculator.calculate($0, referencePrice: nil) }
     }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    assetTypeSelector
+                    coreInputCard
+                    detailsDrawer
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(GoldTheme.up)
+                    }
+                }
+                .padding(16)
+            }
+            .background(GoldTheme.background)
+            .goldKeyboardDismissable()
+            .safeAreaInset(edge: .bottom) {
+                Button(editing == nil ? "确认入库" : "保存修改") { save() }
+                    .buttonStyle(GoldPrimaryButtonStyle())
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(GoldTheme.background)
+            }
+            .navigationTitle(editing == nil ? "记一笔黄金" : "编辑持仓")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                        .foregroundStyle(GoldTheme.textSecondary)
+                }
+            }
+        }
+        .presentationBackground(GoldTheme.background)
+        .sensoryFeedback(.selection, trigger: draft.assetType)
+        .sensoryFeedback(.selection, trigger: quickGramPulse)
+        .sensoryFeedback(.selection, trigger: selectedPreset)
+        .sensoryFeedback(.success, trigger: receipt?.id)
+        .task(id: purchasePrice.selectedDay) {
+            await purchasePrice.load()
+            syncReferencePriceIntoDraft()
+        }
+        .onChange(of: purchasePrice.priceText) {
+            syncReferencePriceIntoDraft()
+        }
+        .onChange(of: draft.laborText) {
+            if draft.costMode == .unit { draft.syncCalculatedTotal() }
+        }
+        .onChange(of: draft.laborPerGram) {
+            if draft.costMode == .unit { draft.syncCalculatedTotal() }
+        }
+        .onChange(of: draft.otherText) {
+            if draft.costMode == .unit { draft.syncCalculatedTotal() }
+        }
+        .sheet(item: $receipt, onDismiss: { dismiss() }) { snapshot in
+            HoldingReceiptSheet(snapshot: snapshot) {
+                receipt = nil
+            }
+        }
+    }
+
+    // MARK: - Step 1: 顶部 4 形态大视觉图标卡片
+
+    private var assetTypeSelector: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("选择形态")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(GoldTheme.textSecondary)
+                Spacer()
+                if draft.assetType == .other {
+                    Text("当前形态：其他")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(GoldTheme.goldSoft)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(GoldTheme.card, in: GoldTheme.capsuleShape)
+                        .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.45), lineWidth: 1))
+                }
+            }
+
+            HStack(spacing: 10) {
+                ForEach(GoldAssetType.primaryQuickTypes) { type in
+                    let isSelected = draft.assetType == type
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            selectedPreset = nil
+                            draft.selectAssetType(type, applyDefaults: editing == nil)
+                        }
+                    } label: {
+                        VStack(spacing: 7) {
+                            GoldAssetGlyph(type: type, size: 38, emphasized: isSelected)
+                            Text(type.rawValue)
+                                .font(.system(size: 13, weight: isSelected ? .bold : .medium, design: .rounded))
+                                .foregroundStyle(isSelected ? GoldTheme.goldSoft : GoldTheme.text)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                            Text(type.quickTagline)
+                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .foregroundStyle(isSelected ? GoldTheme.gold : GoldTheme.textFaint)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 4)
+                        .background(
+                            ZStack {
+                                GoldTheme.holdingsCardShape.fill(GoldTheme.card)
+                                if isSelected {
+                                    GoldTheme.holdingsCardShape.fill(
+                                        RadialGradient(
+                                            colors: [GoldTheme.gold.opacity(0.18), GoldTheme.gold.opacity(0.03)],
+                                            center: .top,
+                                            startRadius: 2,
+                                            endRadius: 88
+                                        )
+                                    )
+                                }
+                            }
+                        )
+                        .overlay(
+                            GoldTheme.holdingsCardShape.strokeBorder(
+                                isSelected ? GoldTheme.gold : GoldTheme.cardStroke,
+                                lineWidth: isSelected ? 1.5 : 1
+                            )
+                        )
+                        .shadow(color: isSelected ? GoldTheme.addButtonShadow.opacity(0.55) : .clear, radius: 10, y: 4)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+            }
+        }
+    }
+
+    // MARK: - Step 2: 核心克重 + 一键克重胶囊 + 单价/总价实时联动卡片
+
+    private var coreInputCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // 克重标题与当前默认参数标签
+            HStack(alignment: .center) {
+                Text("购入克重")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(GoldTheme.textSecondary)
+                Spacer(minLength: 6)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { advanced = true }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(draft.defaultsSummaryText)
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(GoldTheme.goldSoft)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(GoldTheme.background, in: GoldTheme.capsuleShape)
+                    .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.28), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+
+            // 大号克重输入框
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                TextField(
+                    "",
+                    text: Binding(
+                        get: { draft.gramsText },
+                        set: { draft.updateGrams($0) }
+                    ),
+                    prompt: Text("0.00").foregroundStyle(GoldTheme.textFaint)
+                )
+                .keyboardType(.decimalPad)
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(GoldTheme.gold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("购入克重")
+
+                Text("g")
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .foregroundStyle(GoldTheme.textSecondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(GoldTheme.background, in: GoldTheme.subCardShape)
+            .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+
+            // 一键快捷克重胶囊（1g / 5g / 10g / 20g / 50g / 100g）
+            HStack(spacing: 6) {
+                ForEach(HoldingDraft.quickGramOptions, id: \.self) { grams in
+                    let isChosen = draft.parsedGrams.map { abs($0 - grams) < 0.0001 } ?? false
+                    Button {
+                        quickGramPulse += 1
+                        draft.applyQuickGrams(
+                            grams,
+                            fallbackUnitPrice: purchasePrice.validPrice ?? purchasePrice.reference?.price
+                        )
+                    } label: {
+                        Text("\(HoldingDraft.formatGrams(grams))g")
+                            .font(.system(size: 12, weight: isChosen ? .bold : .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .foregroundStyle(isChosen ? GoldTheme.onGold : GoldTheme.goldSoft)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
+                            .background(
+                                isChosen ? GoldTheme.gold : GoldTheme.calendarCell,
+                                in: GoldTheme.capsuleShape
+                            )
+                            .overlay(
+                                GoldTheme.capsuleShape.strokeBorder(
+                                    isChosen ? GoldTheme.gold : GoldTheme.cardStroke,
+                                    lineWidth: 1
+                                )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Divider()
+                .overlay(GoldTheme.cardStroke)
+
+            // 单价 / 总价实时联动输入区
+            HStack(spacing: 10) {
+                linkedPriceBox(
+                    title: "单价（元/克）",
+                    badge: draft.costMode == .unit ? (purchasePrice.isManual ? "手动" : "参考价") : "参考基准",
+                    badgeHighlighted: draft.costMode == .unit,
+                    placeholder: "元/克",
+                    text: Binding(
+                        get: { purchasePrice.priceText },
+                        set: {
+                            purchasePrice.editPrice($0)
+                            draft.updateUnitPrice($0)
+                        }
+                    )
+                )
+
+                linkedPriceBox(
+                    title: "总价（元）",
+                    badge: draft.costMode == .total ? "实付总价" : "自动估算",
+                    badgeHighlighted: draft.costMode == .total,
+                    placeholder: "自动算出",
+                    text: Binding(
+                        get: { draft.totalText },
+                        set: { draft.updateTotalPrice($0) }
+                    )
+                )
+            }
+
+            priceReferenceStatus
+
+            // 即时保本金价摘要条
+            if let result {
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("预计真实保本金价")
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                        Text(draft.costMode == .total
+                             ? "综合单价 ¥\(result.comprehensiveUnitCost.moneyText) / g · 已含工费"
+                             : "总投入 ¥\(result.totalCost.moneyText) · 按当前参数估算")
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textFaint)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    Spacer(minLength: 6)
+                    Text("¥\(result.breakEvenPrice.moneyText)/g")
+                        .font(.system(.subheadline, design: .rounded).bold())
+                        .monospacedDigit()
+                        .foregroundStyle(GoldTheme.gold)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(GoldTheme.background, in: GoldTheme.subCardShape)
+                .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.gold.opacity(0.24), lineWidth: 1))
+            } else {
+                Text("选好克重并核对单价或总价，即时显示预计真实保本金价。")
+                    .font(.caption)
+                    .foregroundStyle(GoldTheme.textSecondary)
+            }
+        }
+        .padding(16)
+        .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+        .overlay(
+            GoldTheme.holdingsCardShape.strokeBorder(
+                LinearGradient(
+                    colors: [GoldTheme.gold.opacity(0.28), GoldTheme.cardStroke],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+        )
+    }
+
+    private func linkedPriceBox(
+        title: String,
+        badge: String,
+        badgeHighlighted: Bool,
+        placeholder: String,
+        text: Binding<String>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(GoldTheme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 2)
+                Text(badge)
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(badgeHighlighted ? GoldTheme.goldSoft : GoldTheme.textFaint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        badgeHighlighted ? GoldTheme.gold.opacity(0.14) : GoldTheme.card,
+                        in: GoldTheme.capsuleShape
+                    )
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: 4) {
+                Text("¥")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(GoldTheme.textSecondary)
+                TextField(
+                    "",
+                    text: text,
+                    prompt: Text(placeholder).foregroundStyle(GoldTheme.textFaint)
+                )
+                .keyboardType(.decimalPad)
+                .font(.system(.body, design: .rounded).weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(GoldTheme.text)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .background(GoldTheme.background, in: GoldTheme.subCardShape)
+        .overlay(
+            GoldTheme.subCardShape.strokeBorder(
+                badgeHighlighted ? GoldTheme.gold.opacity(0.38) : GoldTheme.cardStroke,
+                lineWidth: 1
+            )
+        )
+    }
+
+    // MARK: - Step 3: 默认折叠的「补充细节」抽屉
+
+    private var detailsDrawer: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    advanced.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("补充细节")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(GoldTheme.text)
+                        Text("纯度、品牌、购买渠道、工费、回收规则、日期、账本、备注")
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 6)
+                    Image(systemName: advanced ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(GoldTheme.goldSoft)
+                }
+                .padding(14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if advanced {
+                Divider()
+                    .overlay(GoldTheme.cardStroke)
+                    .padding(.horizontal, 14)
+
+                VStack(alignment: .leading, spacing: 14) {
                     if editing == nil {
                         quickPresetStrip
                     }
-                    Picker("黄金类型", selection: $draft.assetType) {
-                        ForEach(GoldAssetType.allCases) { Text($0.rawValue).tag($0) }
-                    }.pickerStyle(.segmented)
-                    GoldInputField(title: "克重（g）", text: $draft.gramsText, placeholder: "例如 30")
-                    Picker("购入价格方式", selection: $draft.costMode) {
-                        ForEach(HoldingCostMode.allCases) { Text($0.rawValue).tag($0) }
-                    }.pickerStyle(.segmented)
-                    if draft.costMode == .total {
-                        GoldInputField(title: "购买总价（元）· 手动总投入", text: $draft.totalText, placeholder: "实际支付总额")
-                        Text("总价已包含工费与其他成本，不会重复计入。")
-                            .font(.caption).foregroundStyle(GoldTheme.textSecondary)
-                        if let result { Text("综合单价 ¥\(result.comprehensiveUnitCost.moneyText) / g").font(.caption).foregroundStyle(GoldTheme.gold) }
-                    } else {
-                        GoldInputField(title: "裸金购入单价（元/克）", text: Binding(get: { purchasePrice.priceText }, set: {
-                            purchasePrice.editPrice($0); draft.priceText = $0
-                        }), placeholder: "实际购入单价")
-                        priceReferenceStatus
-                        if let result { Text("总投入 ¥\(result.totalCost.moneyText)").font(.caption).foregroundStyle(GoldTheme.gold) }
+
+                    // 完整 5 形态切换（包含「其他」）
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("全部形态（含其他）")
+                            .font(.caption)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                        Picker("黄金类型", selection: Binding(
+                            get: { draft.assetType },
+                            set: { draft.selectAssetType($0, applyDefaults: editing == nil) }
+                        )) {
+                            ForEach(GoldAssetType.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    DatePicker("购买日期", selection: Binding(get: { timestamp }, set: {
-                        timestamp = $0; purchasePrice.selectDate($0)
-                    }), in: ...Date.now, displayedComponents: [.date, .hourAndMinute])
-                        .environment(\.locale, Locale(identifier: "zh_CN")).font(.subheadline).foregroundStyle(GoldTheme.text)
-                    DisclosureGroup("完善真实收益信息", isExpanded: $advanced) {
-                        GoldAdvancedFields(draft: $draft, recentBrands: recentBrands, recentChannels: recentChannels).padding(.top, 12)
-                    }.foregroundStyle(GoldTheme.gold)
-                    Text("默认纯度 \(draft.purityText)%，回收参数可在高级信息中修改。")
-                        .font(.caption).foregroundStyle(GoldTheme.textSecondary)
-                    if let result {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("预计真实保本金价").font(.caption).foregroundStyle(GoldTheme.textSecondary)
-                            Text("¥\(result.breakEvenPrice.moneyText) / g").font(.title2.bold()).monospacedDigit().foregroundStyle(GoldTheme.gold)
-                            Text("按当前回收规则估算，成交价以渠道实际报价为准。")
-                                .font(.caption).foregroundStyle(GoldTheme.textSecondary)
-                        }.frame(maxWidth: .infinity, alignment: .leading).goldCard()
-                    } else {
-                        Text("填写有效克重和购入价格后，即时显示预计保本价。")
-                            .font(.footnote).foregroundStyle(GoldTheme.textSecondary)
+
+                    // 购买日期与账本
+                    DatePicker(
+                        "购买日期",
+                        selection: Binding(
+                            get: { timestamp },
+                            set: {
+                                timestamp = $0
+                                purchasePrice.selectDate($0)
+                            }
+                        ),
+                        in: ...Date.now,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .environment(\.locale, Locale(identifier: "zh_CN"))
+                    .font(.subheadline)
+                    .foregroundStyle(GoldTheme.text)
+
+                    HStack {
+                        Text("归属账本")
+                            .font(.subheadline)
+                            .foregroundStyle(GoldTheme.text)
+                        Spacer()
+                        Menu {
+                            ForEach(availableBooks, id: \.self) { name in
+                                Button {
+                                    selectedBook = name
+                                } label: {
+                                    Label(name, systemImage: name == selectedBook ? "checkmark" : "book.closed")
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(selectedBook)
+                                    .font(.subheadline.weight(.medium))
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(GoldTheme.goldSoft)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(GoldTheme.background, in: GoldTheme.capsuleShape)
+                            .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+                        }
                     }
-                    if let errorMessage { Text(errorMessage).font(.footnote).foregroundStyle(GoldTheme.up) }
-                }.padding(16)
-            }.background(GoldTheme.background)
-                .goldKeyboardDismissable()
-                .safeAreaInset(edge: .bottom) {
-                    Button(editing == nil ? "保存持仓" : "保存修改") { save() }
-                        .buttonStyle(GoldPrimaryButtonStyle()).padding(16).background(GoldTheme.background)
+
+                    GoldAdvancedFields(draft: $draft, recentBrands: recentBrands, recentChannels: recentChannels)
                 }
-                .navigationTitle(editing == nil ? "记一笔黄金" : "编辑持仓").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.foregroundStyle(GoldTheme.textSecondary) } }
-        }.presentationBackground(GoldTheme.background)
-            .sensoryFeedback(.selection, trigger: selectedPreset)
-            .task(id: purchasePrice.selectedDay) { await purchasePrice.load(); draft.priceText = purchasePrice.priceText }
-            .onChange(of: purchasePrice.priceText) { draft.priceText = purchasePrice.priceText }
+                .padding(14)
+            }
+        }
+        .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+        .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
     }
 
     private var quickPresetStrip: some View {
@@ -114,6 +557,9 @@ struct AddHoldingSheet: View {
                         Button {
                             selectedPreset = preset
                             preset.apply(to: &draft)
+                            if draft.costMode == .unit {
+                                draft.syncCalculatedTotal()
+                            }
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: preset.symbol)
@@ -129,8 +575,8 @@ struct AddHoldingSheet: View {
                             .foregroundStyle(active ? GoldTheme.onGold : GoldTheme.text)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(active ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.holdingsCardShape)
-                            .overlay(GoldTheme.holdingsCardShape.strokeBorder(active ? GoldTheme.gold : GoldTheme.cardStroke, lineWidth: 1))
+                            .background(active ? GoldTheme.gold : GoldTheme.background, in: GoldTheme.subCardShape)
+                            .overlay(GoldTheme.subCardShape.strokeBorder(active ? GoldTheme.gold : GoldTheme.cardStroke, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                     }
@@ -148,16 +594,18 @@ struct AddHoldingSheet: View {
                 }
             }
             if let reference = purchasePrice.reference {
-                Text(referenceDescription(reference))
-                if purchasePrice.isManual {
-                    HStack {
-                        Text("已手动填写，保存使用你的单价")
-                        Spacer(minLength: 8)
-                        Button("使用参考价") { purchasePrice.useReference() }
-                            .foregroundStyle(GoldTheme.gold).frame(minHeight: 44)
+                HStack(alignment: .center, spacing: 8) {
+                    Text(referenceDescription(reference))
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    if purchasePrice.isManual || draft.costMode == .total {
+                        Button("恢复参考价") {
+                            purchasePrice.useReference()
+                            draft.updateUnitPrice(purchasePrice.priceText)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(GoldTheme.gold)
                     }
-                } else {
-                    Text("参考价仅用于预填，可改为实际成交价")
                 }
             }
             if let issue = purchasePrice.issue {
@@ -166,21 +614,33 @@ struct AddHoldingSheet: View {
                     Spacer(minLength: 0)
                     if issue != .missingDay {
                         Button("重试") { Task { await purchasePrice.load() } }
-                            .foregroundStyle(GoldTheme.gold).frame(minHeight: 44)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(GoldTheme.gold)
                             .disabled(purchasePrice.isLoading)
                     }
                 }
             }
-        }.font(.caption).foregroundStyle(GoldTheme.textSecondary)
+        }
+        .font(.caption2)
+        .foregroundStyle(GoldTheme.textSecondary)
     }
+
+    private func syncReferencePriceIntoDraft() {
+        draft.priceText = purchasePrice.priceText
+        if draft.costMode == .unit {
+            draft.syncCalculatedTotal()
+        }
+    }
+
     private func referenceDescription(_ reference: HoldingPurchasePriceReference) -> String {
-        if !reference.isHistorical { return "参考 · \(marketBasis.title)最新可用金价 \(reference.price.moneyText) 元/克" }
+        if !reference.isHistorical { return "参考 · \(marketBasis.title)实时参考金价 \(reference.price.moneyText) 元/克" }
         let day = HoldingsSelection.dateText(reference.date)
         if let fx = reference.exchangeRate {
-            return "参考 · \(day)国际收盘价，按最新可用汇率 \(fx.formatted(.number.precision(.fractionLength(2...4)))) 折算为 \(reference.price.moneyText) 元/克（非历史人民币成交价）"
+            return "参考 · \(day)国际收盘折算 \(reference.price.moneyText) 元/克（汇率 \(fx.formatted(.number.precision(.fractionLength(2...4))))）"
         }
         return "参考 · \(day)国内收盘价 \(reference.price.moneyText) 元/克"
     }
+
     private func issueDescription(_ issue: HoldingPurchasePriceModel.Issue) -> String {
         switch issue {
         case .missingDay: "当天没有日线报价，请填写实际购入单价"
@@ -191,20 +651,60 @@ struct AddHoldingSheet: View {
 
     private func save() {
         guard let input = draft.input, GoldReturnCalculator.calculate(input, referencePrice: nil) != nil else {
-            errorMessage = "请检查克重、价格、纯度和费用，折价应小于100%。"; return
+            errorMessage = "请检查克重、价格、纯度和费用，折价应小于100%。"
+            return
         }
-        guard timestamp <= .now else { errorMessage = "购买日期不能晚于当前时间"; return }
-        if let editing, editing.disposition != "holding" { errorMessage = "这笔黄金已处置，无法编辑。"; return }
+        guard timestamp <= .now else {
+            errorMessage = "购买日期不能晚于当前时间"
+            return
+        }
+        if let editing, editing.disposition != "holding" {
+            errorMessage = "这笔黄金已处置，无法编辑。"
+            return
+        }
+
+        let destinationBook = selectedBook.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? (targetBook ?? book)
+            : selectedBook
+
+        let priorBookRecords = existingRecords.filter {
+            $0.bookName == destinationBook && $0.disposition == "holding"
+        }
+        let previousBookGrams = priorBookRecords.reduce(0.0) { $0 + max(0, $1.grams) }
+
         let record = editing ?? HoldingRecord(grams: input.grams, unitPriceCNY: input.unitPrice, timestamp: timestamp)
         draft.apply(to: record, input: input)
         record.timestamp = timestamp
-        if editing != nil { record.resetAlertBaselines() }
-        if editing == nil { record.bookName = targetBook ?? book; modelContext.insert(record) }
-        do { try modelContext.save() } catch {
-            modelContext.rollback(); errorMessage = "保存失败，请重试。"; return
+        record.bookName = destinationBook
+        if editing != nil {
+            record.resetAlertBaselines()
+        } else {
+            modelContext.insert(record)
         }
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            errorMessage = "保存失败，请重试。"
+            return
+        }
+
         onSaved?()
-        dismiss()
+
+        if editing == nil {
+            receipt = HoldingReceiptSnapshot(
+                assetType: draft.assetType,
+                addedGrams: input.grams,
+                unitPrice: input.unitPrice,
+                totalCost: input.totalCost,
+                timestamp: timestamp,
+                purchaseSequence: priorBookRecords.count + 1,
+                previousBookGrams: previousBookGrams,
+                bookName: destinationBook
+            )
+        } else {
+            dismiss()
+        }
     }
 }
 

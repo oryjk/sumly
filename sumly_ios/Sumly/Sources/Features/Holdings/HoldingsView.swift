@@ -88,6 +88,14 @@ struct HoldingsView: View {
                             .listRowBackground(GoldTheme.background).listRowSeparator(.hidden)
                     }
                     summary.listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
+                    GoldVaultCard(
+                        summary: GoldVaultSummary(records: activeRecords),
+                        hideAmounts: hideAmounts,
+                        onAddTap: { sheet = .add }
+                    )
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
+                    .listRowBackground(GoldTheme.background)
+                    .listRowSeparator(.hidden)
                     HoldingsInsightsSection(
                         records: activeRecords,
                         currentGrams: activeRecords.reduce(0) { $0 + $1.grams },
@@ -366,8 +374,10 @@ struct HoldingRowView: View {
     let result: GoldReturnResult?
     let hideAmounts: Bool
     var body: some View {
+        let assetType = GoldAssetType(rawValue: record.assetType) ?? .other
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(spacing: 8) {
+                GoldAssetGlyph(type: assetType, size: 26, emphasized: true)
                 Text(record.displayName).font(.subheadline.bold()).lineLimit(1)
                 Spacer()
                 Text(HoldingsSelection.dateText(record.timestamp)).font(.caption).foregroundStyle(GoldTheme.textSecondary)
