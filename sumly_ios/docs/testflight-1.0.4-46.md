@@ -1,0 +1,26 @@
+# TestFlight 1.0.4（46）
+
+- 日期：2026-11-21（北京时间）。
+- 源码分支：`main`，构建原始源码提交 SHA：`3da94556bf757c809c40186961556477050566de`（已于打包上传前推送至 `origin/main`）。
+  - 本构建包含以下核心提交：
+    - `123e766660cb73550a7e6be4b823fbd8d934d5ff`（0 冲突 cherry-pick 自 `bfa294b6e3c0c4d08b6e7dbef474a8274dc2386f`）：底部 Tab Bar 方案 A 重构（悬浮胶囊导航栏 + 右侧独立圆形「记一笔」按钮，自适应底部安全区避让与 `GoldTabBarLayoutTests`），同时将第 2 个 Tab 名称由「持仓」更名为「持有」。
+    - `3da94556bf757c809c40186961556477050566de`：递增构建号至 `1.0.4 (46)`。
+- Bundle ID：`com.oryjk.sumly`，版本：`1.0.4`，构建号：`46`，最低 iOS `17.0`。
+- 本次发布**仅面向 TestFlight 内部测试**，未触碰已上架的 App Store `1.0.3 (41)`，亦未主动触发外部测试组分发。
+
+## 构建与 TestFlight 内测核实
+
+- 打包与上传方式：通过标准入口 `PATH="/usr/bin:$PATH" make upload`（`scripts/upload_app_store.sh` → `scripts/upload_signed_ipa.py`，使用含 `cryptography` 的 `/usr/bin/python3`）完成本地 `Release` 归档、本地签名导出与 App Store Connect JWT API 上传及处理等待。
+- 本地签名 IPA 路径：`sumly_ios/build/ipa-b46/Sumly.ipa`，SHA-256：`a413b828ca89087c8e4b1aee4fe4d00570f9b6fce310546f9d927442237c7853`。
+- Apple Build ID / Upload Reservation ID：`4625a4ed-49f6-4a56-bf5f-3ea9c66ae23b`（上传时间 `2026-11-20T21:16:19-08:00`）。
+- Apple 端最终核实结果：
+  - `processingState`：`VALID`
+  - `usesNonExemptEncryption`：`false`
+  - `internalBuildState`：`IN_BETA_TESTING`
+  - `externalBuildState`：`READY_FOR_BETA_SUBMISSION`（外部测试组按需更新，本次未触发外部分发）
+  - 内部测试组「测试」（`f079109b-a665-463e-add4-5359f91dbe47`）：`isInternalGroup=true`、`hasAccessToAllBuilds=true`（自动分发），已确认包含构建 `46`（当前 2 名内部测试员）。
+- App Store 线上版本只读核对：版本 `1.0.3`（`338b2329-6ca2-4e75-90e4-b5bdfeabd86c`）状态为 `READY_FOR_SALE`，仍绑定构建 `41`（`8055796d-1440-41e7-afe6-de719dd3586a`），未受影响。
+
+## 验证记录
+
+- iOS 全量构建与单元测试：`cd sumly_ios && make generate && make build && make test`，267 项单测（6 个测试套件，含新增 `GoldTabBarLayout Tests`）全部通过，零新增 Swift 编译警告。
