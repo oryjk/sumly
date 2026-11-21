@@ -824,6 +824,314 @@ private actor SuspendedDetailService: MacroServicing {
     #expect(model.periodMax?.value == 1.95)
 }
 
+// MARK: - 取消与 loading 复位回归测试
+
+private actor CancellableMacroService: MacroServicing {
+    enum Mode: Sendable {
+        case immediateSuccess
+        case throwURLErrorCancelledOnceThenSucceed
+        case suspendUntilCancelledWithURLError
+        case suspendUntilManualResume
+    }
+
+    enum Endpoint: Hashable, Sendable {
+        case temperature
+        case temperatureHistory
+        case treasury
+        case catalog
+        case cot
+        case indicatorDetail
+    }
+
+    private var mode: Mode
+    private var callCounts: [Endpoint: Int] = [:]
+    private var suspended: [UUID: (endpoint: Endpoint, continuation: CheckedContinuation<Void, Error>)] = [:]
+    private var cancelledIDs: Set<UUID> = []
+    private var arrivalWaiters: [CheckedContinuation<Void, Never>] = []
+    private var expectedArrivalCount = 0
+
+    init(mode: Mode) {
+        self.mode = mode
+    }
+
+    func setMode(_ newMode: Mode) {
+        mode = newMode
+    }
+
+    func callCount(for endpoint: Endpoint) -> Int {
+        callCounts[endpoint, default: 0]
+    }
+
+    func waitUntilSuspendedCount(atLeast count: Int) async {
+        if suspended.count >= count { return }
+        expectedArrivalCount = count
+        await withCheckedContinuation { continuation in
+            arrivalWaiters.append(continuation)
+        }
+    }
+
+    func resumeAllSuspendedSuccess() {
+        let items = suspended
+        suspended.removeAll()
+        for (_, item) in items {
+            item.continuation.resume()
+        }
+    }
+
+    private func registerSuspension(id: UUID, endpoint: Endpoint, continuation: CheckedContinuation<Void, Error>) {
+        if cancelledIDs.remove(id) != nil {
+            continuation.resume(throwing: URLError(.cancelled))
+            return
+        }
+        suspended[id] = (endpoint, continuation)
+        if suspended.count >= expectedArrivalCount, !arrivalWaiters.isEmpty {
+            let waiters = arrivalWaiters
+            arrivalWaiters.removeAll()
+            for waiter in waiters {
+                waiter.resume()
+            }
+        }
+    }
+
+    private func cancelSuspension(id: UUID) {
+        if let item = suspended.removeValue(forKey: id) {
+            item.continuation.resume(throwing: URLError(.cancelled))
+        } else {
+            cancelledIDs.insert(id)
+        }
+    }
+
+    private func gate(_ endpoint: Endpoint) async throws {
+        callCounts[endpoint, default: 0] += 1
+        let attempt = callCounts[endpoint, default: 0]
+        switch mode {
+        case .immediateSuccess:
+            return
+        case .throwURLErrorCancelledOnceThenSucceed:
+            if attempt == 1 {
+                throw URLError(.cancelled)
+            }
+            return
+        case .suspendUntilCancelledWithURLError:
+            let id = UUID()
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    registerSuspension(id: id, endpoint: endpoint, continuation: continuation)
+                }
+            } onCancel: {
+                Task { await self.cancelSuspension(id: id) }
+            }
+        case .suspendUntilManualResume:
+            let id = UUID()
+            try await withCheckedThrowingContinuation { continuation in
+                registerSuspension(id: id, endpoint: endpoint, continuation: continuation)
+            }
+        }
+    }
+
+    func fetchTemperature() async throws -> MacroTemperatureReport {
+        try await gate(.temperature)
+        return MacroFixtureData.sampleTemperature
+    }
+
+    func fetchTemperatureHistory(range: MacroHistoryRange) async throws -> MacroTemperatureHistory {
+        try await gate(.temperatureHistory)
+        return MacroFixtureData.sampleHistory(range: range)
+    }
+
+    func fetchTreasury(range: MacroExtendedRange) async throws -> MacroTreasuryReport {
+        try await gate(.treasury)
+        return MacroFixtureData.sampleTreasury
+    }
+
+    func fetchIndicators(section: String?) async throws -> MacroIndicatorsCatalog {
+        try await gate(.catalog)
+        return MacroFixtureData.sampleCatalog
+    }
+
+    func fetchIndicatorDetail(seriesID: String, range: MacroExtendedRange) async throws -> MacroIndicatorDetail {
+        try await gate(.indicatorDetail)
+        return MacroFixtureData.sampleDetail(seriesID: seriesID, range: range)
+    }
+
+    func fetchGoldCot(range: MacroHistoryRange) async throws -> MacroCotReport {
+        try await gate(.cot)
+        return MacroCotReport(seriesID: "GOLD_COT", range: range.rawValue, latest: nil, points: [])
+    }
+}
+
+@Test func isCancellationErrorClassifiesCancellationProperly() {
+    #expect(MacroDashboardViewModel.isCancellationError(URLError(.cancelled)))
+    #expect(MacroDashboardViewModel.isCancellationError(CancellationError()))
+    #expect(!MacroDashboardViewModel.isCancellationError(URLError(.timedOut)))
+    #expect(!MacroDashboardViewModel.isCancellationError(URLError(.notConnectedToInternet)))
+    #expect(!MacroDashboardViewModel.isCancellationError(BackendMacroService.ServiceError.httpStatus(503)))
+}
+
+@MainActor @Test func loadSummaryResetsLoadingAndRecoversAfterURLErrorCancelled() async {
+    let service = CancellableMacroService(mode: .throwURLErrorCancelledOnceThenSucceed)
+    let model = MacroDashboardViewModel(service: service)
+
+    // 首次请求被 URLSession 以 URLError(.cancelled) 取消：不得卡死 loading，也不得污染错误提示。
+    await model.loadSummary(force: false)
+    #expect(!model.isLoadingTemperature)
+    #expect(!model.isLoadingTreasury)
+    #expect(!model.isSummaryLoading)
+    #expect(model.temperature == nil)
+    #expect(model.treasury == nil)
+    #expect(model.temperatureError == nil)
+    #expect(model.treasuryError == nil)
+    #expect(await service.callCount(for: .temperature) == 1)
+    #expect(await service.callCount(for: .treasury) == 1)
+
+    // 再次以 force: false 调用 loadSummary()，应能顺利发起请求并加载完整数据。
+    await model.loadSummary(force: false)
+    #expect(!model.isLoadingTemperature)
+    #expect(!model.isLoadingTreasury)
+    #expect(!model.isSummaryLoading)
+    #expect(model.temperature?.score == MacroFixtureData.sampleTemperature.score)
+    #expect(model.treasury?.summary.totalDebtTrillionUSD == MacroFixtureData.sampleTreasury.summary.totalDebtTrillionUSD)
+    #expect(model.temperatureError == nil)
+    #expect(model.treasuryError == nil)
+    #expect(await service.callCount(for: .temperature) == 2)
+    #expect(await service.callCount(for: .treasury) == 2)
+}
+
+@MainActor @Test func loadSummaryResetsLoadingWhenTaskCancelledInFlightAndRecovers() async {
+    let service = CancellableMacroService(mode: .suspendUntilCancelledWithURLError)
+    let model = MacroDashboardViewModel(service: service)
+
+    let summaryTask = Task { await model.loadSummary(force: false) }
+    await service.waitUntilSuspendedCount(atLeast: 2)
+    #expect(model.isLoadingTemperature)
+    #expect(model.isLoadingTreasury)
+    #expect(model.isSummaryLoading)
+
+    // 模拟冷启动 scenePhase 抖动导致 .task 取消，底层 URLSession 抛出 URLError(.cancelled)。
+    summaryTask.cancel()
+    await summaryTask.value
+
+    #expect(!model.isLoadingTemperature)
+    #expect(!model.isLoadingTreasury)
+    #expect(!model.isSummaryLoading)
+    #expect(model.temperature == nil)
+    #expect(model.treasury == nil)
+    #expect(model.temperatureError == nil)
+    #expect(model.treasuryError == nil)
+
+    await service.setMode(.immediateSuccess)
+    await model.loadSummary(force: false)
+    #expect(!model.isLoadingTemperature)
+    #expect(!model.isLoadingTreasury)
+    #expect(model.temperature?.score == MacroFixtureData.sampleTemperature.score)
+    #expect(model.treasury?.summary.totalDebtTrillionUSD == MacroFixtureData.sampleTreasury.summary.totalDebtTrillionUSD)
+    #expect(model.temperatureError == nil)
+    #expect(model.treasuryError == nil)
+}
+
+@MainActor @Test func loadSummaryResetsLoadingWhenCancelledBeforeResponseApplies() async {
+    let service = CancellableMacroService(mode: .suspendUntilManualResume)
+    let model = MacroDashboardViewModel(service: service)
+
+    let summaryTask = Task { await model.loadSummary(force: false) }
+    await service.waitUntilSuspendedCount(atLeast: 2)
+
+    // 模拟任务取消但底层请求仍正常返回结果（命中 do 块 guard !Task.isCancelled 提前 return 分支）。
+    summaryTask.cancel()
+    await service.resumeAllSuspendedSuccess()
+    await summaryTask.value
+
+    #expect(!model.isLoadingTemperature)
+    #expect(!model.isLoadingTreasury)
+    #expect(!model.isSummaryLoading)
+    #expect(model.temperature == nil)
+    #expect(model.treasury == nil)
+    #expect(model.temperatureError == nil)
+    #expect(model.treasuryError == nil)
+
+    await service.setMode(.immediateSuccess)
+    await model.loadSummary(force: false)
+    #expect(model.temperature?.score == MacroFixtureData.sampleTemperature.score)
+    #expect(model.treasury?.summary.totalDebtTrillionUSD == MacroFixtureData.sampleTreasury.summary.totalDebtTrillionUSD)
+}
+
+@MainActor @Test func loadDashboardResetsAllLoadingFlagsAfterTaskCancellationAndRecovers() async {
+    let service = CancellableMacroService(mode: .suspendUntilCancelledWithURLError)
+    let model = MacroDashboardViewModel(service: service)
+
+    let dashboardTask = Task { await model.loadDashboard(force: false) }
+    await service.waitUntilSuspendedCount(atLeast: 5)
+    #expect(model.isLoadingTemperature)
+    #expect(model.isLoadingHistory)
+    #expect(model.isLoadingTreasury)
+    #expect(model.isLoadingCatalog)
+    #expect(model.isLoadingCot)
+
+    dashboardTask.cancel()
+    await dashboardTask.value
+
+    #expect(!model.isLoadingTemperature)
+    #expect(!model.isLoadingHistory)
+    #expect(!model.isLoadingTreasury)
+    #expect(!model.isLoadingCatalog)
+    #expect(!model.isLoadingCot)
+    #expect(!model.isSummaryLoading)
+    #expect(!model.isRefreshingCurrentTab)
+    #expect(model.temperatureError == nil)
+    #expect(model.historyError == nil)
+    #expect(model.treasuryError == nil)
+    #expect(model.catalogError == nil)
+    #expect(model.cotError == nil)
+
+    await service.setMode(.immediateSuccess)
+    await model.loadDashboard(force: false)
+    #expect(model.temperature?.score == MacroFixtureData.sampleTemperature.score)
+    #expect(model.temperatureHistory?.points.count == 1)
+    #expect(model.treasury?.summary.totalDebtTrillionUSD == MacroFixtureData.sampleTreasury.summary.totalDebtTrillionUSD)
+    #expect(model.catalog?.sections.count == 2)
+    #expect(model.cot?.seriesID == "GOLD_COT")
+    #expect(!model.isLoadingTemperature)
+    #expect(!model.isLoadingHistory)
+    #expect(!model.isLoadingTreasury)
+    #expect(!model.isLoadingCatalog)
+    #expect(!model.isLoadingCot)
+}
+
+@MainActor @Test func indicatorDetailResetsLoadingAndRecoversAfterURLErrorAndTaskCancel() async {
+    let urlCancelService = CancellableMacroService(mode: .throwURLErrorCancelledOnceThenSucceed)
+    let firstModel = MacroIndicatorDetailViewModel(seriesID: "DFII10", service: urlCancelService)
+
+    await firstModel.load()
+    #expect(!firstModel.isLoading)
+    #expect(firstModel.errorMessage == nil)
+    #expect(firstModel.detail == nil)
+
+    await firstModel.load()
+    #expect(!firstModel.isLoading)
+    #expect(firstModel.errorMessage == nil)
+    #expect(firstModel.detail?.seriesID == "DFII10")
+
+    let taskCancelService = CancellableMacroService(mode: .suspendUntilCancelledWithURLError)
+    let secondModel = MacroIndicatorDetailViewModel(seriesID: "DFII10", service: taskCancelService)
+
+    let loadTask = Task { await secondModel.load() }
+    await taskCancelService.waitUntilSuspendedCount(atLeast: 1)
+    #expect(secondModel.isLoading)
+
+    loadTask.cancel()
+    await loadTask.value
+
+    #expect(!secondModel.isLoading)
+    #expect(secondModel.errorMessage == nil)
+    #expect(secondModel.detail == nil)
+
+    await taskCancelService.setMode(.immediateSuccess)
+    await secondModel.load()
+    #expect(!secondModel.isLoading)
+    #expect(secondModel.errorMessage == nil)
+    #expect(secondModel.detail?.seriesID == "DFII10")
+}
+
 @MainActor @Test func renderComplianceCardAndGuideSheetForVisualReview() async throws {
     let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first { $0.isKeyWindow }

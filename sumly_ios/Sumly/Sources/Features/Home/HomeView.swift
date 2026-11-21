@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var model: MarketHomeViewModel
     @State private var macroModel: MacroDashboardViewModel
     @State private var showingMacroDashboard = false
+    @State private var macroLoadTrigger = 0
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingHistorySources = false
     @State private var showingDates = false
@@ -94,8 +95,15 @@ struct HomeView: View {
         .task(id: scenePhase) {
             if scenePhase == .active { await model.start() }
         }
-        .task(id: scenePhase) {
-            if scenePhase == .active { await macroModel.loadSummary() }
+        .task(id: MacroSummaryLoadKey(scenePhase: scenePhase, trigger: macroLoadTrigger)) {
+            guard scenePhase == .active else { return }
+            await macroModel.loadSummary()
+        }
+        .onChange(of: showingMacroDashboard) { _, isPresented in
+            if !isPresented { ensureMacroSummaryLoaded() }
+        }
+        .onChange(of: model.showsInitialLoading) { _, isLoading in
+            if !isLoading { ensureMacroSummaryLoaded() }
         }
         .task(id: model.range) {
             if model.range != .realtime { await model.loadHistory() }
@@ -430,6 +438,16 @@ struct HomeView: View {
         }
     }
 
+    private func ensureMacroSummaryLoaded() {
+        guard scenePhase == .active, !showingMacroDashboard else { return }
+        guard !macroModel.isLoadingTemperature, !macroModel.isLoadingTreasury else { return }
+        let needsTemperature = macroModel.temperature == nil && macroModel.temperatureError == nil
+        let needsTreasury = macroModel.treasury == nil && macroModel.treasuryError == nil
+        if needsTemperature || needsTreasury {
+            macroLoadTrigger &+= 1
+        }
+    }
+
     private func stopBasisTransition() {
         basisSwitchTask?.cancel()
         model.cancelBasisSwitch()
@@ -444,6 +462,11 @@ struct HomeView: View {
             highlightedBasis = model.basis
         }
     }
+}
+
+private struct MacroSummaryLoadKey: Equatable {
+    let scenePhase: ScenePhase
+    let trigger: Int
 }
 
 private struct BasisPressStyle: ButtonStyle {

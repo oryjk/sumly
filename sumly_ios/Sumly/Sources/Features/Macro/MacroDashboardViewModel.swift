@@ -219,21 +219,23 @@ final class MacroDashboardViewModel {
     // MARK: - 分项加载
 
     func loadTemperature() async {
+        guard !Task.isCancelled else { return }
         let requestID = UUID()
         temperatureRequestID = requestID
         isLoadingTemperature = true
         temperatureError = nil
+        defer {
+            if temperatureRequestID == requestID {
+                isLoadingTemperature = false
+            }
+        }
         do {
             let report = try await service.fetchTemperature()
             guard !Task.isCancelled, temperatureRequestID == requestID else { return }
             temperature = report
-            isLoadingTemperature = false
-        } catch is CancellationError {
-            if temperatureRequestID == requestID { isLoadingTemperature = false }
         } catch {
-            guard !Task.isCancelled, temperatureRequestID == requestID else { return }
+            guard !Self.isCancellationError(error), temperatureRequestID == requestID else { return }
             temperatureError = Self.userFacingError(error)
-            isLoadingTemperature = false
         }
     }
 
@@ -244,12 +246,18 @@ final class MacroDashboardViewModel {
     }
 
     func loadTemperatureHistory(range: MacroHistoryRange? = nil) async {
+        guard !Task.isCancelled else { return }
         let targetRange = range ?? temperatureRange
         temperatureRange = targetRange
         let requestID = UUID()
         historyRequestID = requestID
         isLoadingHistory = true
         historyError = nil
+        defer {
+            if historyRequestID == requestID {
+                isLoadingHistory = false
+            }
+        }
         do {
             let history = try await service.fetchTemperatureHistory(range: targetRange)
             guard !Task.isCancelled, historyRequestID == requestID else { return }
@@ -258,13 +266,9 @@ final class MacroDashboardViewModel {
                 requested: temperatureGoldPriceScale,
                 for: temperatureGoldPriceValues
             )
-            isLoadingHistory = false
-        } catch is CancellationError {
-            if historyRequestID == requestID { isLoadingHistory = false }
         } catch {
-            guard !Task.isCancelled, historyRequestID == requestID else { return }
+            guard !Self.isCancellationError(error), historyRequestID == requestID else { return }
             historyError = Self.userFacingError(error)
-            isLoadingHistory = false
         }
     }
 
@@ -275,12 +279,18 @@ final class MacroDashboardViewModel {
     }
 
     func loadTreasury(range: MacroExtendedRange? = nil) async {
+        guard !Task.isCancelled else { return }
         let targetRange = range ?? treasuryRange
         treasuryRange = targetRange
         let requestID = UUID()
         treasuryRequestID = requestID
         isLoadingTreasury = true
         treasuryError = nil
+        defer {
+            if treasuryRequestID == requestID {
+                isLoadingTreasury = false
+            }
+        }
         do {
             let report = try await service.fetchTreasury(range: targetRange)
             guard !Task.isCancelled, treasuryRequestID == requestID else { return }
@@ -294,32 +304,30 @@ final class MacroDashboardViewModel {
                 for: treasuryYieldValues,
                 pointCount: treasuryYieldPointCount
             )
-            isLoadingTreasury = false
-        } catch is CancellationError {
-            if treasuryRequestID == requestID { isLoadingTreasury = false }
         } catch {
-            guard !Task.isCancelled, treasuryRequestID == requestID else { return }
+            guard !Self.isCancellationError(error), treasuryRequestID == requestID else { return }
             treasuryError = Self.userFacingError(error)
-            isLoadingTreasury = false
         }
     }
 
     func loadCatalog() async {
+        guard !Task.isCancelled else { return }
         let requestID = UUID()
         catalogRequestID = requestID
         isLoadingCatalog = true
         catalogError = nil
+        defer {
+            if catalogRequestID == requestID {
+                isLoadingCatalog = false
+            }
+        }
         do {
             let result = try await service.fetchIndicators(section: nil)
             guard !Task.isCancelled, catalogRequestID == requestID else { return }
             catalog = result
-            isLoadingCatalog = false
-        } catch is CancellationError {
-            if catalogRequestID == requestID { isLoadingCatalog = false }
         } catch {
-            guard !Task.isCancelled, catalogRequestID == requestID else { return }
+            guard !Self.isCancellationError(error), catalogRequestID == requestID else { return }
             catalogError = Self.userFacingError(error)
-            isLoadingCatalog = false
         }
     }
 
@@ -330,12 +338,18 @@ final class MacroDashboardViewModel {
     }
 
     func loadCot(range: MacroHistoryRange? = nil) async {
+        guard !Task.isCancelled else { return }
         let targetRange = range ?? cotRange
         cotRange = targetRange
         let requestID = UUID()
         cotRequestID = requestID
         isLoadingCot = true
         cotError = nil
+        defer {
+            if cotRequestID == requestID {
+                isLoadingCot = false
+            }
+        }
         do {
             let result = try await service.fetchGoldCot(range: targetRange)
             guard !Task.isCancelled, cotRequestID == requestID else { return }
@@ -345,14 +359,20 @@ final class MacroDashboardViewModel {
                 for: cotValues,
                 pointCount: cotPointCount
             )
-            isLoadingCot = false
-        } catch is CancellationError {
-            if cotRequestID == requestID { isLoadingCot = false }
         } catch {
-            guard !Task.isCancelled, cotRequestID == requestID else { return }
+            guard !Self.isCancellationError(error), cotRequestID == requestID else { return }
             cotError = Self.userFacingError(error)
-            isLoadingCot = false
         }
+    }
+
+    nonisolated static func isCancellationError(_ error: Error) -> Bool {
+        if Task.isCancelled || error is CancellationError {
+            return true
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        return false
     }
 
     static func userFacingError(_ error: Error) -> String {

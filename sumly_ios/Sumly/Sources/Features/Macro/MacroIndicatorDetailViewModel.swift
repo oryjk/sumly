@@ -119,23 +119,25 @@ final class MacroIndicatorDetailViewModel {
     }
 
     private func fetch(range targetRange: MacroExtendedRange) async {
+        guard !Task.isCancelled else { return }
         let requestID = UUID()
         activeRequestID = requestID
         isLoading = true
         errorMessage = nil
+        defer {
+            if activeRequestID == requestID {
+                isLoading = false
+            }
+        }
         do {
             let loaded = try await service.fetchIndicatorDetail(seriesID: seriesID, range: targetRange)
             guard !Task.isCancelled, activeRequestID == requestID else { return }
             detail = loaded
             selectedPoint = nil
             reconcileChartScale()
-            isLoading = false
-        } catch is CancellationError {
-            if activeRequestID == requestID { isLoading = false }
         } catch {
-            guard !Task.isCancelled, activeRequestID == requestID else { return }
+            guard !MacroDashboardViewModel.isCancellationError(error), activeRequestID == requestID else { return }
             errorMessage = MacroDashboardViewModel.userFacingError(error)
-            isLoading = false
         }
     }
 
