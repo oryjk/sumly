@@ -34,9 +34,10 @@ func (c *GoldCollector) Sample(ctx context.Context) error {
 		return err
 	}
 	now := c.now()
-	if !validPrice(quote.Price) || quote.AsOf.IsZero() || quote.AsOf.After(now.Add(5*time.Second)) {
+	if !validPrice(quote.Price) || quote.AsOf.IsZero() || quote.AsOf.After(now.Add(domain.MaxClockSkew)) {
 		return fmt.Errorf("invalid source quote")
 	}
+	quote.AsOf = domain.ClampSourceTime(quote.AsOf, now)
 	if err := c.store.SaveQuote(ctx, quote); err != nil {
 		return err
 	}
@@ -57,11 +58,18 @@ func (c *GoldCollector) SyncIntraday(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	now := c.now()
 	valid := make([]domain.IntradayPoint, 0, len(points))
 	for _, p := range points {
-		if !p.Time.IsZero() && !p.Time.After(c.now().Add(5*time.Second)) && validPrice(p.Price) {
-			valid = append(valid, p)
+		if p.Time.IsZero() || p.Time.After(now.Add(domain.MaxClockSkew)) || !validPrice(p.Price) {
+			continue
 		}
+		p.Time = domain.ClampSourceTime(p.Time, now)
+		if len(valid) > 0 && valid[len(valid)-1].Time.Equal(p.Time) {
+			valid[len(valid)-1] = p
+			continue
+		}
+		valid = append(valid, p)
 	}
 	if len(valid) == 0 {
 		return fmt.Errorf("source returned no valid intraday points")

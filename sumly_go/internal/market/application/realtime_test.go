@@ -97,3 +97,190 @@ func TestDelayedFeedPreservesEventTime(t *testing.T) {
 		t.Fatal("stopped delayed feed created ticks")
 	}
 }
+
+func TestCollectorClampsModerateFutureSkewAndRejectsExtremeFuture(t *testing.T) {
+	now := time.Date(2026, 11, 21, 1, 30, 0, 0, time.FixedZone("CST", 8*3600))
+
+	for _, skew := range []time.Duration{15 * time.Second, 60 * time.Second, 90 * time.Second} {
+		// 国内原生 AU9999（native=true）
+		nativeWriter := &writeOnlyMarket{}
+		nativeQuote := domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 760.12, AsOf: now.Add(skew)}
+		nativeCollector := NewNativeGoldCollector(&fakeSource{quotes: []domain.GoldQuote{nativeQuote}}, nativeWriter)
+		nativeCollector.now = func() time.Time { return now }
+		if err := nativeCollector.Sample(context.Background()); err != nil {
+			t.Fatalf("native skew %v unexpected error: %v", skew, err)
+		}
+		if nativeWriter.quotes != 1 || !nativeWriter.quote.AsOf.Equal(now) {
+			t.Fatalf("native skew %v quote not clamped to now: %+v", skew, nativeWriter.quote)
+		}
+		if len(nativeWriter.points) != 1 || !nativeWriter.points[0].Time.Equal(now) || !nativeWriter.points[0].SourceTime.Equal(now) || nativeWriter.points[0].Price != 760.12 {
+			t.Fatalf("native skew %v realtime point not clamped to now: %+v", skew, nativeWriter.points)
+		}
+
+		// 国际 XAUUSD（native=false）
+		intlWriter := &writeOnlyMarket{}
+		intlQuote := domain.GoldQuote{Symbol: "XAUUSD", Currency: "USD", Price: 4378.29, USDCNY: 7.0, AsOf: now.Add(skew)}
+		intlCollector := NewGoldCollector(&fakeSource{quotes: []domain.GoldQuote{intlQuote}}, intlWriter)
+		intlCollector.now = func() time.Time { return now }
+		if err := intlCollector.Sample(context.Background()); err != nil {
+			t.Fatalf("intl skew %v unexpected error: %v", skew, err)
+		}
+		if intlWriter.quotes != 1 || !intlWriter.quote.AsOf.Equal(now) {
+			t.Fatalf("intl skew %v quote not clamped to now: %+v", skew, intlWriter.quote)
+		}
+		if len(intlWriter.points) != 1 || !intlWriter.points[0].Time.Equal(now) || !intlWriter.points[0].SourceTime.Equal(now) {
+			t.Fatalf("intl skew %v realtime point not clamped to now: %+v", skew, intlWriter.points)
+		}
+	}
+
+	// 超前 120 秒仍拒绝，不落库报价也不写实时点
+	rejectedWriter := &writeOnlyMarket{}
+	rejectedQuote := domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 760.12, AsOf: now.Add(120 * time.Second)}
+	rejectedCollector := NewNativeGoldCollector(&fakeSource{quotes: []domain.GoldQuote{rejectedQuote}}, rejectedWriter)
+	rejectedCollector.now = func() time.Time { return now }
+	if err := rejectedCollector.Sample(context.Background()); err == nil {
+		t.Fatal("expected +120s quote to be rejected")
+	}
+	if rejectedWriter.quotes != 0 || len(rejectedWriter.points) != 0 {
+		t.Fatalf("rejected future quote persisted: quotes=%d points=%d", rejectedWriter.quotes, len(rejectedWriter.points))
+	}
+}
+
+func TestRealtimeClosedMarketIncompleteSecondsFallsBackToMinutes(t *testing.T) {
+	end := time.Date(2026, 11, 21, 2, 30, 0, 0, time.FixedZone("CST", 8*3600))
+	minutes := make([]domain.IntradayPoint, 0, 20)
+	for i := 20; i >= 1; i-- {
+		minutes = append(minutes, domain.IntradayPoint{
+			Time:  end.Add(-time.Duration(i) * time.Minute),
+			Price: 760.0 - float64(20-i)*0.1,
+		})
+	}
+
+	t.Run("domestic AU9999 two-point straight line falls back to 60s minutes", func(t *testing.T) {
+		store := &readOnlyMarket{
+			found: true,
+			quote: domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 755.01, AsOf: end},
+			points: []domain.RealtimePoint{
+				{Time: end.Add(-5 * time.Second), SourceTime: end.Add(-5 * time.Second), Price: 755.01},
+				{Time: end, SourceTime: end, Price: 755.01},
+			},
+			minutes: minutes,
+		}
+		q := NewNativeGoldQuery(store)
+		q.now = func() time.Time { return end.Add(12 * time.Hour) }
+
+		got, interval, err := q.GetGoldRealtime(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if interval != 60 || len(got) != 21 {
+			t.Fatalf("expected 60s fallback with 21 points, got interval=%d len=%d", interval, len(got))
+		}
+		if !got[0].Time.Equal(end.Add(-RealtimeWindow)) || !got[20].Time.Equal(end) || got[20].Price != 755.01 {
+			t.Fatalf("unexpected endpoints: first=%+v last=%+v", got[0], got[20])
+		}
+	})
+
+	t.Run("international XAUUSD short 5m second-span falls back to 60s minutes", func(t *testing.T) {
+		intlQuote := domain.GoldQuote{Symbol: "XAUUSD", Currency: "USD", Price: 4378.29, USDCNY: 7.0, AsOf: end}
+		shortPoints := make([]domain.RealtimePoint, 0, 61)
+		for i := 60; i >= 0; i-- {
+			at := end.Add(-time.Duration(i) * 5 * time.Second)
+			shortPoints = append(shortPoints, domain.RealtimePoint{Time: at, SourceTime: at, Price: 980})
+		}
+		intlMinutes := make([]domain.IntradayPoint, 0, 20)
+		for i := 20; i >= 1; i-- {
+			intlMinutes = append(intlMinutes, domain.IntradayPoint{Time: end.Add(-time.Duration(i) * time.Minute), Price: 4370})
+		}
+		store := &readOnlyMarket{
+			found:   true,
+			quote:   intlQuote,
+			points:  shortPoints,
+			minutes: intlMinutes,
+		}
+		q := NewGoldQuery(store)
+		q.now = func() time.Time { return end.Add(12 * time.Hour) }
+
+		got, interval, err := q.GetGoldRealtime(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if interval != 60 || len(got) != 21 || got[20].Price != intlQuote.CNYPerGram() {
+			t.Fatalf("expected 60s fallback with 21 converted points, got interval=%d len=%d last=%+v", interval, len(got), got[len(got)-1])
+		}
+	})
+
+	t.Run("complete 5s samples still preferred over minutes", func(t *testing.T) {
+		fullPoints := make([]domain.RealtimePoint, 0, 181)
+		for i := 180; i >= 0; i-- {
+			at := end.Add(-time.Duration(i) * 5 * time.Second)
+			fullPoints = append(fullPoints, domain.RealtimePoint{Time: at, SourceTime: at, Price: 758.5})
+		}
+		store := &readOnlyMarket{
+			found:   true,
+			quote:   domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 755.01, AsOf: end},
+			points:  fullPoints,
+			minutes: minutes,
+		}
+		q := NewNativeGoldQuery(store)
+		q.now = func() time.Time { return end.Add(12 * time.Hour) }
+
+		got, interval, err := q.GetGoldRealtime(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if interval != 5 || len(got) != 181 {
+			t.Fatalf("expected complete 5s samples to win, got interval=%d len=%d", interval, len(got))
+		}
+	})
+
+	t.Run("gracefully falls back to frozen 5s when no intraday minutes exist", func(t *testing.T) {
+		store := &readOnlyMarket{
+			found: true,
+			quote: domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 755.01, AsOf: end},
+			points: []domain.RealtimePoint{
+				{Time: end.Add(-5 * time.Second), SourceTime: end.Add(-5 * time.Second), Price: 755.01},
+				{Time: end, SourceTime: end, Price: 755.01},
+			},
+		}
+		q := NewNativeGoldQuery(store)
+		q.now = func() time.Time { return end.Add(12 * time.Hour) }
+
+		got, interval, err := q.GetGoldRealtime(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if interval != 5 || len(got) != 2 {
+			t.Fatalf("expected graceful fallback to frozen 5s, got interval=%d len=%d", interval, len(got))
+		}
+	})
+
+	t.Run("keeps frozen 5s when partial 5s span exceeds available minute span", func(t *testing.T) {
+		partialPoints := make([]domain.RealtimePoint, 0, 61)
+		for i := 60; i >= 0; i-- {
+			at := end.Add(-time.Duration(i) * 5 * time.Second) // 5 minutes span (<10m)
+			partialPoints = append(partialPoints, domain.RealtimePoint{Time: at, SourceTime: at, Price: 758.5})
+		}
+		shortMinutes := []domain.IntradayPoint{
+			{Time: end.Add(-3 * time.Minute), Price: 757.0},
+			{Time: end.Add(-2 * time.Minute), Price: 756.5},
+			{Time: end.Add(-1 * time.Minute), Price: 756.0},
+		}
+		store := &readOnlyMarket{
+			found:   true,
+			quote:   domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 755.01, AsOf: end},
+			points:  partialPoints,
+			minutes: shortMinutes,
+		}
+		q := NewNativeGoldQuery(store)
+		q.now = func() time.Time { return end.Add(12 * time.Hour) }
+
+		got, interval, err := q.GetGoldRealtime(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if interval != 5 || len(got) != 61 {
+			t.Fatalf("expected partial 5s with longer span to win, got interval=%d len=%d", interval, len(got))
+		}
+	})
+}

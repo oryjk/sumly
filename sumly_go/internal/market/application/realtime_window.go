@@ -4,12 +4,18 @@ import (
 	"context"
 	"errors"
 	"math"
+	"time"
 
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 )
 
+const (
+	minFrozenSecondPoints = 12
+	minFrozenSecondSpan   = 10 * time.Minute
+)
+
 // GetGoldRealtime 停更时将窗口固定在上游最后报价时间，不能随墙上时钟消失。
-// 五秒历史缺失时仅回退到真实分钟记录，通过返回的间隔明确区分；不回填采样库。
+// 五秒历史缺失或覆盖不足时回退到真实分钟记录，通过返回的间隔明确区分；不回填采样库。
 func (s *GoldQuery) GetGoldRealtime(ctx context.Context) ([]domain.RealtimePoint, int, error) {
 	points, err := s.store.LoadRealtime(ctx)
 	if err != nil {
@@ -27,20 +33,23 @@ func (s *GoldQuery) GetGoldRealtime(ctx context.Context) ([]domain.RealtimePoint
 		last := points[len(points)-1]
 		return frozenWindow(points, domain.RealtimePoint{Time: last.SourceTime, SourceTime: last.SourceTime, Price: last.Price}), 5, nil
 	}
-	if domain.ValidRealtime(quote, s.now(), s.native) && len(points) > 1 {
+	now := s.now()
+	if domain.ValidRealtime(quote, now, s.native) && len(points) > 1 {
 		return points, 5, nil
 	}
-	if quote.AsOf.IsZero() || quote.AsOf.After(s.now()) || domain.RealtimePrice(quote, s.native) <= 0 || math.IsNaN(domain.RealtimePrice(quote, s.native)) || math.IsInf(domain.RealtimePrice(quote, s.native), 0) {
+	price := domain.RealtimePrice(quote, s.native)
+	if quote.AsOf.IsZero() || quote.AsOf.After(now.Add(domain.MaxClockSkew)) || price <= 0 || math.IsNaN(price) || math.IsInf(price, 0) {
 		return points, 5, nil
 	}
-	end := domain.RealtimePoint{Time: quote.AsOf, SourceTime: quote.AsOf, Price: domain.RealtimePrice(quote, s.native)}
+	asOf := domain.ClampSourceTime(quote.AsOf, now)
+	end := domain.RealtimePoint{Time: asOf, SourceTime: asOf, Price: price}
 	// 并发请求返回的旧报价不能让已采集的窗口倒退。
 	if len(points) > 0 && points[len(points)-1].SourceTime.After(end.Time) {
 		last := points[len(points)-1]
 		end = domain.RealtimePoint{Time: last.SourceTime, SourceTime: last.SourceTime, Price: last.Price}
 	}
 	frozen := frozenWindow(points, end)
-	if len(frozen) > 1 {
+	if hasSufficientFrozenSeconds(frozen) {
 		return frozen, 5, nil
 	}
 	minutes, minuteErr := s.GetGoldIntraday(ctx)
@@ -60,7 +69,32 @@ func (s *GoldQuery) GetGoldRealtime(ctx context.Context) ([]domain.RealtimePoint
 			recovered = append(recovered, domain.RealtimePoint{Time: p.Time, SourceTime: p.Time, Price: price})
 		}
 	}
-	return frozenWindow(recovered, end), 60, nil
+	recoveredWindow := frozenWindow(recovered, end)
+	if preferRecoveredMinutes(frozen, recoveredWindow) {
+		return recoveredWindow, 60, nil
+	}
+	return frozen, 5, nil
+}
+
+func realtimeSpan(points []domain.RealtimePoint) time.Duration {
+	if len(points) < 2 {
+		return 0
+	}
+	return points[len(points)-1].Time.Sub(points[0].Time)
+}
+
+func hasSufficientFrozenSeconds(points []domain.RealtimePoint) bool {
+	return len(points) >= minFrozenSecondPoints && realtimeSpan(points) >= minFrozenSecondSpan
+}
+
+func preferRecoveredMinutes(frozen, recovered []domain.RealtimePoint) bool {
+	if len(recovered) <= 1 {
+		return false
+	}
+	if realtimeSpan(recovered) > realtimeSpan(frozen) {
+		return true
+	}
+	return len(frozen) <= 2 && len(recovered) > len(frozen)
 }
 
 func frozenWindow(points []domain.RealtimePoint, end domain.RealtimePoint) []domain.RealtimePoint {

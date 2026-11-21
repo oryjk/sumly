@@ -28,6 +28,7 @@ import (
 	macrotreasury "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/treasury"
 	macroyahoo "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/yahoo"
 	macroapplication "gitee.com/oryjk/sumly/sumly_go/internal/macro/application"
+	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/eastmoney"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/feed"
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/historical"
 	markethttp "gitee.com/oryjk/sumly/sumly_go/internal/market/adapters/http"
@@ -124,7 +125,11 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 
 	domesticQuote := sina.NewInstrumentClient(sinaClient, "gds_AU9999", "AU9999", "CNY")
 	londonSource := sina.NewInstrumentClient(sinaClient, "hf_XAU", "XAUUSD", "USD")
-	domesticSource := feed.Source{Quote: domesticQuote, Daily: &sge.Client{HTTP: &http.Client{Timeout: 20 * time.Second}}}
+	domesticSource := feed.Source{
+		Quote:    domesticQuote,
+		Daily:    &sge.Client{HTTP: &http.Client{Timeout: 20 * time.Second}},
+		Intraday: eastmoney.NewClient(&http.Client{Timeout: 10 * time.Second}, "118.AU9999"),
+	}
 	comexSource := &yahoo.Client{HTTP: &http.Client{Timeout: 10 * time.Second}, Symbol: "GCZ26.CMX", FX: londonSource}
 	markets := []marketapplication.InstrumentMarket{
 		{Instrument: domain.Instrument{ID: "comex-gold", Name: "纽约黄金期货", Symbol: "GCZ26.CMX", Kind: "future", Currency: "USD", Unit: "USD/troy_oz", QuoteSource: "yahoo", DailySource: "yahoo", Exchange: "COMEX", Contract: "GCZ26", DelaySeconds: 1800}, Service: marketapplication.NewNativeGoldQuery(marketpostgres.NewNativeReader(pool, "GCZ26.CMX"))},
