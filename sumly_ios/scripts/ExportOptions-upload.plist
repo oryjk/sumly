@@ -16,6 +16,8 @@
 	<dict>
 		<key>com.oryjk.sumly</key>
 		<string>Sumly API App Store Distribution</string>
+		<key>com.oryjk.sumly.widget</key>
+		<string>Sumly Widget App Store Distribution</string>
 	</dict>
 	<key>stripSwiftSymbols</key>
 	<true/>
