@@ -7,6 +7,7 @@ struct HomeView: View {
     @Binding private var marketBasis: GoldMarketBasis
     private let quoteStore: LiveGoldQuoteStore?
     private let macroService: any MacroServicing
+    private let bottomTabBarInset: CGFloat?
     private let onOpenHoldings: (() -> Void)?
     private let onOpenChanlun: (() -> Void)?
     @Query private var records: [HoldingRecord]
@@ -34,6 +35,7 @@ struct HomeView: View {
         marketBasis: Binding<GoldMarketBasis>,
         quoteStore: LiveGoldQuoteStore? = nil,
         macroService: any MacroServicing = BackendMacroService(),
+        bottomTabBarInset: CGFloat? = nil,
         onOpenHoldings: (() -> Void)? = nil,
         onOpenChanlun: (() -> Void)? = nil
     ) {
@@ -41,6 +43,7 @@ struct HomeView: View {
         _marketBasis = marketBasis
         self.quoteStore = quoteStore
         self.macroService = macroService
+        self.bottomTabBarInset = bottomTabBarInset
         self.onOpenHoldings = onOpenHoldings
         self.onOpenChanlun = onOpenChanlun
         _model = State(initialValue: MarketHomeViewModel(basis: marketBasis.wrappedValue))
@@ -144,8 +147,10 @@ struct HomeView: View {
 
     private var dashboard: some View {
         GeometryReader { geometry in
-            // The custom tab bar scales with width and its add button protrudes upward.
-            let bottomInset = 112 + geometry.safeAreaInsets.bottom
+            let bottomInset = bottomTabBarInset ?? GoldTabBarLayout.resolve(
+                containerWidth: geometry.size.width,
+                safeAreaBottom: geometry.safeAreaInsets.bottom
+            ).homeAdditionalBottomInset
             let availableChartContentHeight = max(0, geometry.size.height - bottomInset - 66)
             ScrollView {
                 VStack(spacing: 14) {

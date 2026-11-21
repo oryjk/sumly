@@ -111,6 +111,7 @@ struct HoldingsCalendarSheet: View {
                         .background(GoldTheme.background)
                 }
             }
+            .modifier(EmbeddedCalendarTabBarSafeArea(isEmbeddedTab: isEmbeddedTab))
         }
         .tint(GoldTheme.gold).foregroundStyle(GoldTheme.text)
         .presentationBackground(GoldTheme.background)
@@ -391,6 +392,18 @@ struct HoldingCalendarFilterSheet: View {
                 .foregroundStyle(selected ? GoldTheme.gold : GoldTheme.text)
                 .background(GoldTheme.background, in: GoldTheme.rangeShape)
                 .overlay { if selected { GoldTheme.rangeShape.strokeBorder(GoldTheme.gold, lineWidth: 1) } }
+        }
+    }
+}
+
+private struct EmbeddedCalendarTabBarSafeArea: ViewModifier {
+    let isEmbeddedTab: Bool
+
+    func body(content: Content) -> some View {
+        if isEmbeddedTab {
+            content.goldTabBarContentSafeArea()
+        } else {
+            content
         }
     }
 }

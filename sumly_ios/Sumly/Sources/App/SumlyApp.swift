@@ -115,9 +115,10 @@ private struct GoldWorkspaceView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let safeBottom = geometry.safeAreaInsets.bottom
-            let barBodyHeight: CGFloat = 64
-            let totalBarHeight = barBodyHeight + safeBottom
+            let tabBarLayout = GoldTabBarLayout.resolve(
+                containerWidth: geometry.size.width,
+                safeAreaBottom: geometry.safeAreaInsets.bottom
+            )
             ZStack(alignment: .bottom) {
                 GoldTheme.background.ignoresSafeArea()
 
@@ -126,6 +127,7 @@ private struct GoldWorkspaceView: View {
                     HomeView(
                         marketBasis: marketBasisBinding,
                         quoteStore: quoteStore,
+                        bottomTabBarInset: tabBarLayout.homeAdditionalBottomInset,
                         onOpenHoldings: { selectedTab = 1 },
                         onOpenChanlun: openChanlun
                     )
@@ -139,7 +141,6 @@ private struct GoldWorkspaceView: View {
                         quoteStore: quoteStore,
                         onOpenCalendar: { selectedTab = 2 }
                     )
-                    .padding(.bottom, totalBarHeight)
                     .opacity(selectedTab == 1 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 1)
                     .accessibilityHidden(selectedTab != 1)
@@ -151,7 +152,6 @@ private struct GoldWorkspaceView: View {
                         quoteStore: quoteStore,
                         isEmbeddedTab: true
                     )
-                    .padding(.bottom, totalBarHeight)
                     .opacity(selectedTab == 2 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 2)
                     .accessibilityHidden(selectedTab != 2)
@@ -161,14 +161,17 @@ private struct GoldWorkspaceView: View {
                         cloud: cloud,
                         onOpenChanlun: openChanlun
                     )
-                    .padding(.bottom, totalBarHeight)
                     .opacity(selectedTab == 3 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 3)
                     .accessibilityHidden(selectedTab != 3)
                 }
+                .environment(\.goldTabBarAdditionalBottomInset, tabBarLayout.additionalSafeAreaBottomInset)
 
-                tabBar(barBodyHeight: barBodyHeight, safeBottom: safeBottom)
-                    .frame(height: totalBarHeight)
+                GoldFloatingTabBar(
+                    selectedTab: $selectedTab,
+                    layout: tabBarLayout,
+                    onAdd: { showingAdd = true }
+                )
             }
             .ignoresSafeArea(edges: .bottom)
         }
@@ -197,73 +200,5 @@ private struct GoldWorkspaceView: View {
             _ = await (cloudSync, quotePolling)
         }
         .modifier(HoldingAlertsLifecycle())
-    }
-
-    private func tabBar(barBodyHeight: CGFloat, safeBottom: CGFloat) -> some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let addDiameter: CGFloat = 56
-            ZStack(alignment: .topLeading) {
-                GoldTabBarShape()
-                    .fill(GoldTheme.card)
-                    .overlay(alignment: .top) {
-                        GoldTabBarShape()
-                            .stroke(GoldTheme.cardStroke, lineWidth: 0.75)
-                    }
-                tabItem("行情", symbol: "chart.xyaxis.line", index: 0)
-                    .position(x: width * 0.1, y: barBodyHeight * 0.54)
-                tabItem("持仓", symbol: "bag.fill", index: 1)
-                    .position(x: width * 0.3, y: barBodyHeight * 0.54)
-                tabItem("日历", symbol: "calendar", index: 2)
-                    .position(x: width * 0.7, y: barBodyHeight * 0.54)
-                tabItem("我的", symbol: "person.fill", index: 3)
-                    .position(x: width * 0.9, y: barBodyHeight * 0.54)
-                Button { showingAdd = true } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(GoldTheme.onGold)
-                        .frame(width: addDiameter, height: addDiameter)
-                        .background(GoldTheme.gold, in: Circle())
-                        .shadow(color: GoldTheme.gold.opacity(0.28), radius: 8, y: 3)
-                }
-                .buttonStyle(GoldScalePressStyle())
-                .accessibilityLabel("添加黄金")
-                .position(x: width / 2, y: 18)
-            }
-            .padding(.bottom, safeBottom > 0 ? 0 : 2)
-        }
-    }
-
-    private func tabItem(_ title: String, symbol: String, index: Int) -> some View {
-        Button {
-            selectedTab = index
-        } label: {
-            VStack(spacing: 5) {
-                if index == 1 {
-                    GoldMoneyBagShape()
-                        .fill(selectedTab == index ? GoldTheme.gold : GoldTheme.textSecondary)
-                        .frame(width: 22, height: 22)
-                } else {
-                    Image(systemName: symbol)
-                        .font(.system(size: 20, weight: .semibold))
-                        .frame(height: 22)
-                }
-                Text(title)
-                    .font(.system(size: 10.5, weight: selectedTab == index ? .semibold : .regular))
-            }
-            .foregroundStyle(selectedTab == index ? GoldTheme.gold : GoldTheme.textSecondary)
-            .frame(width: 64, height: 50)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(GoldScalePressStyle())
-        .accessibilityAddTraits(selectedTab == index ? .isSelected : [])
-    }
-}
-
-private struct GoldScalePressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.93 : 1)
-            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
     }
 }

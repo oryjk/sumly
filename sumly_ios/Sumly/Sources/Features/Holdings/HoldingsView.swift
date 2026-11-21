@@ -62,9 +62,11 @@ struct HoldingsView: View {
             if embedInNavigationStack {
                 NavigationStack {
                     holdingsContent
+                        .goldTabBarContentSafeArea()
                         .toolbar(.hidden, for: .navigationBar)
                         .navigationDestination(item: $pushedDetail) { record in
                             HoldingDetailView(record: record, model: model, marketBasis: marketBasis, embeddedInNavigationStack: true)
+                                .goldTabBarContentSafeArea()
                         }
                 }
                 .tint(GoldTheme.gold)

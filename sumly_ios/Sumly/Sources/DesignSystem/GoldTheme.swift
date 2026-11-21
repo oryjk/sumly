@@ -51,6 +51,7 @@ enum GoldTheme {
     static let holdingsCardShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
     static let holdingPriceShape = UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 0, bottomTrailingRadius: 13, topTrailingRadius: 0)
     static let capsuleShape = Capsule()
+    static let circleShape = Circle()
     static let cardShape = RoundedRectangle(cornerRadius: 20, style: .continuous)
     static let subCardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
     static let badgeShape = RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -58,34 +59,12 @@ enum GoldTheme {
     static let serviceText = Color(hex: 0xC4C4C4)
     static let serviceStroke = Color.white.opacity(0.035)
     static let chartFill = gold.opacity(0.13)
-}
 
-/// 底栏中间下凹，给独立的圆形添加按钮留出环形间隙。
-struct GoldTabBarShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = rect.width / 430
-        let c = rect.midX
-        var path = Path()
-        path.move(to: .zero)
-        path.addLine(to: CGPoint(x: c - 66 * s, y: 0))
-        path.addCurve(to: CGPoint(x: c - 42 * s, y: 20 * s),
-                      control1: CGPoint(x: c - 51 * s, y: 0),
-                      control2: CGPoint(x: c - 44 * s, y: 9 * s))
-        path.addCurve(to: CGPoint(x: c, y: 58 * s),
-                      control1: CGPoint(x: c - 39 * s, y: 42 * s),
-                      control2: CGPoint(x: c - 24 * s, y: 58 * s))
-        path.addCurve(to: CGPoint(x: c + 42 * s, y: 20 * s),
-                      control1: CGPoint(x: c + 24 * s, y: 58 * s),
-                      control2: CGPoint(x: c + 39 * s, y: 42 * s))
-        path.addCurve(to: CGPoint(x: c + 66 * s, y: 0),
-                      control1: CGPoint(x: c + 44 * s, y: 9 * s),
-                      control2: CGPoint(x: c + 51 * s, y: 0))
-        path.addLine(to: CGPoint(x: rect.maxX, y: 0))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: 0, y: rect.maxY))
-        path.closeSubpath()
-        return path
-    }
+    // 底部悬浮导航栏
+    static let tabBarSurface = card.opacity(0.95)
+    static let tabBarHighlight = gold.opacity(0.14)
+    static let tabBarShadow = Color.black.opacity(0.36)
+    static let addButtonShadow = gold.opacity(0.28)
 }
 
 /// 参考稿的圆钱袋轮廓，与购物袋图标区分。

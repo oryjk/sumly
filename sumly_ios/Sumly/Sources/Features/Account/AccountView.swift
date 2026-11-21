@@ -16,9 +16,11 @@ struct AccountView: View {
     var body: some View {
         NavigationStack {
             accountContent
+                .goldTabBarContentSafeArea()
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(isPresented: $showSettings) {
                     AccountSettingsView(session: session, cloud: cloud)
+                        .goldTabBarContentSafeArea()
                 }
         }
         .tint(GoldTheme.gold)
