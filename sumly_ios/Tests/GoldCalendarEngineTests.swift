@@ -434,6 +434,57 @@ struct GoldCalendarEngineTests {
         #expect(inYearCells.count == 365)
     }
 
+    @MainActor
+    @Test func posterPrivacyMaskingHidesBuyGramsEvenWhenYearlyPnLIsNil() throws {
+        // 模拟无日线数据（如早于日线起点/缺汇率/弱网）导致 totalPnL == nil，但当年有买金记录
+        let items = [
+            CalendarHoldingItem(grams: 10, unitPriceCNY: 580, timestamp: day(2026, 3, 8)),
+            CalendarHoldingItem(grams: 5, unitPriceCNY: 600, timestamp: day(2026, 11, 5))
+        ]
+        let companion = GoldCalendarEngine.computeCompanionStats(items: items, now: day(2026, 11, 20), calendar: calendar)
+        let yearSnap = GoldCalendarEngine.buildYearSnapshot(
+            year: 2026,
+            items: items,
+            dailyBars: [:],
+            liveQuote: nil,
+            temperatures: [:],
+            milestoneFirstReached: companion.milestoneFirstReached,
+            now: day(2026, 11, 20),
+            calendar: calendar
+        )
+        #expect(yearSnap.totalPnL == nil)
+        #expect(yearSnap.totalBuyGrams == 15)
+        let monthSnap = try #require(yearSnap.monthSummary(11))
+
+        let masked = GoldCalendarPosterSnapshot(
+            year: 2026,
+            month: 11,
+            monthSummary: monthSnap,
+            yearSnapshot: yearSnap,
+            companion: companion,
+            basis: .domestic,
+            layer: .pnl,
+            maskSensitiveAmounts: true
+        )
+        #expect(masked.yearlyBuySubtitle == nil)
+        #expect(masked.monthlyBuySubtitle == nil)
+        let renderedYearly = try #require(GoldCalendarPosterRenderer.renderImage(snapshot: masked, mode: .yearly))
+        #expect(renderedYearly.size.width > 300)
+
+        let unmasked = GoldCalendarPosterSnapshot(
+            year: 2026,
+            month: 11,
+            monthSummary: monthSnap,
+            yearSnapshot: yearSnap,
+            companion: companion,
+            basis: .domestic,
+            layer: .pnl,
+            maskSensitiveAmounts: false
+        )
+        #expect(unmasked.yearlyBuySubtitle == "新攒 +15g · 2笔")
+        #expect(unmasked.monthlyBuySubtitle == "本月新攒 +5g")
+    }
+
     // MARK: - 8. 合规零违规词断言
 
     @Test func allCalendarCopyIsStrictlyObjectiveAndCompliant() {

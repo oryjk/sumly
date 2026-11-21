@@ -28,6 +28,16 @@ struct GoldCalendarPosterSnapshot: Equatable, Sendable {
     var isPnLView: Bool {
         hasHoldings && layer == .pnl
     }
+
+    var monthlyBuySubtitle: String? {
+        guard isPnLView, !maskSensitiveAmounts, monthSummary.newBuyGrams > 1e-9 else { return nil }
+        return "本月新攒 +\(GoldVaultSummary.formatGrams(monthSummary.newBuyGrams))g"
+    }
+
+    var yearlyBuySubtitle: String? {
+        guard hasHoldings, !maskSensitiveAmounts, yearSnapshot.totalBuyGrams > 1e-9 else { return nil }
+        return "新攒 +\(GoldVaultSummary.formatGrams(yearSnapshot.totalBuyGrams))g · \(yearSnapshot.totalBuyCount)笔"
+    }
 }
 
 struct GoldCalendarShareImage: Transferable, Sendable {
@@ -237,8 +247,8 @@ struct GoldCalendarPosterCardView: View {
                         .font(.system(size: 11.5, design: .rounded))
                         .monospacedDigit()
 
-                        if isPnL && m.newBuyGrams > 1e-9 {
-                            Text("本月新攒 +\(GoldVaultSummary.formatGrams(m.newBuyGrams))g")
+                        if let buySubtitle = snapshot.monthlyBuySubtitle {
+                            Text(buySubtitle)
                                 .font(.system(size: 10.5, weight: .medium, design: .rounded))
                                 .foregroundStyle(GoldTheme.goldSoft)
                         }
@@ -432,8 +442,8 @@ struct GoldCalendarPosterCardView: View {
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.textSecondary)
-                        if snapshot.hasHoldings && y.totalBuyGrams > 1e-9 {
-                            Text("新攒 +\(GoldVaultSummary.formatGrams(y.totalBuyGrams))g · \(y.totalBuyCount)笔")
+                        if let buySubtitle = snapshot.yearlyBuySubtitle {
+                            Text(buySubtitle)
                                 .font(.system(size: 10, design: .rounded))
                                 .foregroundStyle(GoldTheme.goldSoft)
                         }
