@@ -2,6 +2,31 @@ import SwiftUI
 
 /// 走势图买入红点交互文案、脱敏格式化与查价浮窗数据构建（纯 Sendable，便于单元测试）。
 enum ChartPurchaseMarkerPresentation: Sendable {
+    enum SpreadSentiment: Equatable, Sendable {
+        /// 买入成本高于大盘参考价（买贵了 / 多花）→ 与全 App 亏损/不利语义一致（绿色）
+        case unfavorable
+        /// 买入成本低于大盘参考价（买便宜了 / 省了）→ 与全 App 盈利/划算语义一致（红色）
+        case favorable
+        /// 与大盘参考价持平 → 中性
+        case neutral
+
+        var color: Color {
+            switch self {
+            case .unfavorable: return GoldTheme.down
+            case .favorable: return GoldTheme.up
+            case .neutral: return GoldTheme.textSecondary
+            }
+        }
+
+        var symbolName: String {
+            switch self {
+            case .unfavorable: return "arrow.down.right"
+            case .favorable: return "arrow.up.right"
+            case .neutral: return "equal"
+            }
+        }
+    }
+
     struct SpreadMetric: Equatable, Sendable {
         let diff: Double
         let percent: Double?
@@ -9,6 +34,7 @@ enum ChartPurchaseMarkerPresentation: Sendable {
         let compactText: String
         let isPremium: Bool
         let isDiscount: Bool
+        let sentiment: SpreadSentiment
     }
 
     struct InspectionTooltipContent: Equatable, Sendable {
@@ -44,20 +70,26 @@ enum ChartPurchaseMarkerPresentation: Sendable {
         return hideAmounts ? "含工费 ••••" : "含工费 ¥\(laborFee.moneyText)"
     }
 
-    static func spreadMetric(unitCost: Double, marketAnchor: Double?) -> SpreadMetric? {
+    static func spreadMetric(
+        unitCost: Double,
+        marketAnchor: Double?,
+        isInterpolatedMarketAnchor: Bool = false
+    ) -> SpreadMetric? {
         guard let anchor = marketAnchor, anchor.isFinite, anchor > 0, unitCost.isFinite, unitCost > 0 else {
             return nil
         }
+        let anchorLabel = isInterpolatedMarketAnchor ? "临近交易日" : "当日大盘"
         let diff = unitCost - anchor
         let pct = (diff / anchor) * 100
         if abs(diff) < 0.005 {
             return SpreadMetric(
                 diff: 0,
                 percent: 0,
-                capsuleText: "与当日大盘持平 (¥0.00/g)",
+                capsuleText: "与\(anchorLabel)持平 (¥0.00/g)",
                 compactText: "与大盘持平",
                 isPremium: false,
-                isDiscount: false
+                isDiscount: false,
+                sentiment: .neutral
             )
         }
         if diff > 0 {
@@ -66,10 +98,11 @@ enum ChartPurchaseMarkerPresentation: Sendable {
             return SpreadMetric(
                 diff: diff,
                 percent: pct,
-                capsuleText: "较当日大盘 +¥\(absDiff)/g (+\(absPct)%)",
-                compactText: "+¥\(absDiff)",
+                capsuleText: "较\(anchorLabel)多花 ¥\(absDiff)/g（贵 \(absPct)%）",
+                compactText: "多花 ¥\(absDiff)",
                 isPremium: true,
-                isDiscount: false
+                isDiscount: false,
+                sentiment: .unfavorable
             )
         } else {
             let absDiff = (-diff).moneyText
@@ -77,10 +110,11 @@ enum ChartPurchaseMarkerPresentation: Sendable {
             return SpreadMetric(
                 diff: diff,
                 percent: pct,
-                capsuleText: "低于当日大盘 -¥\(absDiff)/g (-\(absPct)%)",
-                compactText: "-¥\(absDiff)",
+                capsuleText: "较\(anchorLabel)省 ¥\(absDiff)/g（省 \(absPct)%）",
+                compactText: "省 ¥\(absDiff)",
                 isPremium: false,
-                isDiscount: true
+                isDiscount: true,
+                sentiment: .favorable
             )
         }
     }
@@ -113,7 +147,12 @@ enum ChartPurchaseMarkerPresentation: Sendable {
     ) -> InspectionTooltipContent {
         let marker = match.resolved.marker
         let referencePrice = match.resolved.marketAnchorPrice ?? selectedPoint.price
-        let spread = spreadMetric(unitCost: marker.averageUnitPrice, marketAnchor: referencePrice)
+        let isInterpolated = match.resolved.isInterpolatedMarketAnchor || !match.isSameDay
+        let spread = spreadMetric(
+            unitCost: marker.averageUnitPrice,
+            marketAnchor: referencePrice,
+            isInterpolatedMarketAnchor: isInterpolated
+        )
         let dateBadge: String? = match.isSameDay
             ? nil
             : "\(shortDateText(marker.date, calendar: calendar)) 买入 · 休市参考"
@@ -198,7 +237,8 @@ struct ChartPurchaseMarkerSheet: View {
     private var spread: ChartPurchaseMarkerPresentation.SpreadMetric? {
         ChartPurchaseMarkerPresentation.spreadMetric(
             unitCost: marker.averageUnitPrice,
-            marketAnchor: resolvedMarker.marketAnchorPrice
+            marketAnchor: resolvedMarker.marketAnchorPrice,
+            isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor
         )
     }
 
@@ -361,11 +401,13 @@ struct ChartPurchaseMarkerSheet: View {
             if let spread {
                 let tint = spreadColor(spread)
                 HStack(spacing: 6) {
-                    Image(systemName: spread.isPremium ? "arrow.up.right" : (spread.isDiscount ? "arrow.down.right" : "equal"))
+                    Image(systemName: spread.sentiment.symbolName)
                         .font(.system(size: 10, weight: .bold))
                     Text(spread.capsuleText)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
                 .foregroundStyle(tint)
                 .padding(.horizontal, 10)
@@ -427,7 +469,8 @@ struct ChartPurchaseMarkerSheet: View {
     private func purchaseItemRow(_ item: MarketHoldingOverlay.PurchaseItem, navigable: Bool) -> some View {
         let itemSpread = ChartPurchaseMarkerPresentation.spreadMetric(
             unitCost: item.effectiveUnitCost,
-            marketAnchor: resolvedMarker.marketAnchorPrice
+            marketAnchor: resolvedMarker.marketAnchorPrice,
+            isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor
         )
         let laborTag = ChartPurchaseMarkerPresentation.laborFeeTagText(item.laborFee, hideAmounts: hideAmounts)
         let trimmedNote = item.note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -511,6 +554,7 @@ struct ChartPurchaseMarkerSheet: View {
                             .monospacedDigit()
                             .foregroundStyle(spreadColor(itemSpread))
                             .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                     }
                 }
 
@@ -529,8 +573,6 @@ struct ChartPurchaseMarkerSheet: View {
     }
 
     private func spreadColor(_ metric: ChartPurchaseMarkerPresentation.SpreadMetric) -> Color {
-        if metric.isPremium { return GoldTheme.up }
-        if metric.isDiscount { return GoldTheme.down }
-        return GoldTheme.textSecondary
+        metric.sentiment.color
     }
 }

@@ -393,14 +393,31 @@ struct ChartHoldingMarkerTests {
         // 3. 零投顾违规词校验
         let spreadPremium = try #require(ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 656.10, marketAnchor: 620.0))
         let spreadDiscount = try #require(ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 615.80, marketAnchor: 620.0))
-        #expect(spreadPremium.capsuleText.contains("+¥36.10/g"))
-        #expect(spreadDiscount.capsuleText.contains("-¥4.20/g"))
+        let spreadNeutral = try #require(ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 620.0, marketAnchor: 620.0))
+        let spreadInterpolatedPremium = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 656.10, marketAnchor: 620.0, isInterpolatedMarketAnchor: true)
+        )
+        let spreadInterpolatedDiscount = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 615.80, marketAnchor: 620.0, isInterpolatedMarketAnchor: true)
+        )
+        let spreadInterpolatedNeutral = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 620.0, marketAnchor: 620.0, isInterpolatedMarketAnchor: true)
+        )
+        #expect(spreadPremium.capsuleText == "较当日大盘多花 ¥36.10/g（贵 5.82%）")
+        #expect(spreadDiscount.capsuleText == "较当日大盘省 ¥4.20/g（省 0.68%）")
 
         let allCopy = [
             ChartPurchaseMarkerPresentation.explanationText(isInterpolatedMarketAnchor: false),
             ChartPurchaseMarkerPresentation.explanationText(isInterpolatedMarketAnchor: true),
             spreadPremium.capsuleText,
+            spreadPremium.compactText,
             spreadDiscount.capsuleText,
+            spreadDiscount.compactText,
+            spreadNeutral.capsuleText,
+            spreadNeutral.compactText,
+            spreadInterpolatedPremium.capsuleText,
+            spreadInterpolatedDiscount.capsuleText,
+            spreadInterpolatedNeutral.capsuleText,
             visibleTooltip.headline,
             visibleTooltip.primaryMetric,
             visibleTooltip.secondaryMetric ?? "",
@@ -414,6 +431,174 @@ struct ChartHoldingMarkerTests {
         for term in forbiddenAdvisoryTerms {
             #expect(!allCopy.contains(term), "文案不得包含投顾违规词：\(term)")
         }
+    }
+
+    @Test("买入价与大盘差额语义、红绿配色、图标、正常日与休市插值文案及滑查浮窗断言")
+    func spreadSentimentWordingAndInspectionTooltipSemantics() throws {
+        // 1. 买贵了（unitCost > marketAnchor）-> unfavorable / 绿色 GoldTheme.down / arrow.down.right
+        let unfavorableDaily = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 656.10, marketAnchor: 620.0)
+        )
+        #expect(unfavorableDaily.isPremium == true)
+        #expect(unfavorableDaily.isDiscount == false)
+        #expect(unfavorableDaily.sentiment == .unfavorable)
+        #expect(unfavorableDaily.sentiment.color == GoldTheme.down)
+        #expect(unfavorableDaily.sentiment.symbolName == "arrow.down.right")
+        #expect(unfavorableDaily.capsuleText == "较当日大盘多花 ¥36.10/g（贵 5.82%）")
+        #expect(unfavorableDaily.compactText == "多花 ¥36.10")
+
+        let unfavorableInterpolated = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 656.10, marketAnchor: 620.0, isInterpolatedMarketAnchor: true)
+        )
+        #expect(unfavorableInterpolated.sentiment == .unfavorable)
+        #expect(unfavorableInterpolated.capsuleText == "较临近交易日多花 ¥36.10/g（贵 5.82%）")
+        #expect(unfavorableInterpolated.compactText == "多花 ¥36.10")
+
+        // 2. 买便宜了（unitCost < marketAnchor）-> favorable / 红色 GoldTheme.up / arrow.up.right
+        let favorableDaily = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 615.80, marketAnchor: 620.0)
+        )
+        #expect(favorableDaily.isPremium == false)
+        #expect(favorableDaily.isDiscount == true)
+        #expect(favorableDaily.sentiment == .favorable)
+        #expect(favorableDaily.sentiment.color == GoldTheme.up)
+        #expect(favorableDaily.sentiment.symbolName == "arrow.up.right")
+        #expect(favorableDaily.capsuleText == "较当日大盘省 ¥4.20/g（省 0.68%）")
+        #expect(favorableDaily.compactText == "省 ¥4.20")
+
+        let favorableInterpolated = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 615.80, marketAnchor: 620.0, isInterpolatedMarketAnchor: true)
+        )
+        #expect(favorableInterpolated.sentiment == .favorable)
+        #expect(favorableInterpolated.capsuleText == "较临近交易日省 ¥4.20/g（省 0.68%）")
+        #expect(favorableInterpolated.compactText == "省 ¥4.20")
+
+        // 3. 持平（abs(diff) < 0.005）-> neutral / 次要灰 GoldTheme.textSecondary / equal
+        let neutralExact = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 620.0, marketAnchor: 620.0)
+        )
+        #expect(neutralExact.diff == 0)
+        #expect(neutralExact.percent == 0)
+        #expect(neutralExact.isPremium == false)
+        #expect(neutralExact.isDiscount == false)
+        #expect(neutralExact.sentiment == .neutral)
+        #expect(neutralExact.sentiment.color == GoldTheme.textSecondary)
+        #expect(neutralExact.sentiment.symbolName == "equal")
+        #expect(neutralExact.capsuleText == "与当日大盘持平 (¥0.00/g)")
+        #expect(neutralExact.compactText == "与大盘持平")
+
+        let neutralThresholdPos = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 620.004, marketAnchor: 620.0)
+        )
+        let neutralThresholdNeg = try #require(
+            ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 619.996, marketAnchor: 620.0, isInterpolatedMarketAnchor: true)
+        )
+        #expect(neutralThresholdPos.sentiment == .neutral)
+        #expect(neutralThresholdNeg.sentiment == .neutral)
+        #expect(neutralThresholdNeg.capsuleText == "与临近交易日持平 (¥0.00/g)")
+        #expect(neutralThresholdNeg.compactText == "与大盘持平")
+
+        // 4. 非法输入安全返回 nil
+        #expect(ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 620, marketAnchor: nil) == nil)
+        #expect(ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 620, marketAnchor: 0) == nil)
+        #expect(ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 620, marketAnchor: -10) == nil)
+        #expect(ChartPurchaseMarkerPresentation.spreadMetric(unitCost: 0, marketAnchor: 620) == nil)
+        #expect(ChartPurchaseMarkerPresentation.spreadMetric(unitCost: .nan, marketAnchor: 620) == nil)
+
+        // 5. inspectionTooltip 输出断言：正常交易日多花 / 正常交易日省钱 / 休市插值日吸附 / 持平 / 4 位单价
+        let fri = noon(2026, 4, 10)
+        let sat = noon(2026, 4, 11)
+        let selectedFri = MarketChartPoint(date: fri, price: 1020.0, granularity: .daily)
+
+        // 5a. 正常交易日 4 位单价买贵
+        let premiumItem = MarketHoldingOverlay.PurchaseItem(
+            id: UUID(), assetType: "金饰", brand: "周大福", grams: 10,
+            unitPrice: 1050.0, effectiveUnitCost: 1085.50, totalCost: 10855.0, laborFee: 355.0, timestamp: fri, note: ""
+        )
+        let premiumMarker = MarketHoldingOverlay.PurchaseMarker(
+            date: fri, totalGrams: 10, averageUnitPrice: 1085.50, count: 1, items: [premiumItem]
+        )
+        let premiumResolved = ChartHoldingMarkerResolver.ResolvedMarker(
+            marker: premiumMarker, scaledCost: 1085.50, marketAnchorPrice: 1020.0, scaledMarketAnchor: 1020.0,
+            isInterpolatedMarketAnchor: false
+        )
+        let premiumTooltip = ChartPurchaseMarkerPresentation.inspectionTooltip(
+            match: .init(resolved: premiumResolved, isSameDay: true, dayDistance: 0),
+            selectedPoint: selectedFri,
+            hideAmounts: false,
+            calendar: calendar
+        )
+        #expect(premiumTooltip.dateBadge == nil)
+        #expect(premiumTooltip.primaryMetric == "买入 ¥1085.50/g")
+        let premiumSpread = try #require(premiumTooltip.spread)
+        #expect(premiumSpread.sentiment == .unfavorable)
+        #expect(premiumSpread.sentiment.color == GoldTheme.down)
+        #expect(premiumSpread.compactText == "多花 ¥65.50")
+        #expect(premiumSpread.capsuleText == "较当日大盘多花 ¥65.50/g（贵 6.42%）")
+
+        // 5b. 正常交易日买便宜
+        let discountItem = MarketHoldingOverlay.PurchaseItem(
+            id: UUID(), assetType: "积存金", brand: "工商银行", grams: 15,
+            unitPrice: 1008.20, effectiveUnitCost: 1008.20, totalCost: 15123.0, laborFee: 0, timestamp: fri, note: ""
+        )
+        let discountMarker = MarketHoldingOverlay.PurchaseMarker(
+            date: fri, totalGrams: 15, averageUnitPrice: 1008.20, count: 1, items: [discountItem]
+        )
+        let discountResolved = ChartHoldingMarkerResolver.ResolvedMarker(
+            marker: discountMarker, scaledCost: 1008.20, marketAnchorPrice: 1020.0, scaledMarketAnchor: 1020.0,
+            isInterpolatedMarketAnchor: false
+        )
+        let discountTooltip = ChartPurchaseMarkerPresentation.inspectionTooltip(
+            match: .init(resolved: discountResolved, isSameDay: true, dayDistance: 0),
+            selectedPoint: selectedFri,
+            hideAmounts: false,
+            calendar: calendar
+        )
+        let discountSpread = try #require(discountTooltip.spread)
+        #expect(discountSpread.sentiment == .favorable)
+        #expect(discountSpread.sentiment.color == GoldTheme.up)
+        #expect(discountSpread.compactText == "省 ¥11.80")
+        #expect(discountSpread.capsuleText == "较当日大盘省 ¥11.80/g（省 1.16%）")
+
+        // 5c. 休市插值日吸附（周六买入吸附周五）
+        let weekendMarker = MarketHoldingOverlay.PurchaseMarker(
+            date: sat, totalGrams: 8, averageUnitPrice: 1032.0, count: 1
+        )
+        let weekendResolved = ChartHoldingMarkerResolver.ResolvedMarker(
+            marker: weekendMarker, scaledCost: 1032.0, marketAnchorPrice: 1020.0, scaledMarketAnchor: 1020.0,
+            isInterpolatedMarketAnchor: true
+        )
+        let weekendTooltip = ChartPurchaseMarkerPresentation.inspectionTooltip(
+            match: .init(resolved: weekendResolved, isSameDay: false, dayDistance: 1),
+            selectedPoint: selectedFri,
+            hideAmounts: false,
+            calendar: calendar
+        )
+        #expect(weekendTooltip.dateBadge == "04/11 买入 · 休市参考")
+        let weekendSpread = try #require(weekendTooltip.spread)
+        #expect(weekendSpread.sentiment == .unfavorable)
+        #expect(weekendSpread.compactText == "多花 ¥12.00")
+        #expect(weekendSpread.capsuleText == "较临近交易日多花 ¥12.00/g（贵 1.18%）")
+
+        // 5d. 持平场景
+        let flatMarker = MarketHoldingOverlay.PurchaseMarker(
+            date: fri, totalGrams: 5, averageUnitPrice: 1020.0, count: 1
+        )
+        let flatResolved = ChartHoldingMarkerResolver.ResolvedMarker(
+            marker: flatMarker, scaledCost: 1020.0, marketAnchorPrice: 1020.0, scaledMarketAnchor: 1020.0,
+            isInterpolatedMarketAnchor: false
+        )
+        let flatTooltip = ChartPurchaseMarkerPresentation.inspectionTooltip(
+            match: .init(resolved: flatResolved, isSameDay: true, dayDistance: 0),
+            selectedPoint: selectedFri,
+            hideAmounts: false,
+            calendar: calendar
+        )
+        let flatSpread = try #require(flatTooltip.spread)
+        #expect(flatSpread.sentiment == .neutral)
+        #expect(flatSpread.sentiment.color == GoldTheme.textSecondary)
+        #expect(flatSpread.compactText == "与大盘持平")
+        #expect(flatSpread.capsuleText == "与当日大盘持平 (¥0.00/g)")
     }
 
     @MainActor

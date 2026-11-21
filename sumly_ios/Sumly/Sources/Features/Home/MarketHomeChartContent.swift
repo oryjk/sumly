@@ -599,7 +599,7 @@ struct MarketHomeChartContent: View {
                 hideAmounts: hideAmounts
             )
         }
-        let targetWidth: CGFloat = tooltipContent == nil ? 162 : min(196, max(168, containerSize.width - 12))
+        let targetWidth: CGFloat = tooltipContent == nil ? 162 : min(204, max(172, containerSize.width - 12))
         let anchorX = plotMinX + pointXInPlot
         let preferredLeft: CGFloat = {
             let rightCandidate = anchorX + 10
@@ -648,12 +648,15 @@ struct MarketHomeChartContent: View {
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     if let spread = tooltipContent.spread {
                         Text(spread.compactText)
                             .font(.system(size: 10, weight: .semibold, design: .rounded))
                             .monospacedDigit()
-                            .foregroundStyle(spread.isPremium ? GoldTheme.up : (spread.isDiscount ? GoldTheme.down : GoldTheme.textSecondary))
+                            .foregroundStyle(spread.sentiment.color)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                     }
                 }
 
