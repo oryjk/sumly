@@ -1,5 +1,78 @@
 import SwiftUI
 
+// MARK: - 黄金温度弧形仪表盘纯几何模型
+
+struct GoldTemperatureGaugeGeometry: Sendable, Equatable {
+    static let arcSpan: Double = 0.72 // 259.2°
+    static let startAngleDegrees: Double = 140.4
+    static let minimumTrim: Double = 0.001
+
+    let score: Double
+    let compact: Bool
+
+    var size: CGFloat { compact ? 104 : 184 }
+    var lineWidth: CGFloat { compact ? 9 : 14 }
+    var strokeInset: CGFloat { lineWidth / 2 }
+    var trackRadius: CGFloat { (size - lineWidth) / 2 }
+    var outerStrokeRadius: CGFloat { trackRadius + lineWidth / 2 }
+    var center: CGPoint { CGPoint(x: size / 2, y: size / 2) }
+    var dotDiameter: CGFloat { compact ? 10 : 14 }
+    var dotBorderWidth: CGFloat { compact ? 2.5 : 3 }
+
+    var clampedScore: Double {
+        MacroPresentation.clampedTemperatureScore(score)
+    }
+
+    var rawProgress: Double {
+        clampedScore / 100.0
+    }
+
+    /// 共享的有效进度：弧线终点与指示圆点圆心使用完全一致的角度计算，避免 0° 附近错位。
+    var effectiveProgress: Double {
+        max(Self.minimumTrim / Self.arcSpan, rawProgress)
+    }
+
+    var trackTrimEnd: Double {
+        Self.arcSpan
+    }
+
+    var activeTrimEnd: Double {
+        Self.arcSpan * effectiveProgress
+    }
+
+    var startAngleDegrees: Double {
+        Self.startAngleDegrees
+    }
+
+    var trackEndAngleDegrees: Double {
+        Self.startAngleDegrees + Self.arcSpan * 360.0
+    }
+
+    var activeArcEndAngleDegrees: Double {
+        Self.startAngleDegrees + activeTrimEnd * 360.0
+    }
+
+    var indicatorAngleDegrees: Double {
+        Self.startAngleDegrees + Self.arcSpan * 360.0 * effectiveProgress
+    }
+
+    func pointOnTrack(atAngleDegrees degrees: Double) -> CGPoint {
+        let radians = degrees * .pi / 180.0
+        return CGPoint(
+            x: center.x + CGFloat(cos(radians)) * trackRadius,
+            y: center.y + CGFloat(sin(radians)) * trackRadius
+        )
+    }
+
+    var activeArcEndPoint: CGPoint {
+        pointOnTrack(atAngleDegrees: activeArcEndAngleDegrees)
+    }
+
+    var indicatorCenter: CGPoint {
+        pointOnTrack(atAngleDegrees: indicatorAngleDegrees)
+    }
+}
+
 // MARK: - 黄金温度弧形仪表盘
 
 struct GoldTemperatureGauge: View {
@@ -10,38 +83,32 @@ struct GoldTemperatureGauge: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var clamped: Double {
-        MacroPresentation.clampedTemperatureScore(score)
-    }
-
-    private var progress: Double {
-        clamped / 100.0
+    private var geometry: GoldTemperatureGaugeGeometry {
+        GoldTemperatureGaugeGeometry(score: score, compact: compact)
     }
 
     private var accentColor: Color {
         MacroPresentation.temperatureColor(for: level)
     }
 
-    private let arcSpan: Double = 0.72 // 259.2°
-    private let startDegrees: Double = 140.4
-
     var body: some View {
-        let size: CGFloat = compact ? 104 : 184
-        let lineWidth: CGFloat = compact ? 9 : 14
+        let g = geometry
 
         ZStack {
-            // 背景轨道
+            // 背景轨道（内缩 lineWidth / 2，使中线半径严格等于 trackRadius 且描边外缘不溢出边界框）
             Circle()
-                .trim(from: 0, to: arcSpan)
+                .inset(by: g.strokeInset)
+                .trim(from: 0, to: g.trackTrimEnd)
                 .stroke(
                     GoldTheme.calendarCell,
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    style: StrokeStyle(lineWidth: g.lineWidth, lineCap: .round)
                 )
-                .rotationEffect(.degrees(startDegrees))
+                .rotationEffect(.degrees(g.startAngleDegrees))
 
-            // 五段冷热渐变弧
+            // 五段冷热渐变弧（与背景轨道同圆心同中线半径，终点角度与指示圆点严格共享 effectiveProgress）
             Circle()
-                .trim(from: 0, to: max(0.01, arcSpan * progress))
+                .inset(by: g.strokeInset)
+                .trim(from: 0, to: g.activeTrimEnd)
                 .stroke(
                     AngularGradient(
                         gradient: Gradient(stops: [
@@ -58,30 +125,23 @@ struct GoldTemperatureGauge: View {
                         startAngle: .degrees(-20),
                         endAngle: .degrees(340)
                     ),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    style: StrokeStyle(lineWidth: g.lineWidth, lineCap: .round)
                 )
-                .rotationEffect(.degrees(startDegrees))
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: progress)
+                .rotationEffect(.degrees(g.startAngleDegrees))
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: g.effectiveProgress)
 
-            // 指示圆点
-            GeometryReader { proxy in
-                let radius = (min(proxy.size.width, proxy.size.height) - lineWidth) / 2
-                let angleDeg = startDegrees + (arcSpan * 360.0 * progress)
-                let rad = angleDeg * .pi / 180.0
-                let cx = proxy.size.width / 2 + CGFloat(cos(rad)) * radius
-                let cy = proxy.size.height / 2 + CGFloat(sin(rad)) * radius
-                Circle()
-                    .fill(GoldTheme.text)
-                    .frame(width: compact ? 10 : 14, height: compact ? 10 : 14)
-                    .overlay(Circle().stroke(accentColor, lineWidth: compact ? 2.5 : 3))
-                    .position(x: cx, y: cy)
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: progress)
-            }
-            .allowsHitTesting(false)
+            // 指示圆点（圆心严格落在 trackRadius 圆环中线与彩色弧线终点上）
+            Circle()
+                .fill(GoldTheme.text)
+                .frame(width: g.dotDiameter, height: g.dotDiameter)
+                .overlay(Circle().stroke(accentColor, lineWidth: g.dotBorderWidth))
+                .position(g.indicatorCenter)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: g.effectiveProgress)
+                .allowsHitTesting(false)
 
             // 中心温度读数
             VStack(spacing: compact ? 2 : 4) {
-                Text(String(format: "%.1f°", clamped))
+                Text(String(format: "%.1f°", g.clampedScore))
                     .font(.system(size: compact ? 23 : 38, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.text)
@@ -101,9 +161,9 @@ struct GoldTemperatureGauge: View {
             }
             .offset(y: compact ? 4 : 6)
         }
-        .frame(width: size, height: size)
+        .frame(width: g.size, height: g.size)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("黄金温度 \(String(format: "%.1f", clamped)) 度，\(levelLabel.isEmpty ? level.defaultLabel : levelLabel)")
+        .accessibilityLabel("黄金温度 \(String(format: "%.1f", g.clampedScore)) 度，\(levelLabel.isEmpty ? level.defaultLabel : levelLabel)")
     }
 }
 
@@ -117,48 +177,77 @@ struct GoldTemperatureCard: View {
     let onRetry: () -> Void
     let onOpenDashboard: () -> Void
 
+    @State private var showingGuideHelp = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             headerRow
 
-            if isLoading && temperature == nil {
-                loadingContent
-            } else if let report = temperature {
-                if report.hasAvailableData {
-                    loadedContent(report)
+            Group {
+                if isLoading && temperature == nil {
+                    loadingContent
+                } else if let report = temperature {
+                    if report.hasAvailableData {
+                        loadedContent(report)
+                    } else {
+                        coldStartContent(report)
+                    }
+                } else if let errorMessage {
+                    errorContent(errorMessage)
                 } else {
-                    coldStartContent(report)
+                    loadingContent
                 }
-            } else if let errorMessage {
-                errorContent(errorMessage)
-            } else {
-                loadingContent
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onOpenDashboard()
             }
         }
         .goldCard(padding: 16)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onOpenDashboard()
+        .sheet(isPresented: $showingGuideHelp) {
+            MacroTemperatureGuideSheet(
+                help: temperature?.resolvedGuideHelp ?? .defaultGuide,
+                disclaimer: temperature.map { MacroPresentation.objectiveDisclaimer(for: $0.actionGuide) } ?? MacroPresentation.defaultDisclaimer,
+                currentLevel: temperature?.hasAvailableData == true ? temperature?.level : nil
+            )
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home.macroTemperatureCard")
     }
 
     private var headerRow: some View {
-        HStack(spacing: 8) {
-            Label("黄金温度计", systemImage: "thermometer.medium")
-                .font(.subheadline.bold())
-                .foregroundStyle(GoldTheme.gold)
+        HStack(spacing: 6) {
+            Button(action: onOpenDashboard) {
+                HStack(spacing: 6) {
+                    Label("黄金温度计", systemImage: "thermometer.medium")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(GoldTheme.gold)
 
-            if let report = temperature, report.hasAvailableData {
-                let regimeTint = MacroPresentation.regimeColor(for: report.macroRegime.regime)
-                Text(report.macroRegime.label.isEmpty ? report.macroRegime.regime.defaultLabel : report.macroRegime.label)
-                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(regimeTint)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(regimeTint.opacity(0.14), in: GoldTheme.capsuleShape)
+                    if let report = temperature, report.hasAvailableData {
+                        let regimeTint = MacroPresentation.regimeColor(for: report.macroRegime.regime)
+                        Text(report.macroRegime.label.isEmpty ? report.macroRegime.regime.defaultLabel : report.macroRegime.label)
+                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(regimeTint)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(regimeTint.opacity(0.14), in: GoldTheme.capsuleShape)
+                    }
+                }
             }
+            .buttonStyle(.plain)
+
+            Button {
+                showingGuideHelp = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(GoldTheme.textSecondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("查看黄金温度计说明")
+            .accessibilityIdentifier("home.macroTemperatureGuideButton")
 
             Spacer(minLength: 4)
 
@@ -229,11 +318,9 @@ struct GoldTemperatureCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if !report.actionGuide.disclaimer.isEmpty {
-                Text(report.actionGuide.disclaimer)
-                    .font(.caption2)
-                    .foregroundStyle(GoldTheme.textFaint)
-            }
+            Text(MacroPresentation.objectiveDisclaimer(for: report.actionGuide))
+                .font(.caption2)
+                .foregroundStyle(GoldTheme.textFaint)
         }
         .padding(.vertical, 4)
     }
@@ -249,21 +336,20 @@ struct GoldTemperatureCard: View {
                 )
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(report.actionGuide.title.isEmpty ? report.levelLabel : report.actionGuide.title)
+                    Text(MacroPresentation.objectiveGuideTitle(for: report))
                         .font(.subheadline.bold())
                         .foregroundStyle(GoldTheme.text)
                         .lineLimit(2)
 
-                    Text(report.actionGuide.summary)
+                    Text(MacroPresentation.objectiveGuideSummary(for: report))
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 6) {
-                        Text("定投 \(MacroPresentation.formatDCAMultiplier(report.actionGuide.dcaMultiplier))")
+                        Text(MacroPresentation.objectiveStatusBadge(for: report.actionGuide, level: report.level))
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
                             .foregroundStyle(GoldTheme.onGold)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
@@ -308,7 +394,7 @@ struct GoldTemperatureCard: View {
                 tint: GoldTheme.text
             )
             quickStatCell(
-                title: "年线偏离",
+                title: "200日均线偏离",
                 value: MacroPresentation.formatPercent(report.actionGuide.ma200DeviationPct, signed: true),
                 tint: MacroPresentation.changeColor(for: report.actionGuide.ma200DeviationPct)
             )

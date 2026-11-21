@@ -98,11 +98,11 @@ enum MacroTemperatureLevel: String, Codable, Sendable, CaseIterable, Hashable {
 
     var defaultLabel: String {
         switch self {
-        case .freezing: "极冷低迷"
-        case .cool: "偏冷蓄势"
-        case .neutral: "温和中性"
-        case .warm: "偏热活跃"
-        case .hot: "极度火热"
+        case .freezing: "极冷区间"
+        case .cool: "偏冷区间"
+        case .neutral: "中性区间"
+        case .warm: "偏热区间"
+        case .hot: "极热区间"
         }
     }
 
@@ -131,14 +131,14 @@ enum MacroRegimeKind: String, Codable, Sendable, CaseIterable, Hashable {
 
     var defaultLabel: String {
         switch self {
-        case .tailwind: "长期宏观顺风"
+        case .tailwind: "宏观偏暖"
         case .neutral: "宏观中性"
-        case .headwind: "长期宏观逆风"
+        case .headwind: "宏观偏弱"
         }
     }
 }
 
-// MARK: - 1. 黄金温度与操作指南针
+// MARK: - 1. 黄金温度与市场状态解读
 
 struct MacroRegime: Codable, Sendable, Equatable {
     let score: Double
@@ -250,6 +250,147 @@ struct MacroTemperatureDimension: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+struct MacroTemperatureGuideLevel: Codable, Sendable, Equatable, Identifiable {
+    let range: String
+    let level: MacroTemperatureLevel
+    let label: String
+    let description: String
+
+    var id: String { "\(level.rawValue)-\(range)" }
+
+    enum CodingKeys: String, CodingKey {
+        case range, level, label, description
+    }
+
+    init(
+        range: String,
+        level: MacroTemperatureLevel,
+        label: String,
+        description: String
+    ) {
+        self.range = range
+        self.level = level
+        self.label = label
+        self.description = description
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        range = try c.decodeIfPresent(String.self, forKey: .range) ?? ""
+        level = try c.decodeIfPresent(MacroTemperatureLevel.self, forKey: .level) ?? .neutral
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? level.defaultLabel
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+    }
+}
+
+struct MacroTemperatureGuideHelp: Codable, Sendable, Equatable {
+    let title: String
+    let methodology: String
+    let levels: [MacroTemperatureGuideLevel]
+    let officialAccountName: String
+    let officialAccountNote: String
+
+    static let defaultOfficialAccountNote = "每日宏观数据复盘与模型方法论笔记同步更新于微信公众号"
+
+    static let defaultGuide = MacroTemperatureGuideHelp(
+        title: "黄金温度计说明",
+        methodology: "黄金温度计综合趋势偏离、机构持仓拥挤度、国内溢价、资金流与跨品种强弱、实际利率与美元短期共振共 5 个维度，基于近 3 年滚动历史分位加权合成（0°~100°），仅客观刻画市场冷热与拥挤程度，不构成投资建议。",
+        levels: [
+            MacroTemperatureGuideLevel(
+                range: "0° ~ 20°",
+                level: .freezing,
+                label: "极冷区间",
+                description: "情绪与交易热度处于近 3 年低位，市场关注度低迷"
+            ),
+            MacroTemperatureGuideLevel(
+                range: "20° ~ 40°",
+                level: .cool,
+                label: "偏冷区间",
+                description: "交易拥挤度较低，市场情绪尚未过热"
+            ),
+            MacroTemperatureGuideLevel(
+                range: "40° ~ 60°",
+                level: .neutral,
+                label: "中性区间",
+                description: "多空力量相对均衡，市场热度处于常态"
+            ),
+            MacroTemperatureGuideLevel(
+                range: "60° ~ 80°",
+                level: .warm,
+                label: "偏热区间",
+                description: "资金关注度升温，交投活跃度偏高"
+            ),
+            MacroTemperatureGuideLevel(
+                range: "80° ~ 100°",
+                level: .hot,
+                label: "极热区间",
+                description: "短期偏离与多头拥挤度处于高位，历史波动往往放大"
+            )
+        ],
+        officialAccountName: "",
+        officialAccountNote: ""
+    )
+
+    var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? Self.defaultGuide.title : trimmed
+    }
+
+    var displayMethodology: String {
+        let trimmed = methodology.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? Self.defaultGuide.methodology : trimmed
+    }
+
+    var displayLevels: [MacroTemperatureGuideLevel] {
+        levels.isEmpty ? Self.defaultGuide.levels : levels
+    }
+
+    var trimmedOfficialAccountName: String {
+        officialAccountName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedOfficialAccountNote: String {
+        let trimmed = officialAccountNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        return hasOfficialAccount ? Self.defaultOfficialAccountNote : ""
+    }
+
+    var hasOfficialAccount: Bool {
+        !trimmedOfficialAccountName.isEmpty
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case title, methodology, levels
+        case officialAccountName = "official_account_name"
+        case officialAccountNote = "official_account_note"
+    }
+
+    init(
+        title: String,
+        methodology: String,
+        levels: [MacroTemperatureGuideLevel],
+        officialAccountName: String = "",
+        officialAccountNote: String = ""
+    ) {
+        self.title = title
+        self.methodology = methodology
+        self.levels = levels
+        self.officialAccountName = officialAccountName
+        self.officialAccountNote = officialAccountNote
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        methodology = try c.decodeIfPresent(String.self, forKey: .methodology) ?? ""
+        levels = try c.decodeIfPresent([MacroTemperatureGuideLevel].self, forKey: .levels) ?? []
+        officialAccountName = try c.decodeIfPresent(String.self, forKey: .officialAccountName) ?? ""
+        officialAccountNote = try c.decodeIfPresent(String.self, forKey: .officialAccountNote) ?? ""
+    }
+}
+
 struct MacroTemperatureReport: Codable, Sendable, Equatable {
     let asOf: String
     let modelVersion: String
@@ -265,8 +406,13 @@ struct MacroTemperatureReport: Codable, Sendable, Equatable {
     let macroRegime: MacroRegime
     let actionGuide: MacroActionGuide
     let dimensions: [MacroTemperatureDimension]
+    let guideHelp: MacroTemperatureGuideHelp?
 
     var asOfDate: Date? { MacroDateParser.parseDay(asOf) }
+
+    var resolvedGuideHelp: MacroTemperatureGuideHelp {
+        guideHelp ?? .defaultGuide
+    }
 
     /// 后端冷启动无观测数据时返回 `as_of == ""` 且全部维度不可用。
     var hasAvailableData: Bool {
@@ -295,6 +441,7 @@ struct MacroTemperatureReport: Codable, Sendable, Equatable {
         case volatilityNote = "volatility_note"
         case macroRegime = "macro_regime"
         case actionGuide = "action_guide"
+        case guideHelp = "guide_help"
     }
 
     init(
@@ -311,7 +458,8 @@ struct MacroTemperatureReport: Codable, Sendable, Equatable {
         volatilityNote: String,
         macroRegime: MacroRegime,
         actionGuide: MacroActionGuide,
-        dimensions: [MacroTemperatureDimension]
+        dimensions: [MacroTemperatureDimension],
+        guideHelp: MacroTemperatureGuideHelp? = nil
     ) {
         self.asOf = asOf
         self.modelVersion = modelVersion
@@ -327,6 +475,7 @@ struct MacroTemperatureReport: Codable, Sendable, Equatable {
         self.macroRegime = macroRegime
         self.actionGuide = actionGuide
         self.dimensions = dimensions
+        self.guideHelp = guideHelp
     }
 
     init(from decoder: Decoder) throws {
@@ -345,6 +494,7 @@ struct MacroTemperatureReport: Codable, Sendable, Equatable {
         macroRegime = try c.decode(MacroRegime.self, forKey: .macroRegime)
         actionGuide = try c.decode(MacroActionGuide.self, forKey: .actionGuide)
         dimensions = try c.decodeIfPresent([MacroTemperatureDimension].self, forKey: .dimensions) ?? []
+        guideHelp = try c.decodeIfPresent(MacroTemperatureGuideHelp.self, forKey: .guideHelp)
     }
 }
 
@@ -1152,9 +1302,125 @@ enum MacroPresentation {
         return "\(prefix)\(String(format: "%.1f", value))°"
     }
 
-    static func formatDCAMultiplier(_ value: Double) -> String {
-        guard value.isFinite else { return "—" }
-        return String(format: "%.1fx", max(0, value))
+    static let defaultDisclaimer = "数据与温度模型基于公开宏观及市场统计测算，仅反映历史分位与市场热度状态，不构成任何投资建议。"
+
+    private static let advisoryKeywords: [String] = [
+        "操作指南针", "逢低", "加配", "定投", "加仓", "减仓", "止盈", "建仓", "追高",
+        "抄底", "知识星球", "付费社群", "建议", "适合", "划算", "黄金坑", "安全垫",
+        "分批", "仓位", "买入", "卖出", "放慢节奏", "防守", "试探"
+    ]
+
+    static func containsAdvisoryTerms(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return advisoryKeywords.contains { trimmed.contains($0) }
+    }
+
+    static func objectiveStatusLabel(for level: MacroTemperatureLevel) -> String {
+        switch level {
+        case .freezing: "近3年极低分位"
+        case .cool: "拥挤度较低"
+        case .neutral: "热度均衡"
+        case .warm: "关注度偏高"
+        case .hot: "拥挤度偏高"
+        }
+    }
+
+    /// 优先使用服务端下发的客观标签；若旧版服务端仍返回含投顾/定投字样，则前端兜底映射为客观历史分位标签。
+    static func objectiveStatusBadge(for guide: MacroActionGuide, level: MacroTemperatureLevel) -> String {
+        let trimmed = guide.dcaLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+            return trimmed
+        }
+        return objectiveStatusLabel(for: level)
+    }
+
+    static func objectiveGuideTitle(for report: MacroTemperatureReport) -> String {
+        let trimmed = report.actionGuide.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+            return trimmed
+        }
+        let levelPart = report.level.defaultLabel
+        let regimePart = report.macroRegime.regime.defaultLabel
+        switch report.level {
+        case .freezing: return "\(levelPart) · 热度处于低位"
+        case .cool: return "\(levelPart) · \(regimePart)"
+        case .neutral: return "\(levelPart) · 多空相对均衡"
+        case .warm: return "\(levelPart) · 关注度升温"
+        case .hot: return "\(levelPart) · 交易高度拥挤"
+        }
+    }
+
+    static func objectiveGuideSummary(for report: MacroTemperatureReport) -> String {
+        let trimmed = report.actionGuide.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+            return trimmed
+        }
+        let regimeSummary: String
+        switch report.macroRegime.regime {
+        case .tailwind: regimeSummary = "长期宏观底座偏暖"
+        case .neutral: regimeSummary = "长期宏观底座处于中性"
+        case .headwind: regimeSummary = "长期宏观底座偏弱"
+        }
+        switch report.level {
+        case .freezing:
+            return "五维市场热度处于近 3 年极低分位，市场关注度低迷；\(regimeSummary)。"
+        case .cool:
+            return "五维市场热度处于近 3 年偏低分位，交易拥挤度较低；\(regimeSummary)。"
+        case .neutral:
+            return "五维市场热度处于近 3 年中位区间，多空力量相对均衡；\(regimeSummary)。"
+        case .warm:
+            return "五维市场热度处于近 3 年偏高分位，资金关注度升温；\(regimeSummary)。"
+        case .hot:
+            return "五维市场热度处于近 3 年高位，短期偏离与多头拥挤度偏高；\(regimeSummary)。"
+        }
+    }
+
+    static func objectiveMa200Note(for guide: MacroActionGuide) -> String {
+        let trimmed = guide.ma200Note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+            return trimmed
+        }
+        guard let dev = guide.ma200DeviationPct, dev.isFinite else {
+            return "暂无 200 日均线偏离统计"
+        }
+        if dev > 0.05 {
+            return "高于 200 日均线 \(String(format: "%.2f", dev))%，处于年线上方"
+        } else if dev < -0.05 {
+            return "低于 200 日均线 \(String(format: "%.2f", abs(dev)))%，处于年线下方"
+        } else {
+            return "接近 200 日均线位置"
+        }
+    }
+
+    static func objectiveDomesticPremiumNote(for guide: MacroActionGuide) -> String {
+        let trimmed = guide.domesticPremiumNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+            return trimmed
+        }
+        guard let premium = guide.domesticPremiumPct, premium.isFinite else {
+            return "暂无上海金溢价统计"
+        }
+        if premium > 0.05 {
+            return "国内金价较国际溢价 +\(String(format: "%.2f", premium))%"
+        } else if premium < -0.05 {
+            return "国内金价较国际折价 \(String(format: "%.2f", premium))%"
+        } else {
+            return "国内与国际金价基本平水"
+        }
+    }
+
+    static func objectiveVolatilityNote(for report: MacroTemperatureReport) -> String {
+        let trimmed = report.volatilityNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+            return trimmed
+        }
+        return "黄金隐含波动率处于近 3 年偏高分位，历史同期短期振幅往往放大。"
+    }
+
+    static func objectiveDisclaimer(for guide: MacroActionGuide) -> String {
+        let trimmed = guide.disclaimer.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? defaultDisclaimer : trimmed
     }
 
     static func formatPercent(_ value: Double?, signed: Bool = false) -> String {

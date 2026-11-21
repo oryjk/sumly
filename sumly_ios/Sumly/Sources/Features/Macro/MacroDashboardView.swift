@@ -10,6 +10,7 @@ struct MacroDashboardView: View {
     @State private var selectedDebtDate: Date?
     @State private var selectedYieldDate: Date?
     @State private var selectedCotDate: Date?
+    @State private var showingGuideHelp = false
 
     init(
         model: MacroDashboardViewModel,
@@ -68,6 +69,13 @@ struct MacroDashboardView: View {
                 service: service
             )
         }
+        .sheet(isPresented: $showingGuideHelp) {
+            MacroTemperatureGuideSheet(
+                help: model.temperature?.resolvedGuideHelp ?? .defaultGuide,
+                disclaimer: model.temperature.map { MacroPresentation.objectiveDisclaimer(for: $0.actionGuide) } ?? MacroPresentation.defaultDisclaimer,
+                currentLevel: model.temperature?.hasAvailableData == true ? model.temperature?.level : nil
+            )
+        }
         .refreshable {
             await model.refreshAll()
         }
@@ -112,7 +120,7 @@ struct MacroDashboardView: View {
     @ViewBuilder
     private var temperatureTabContent: some View {
         if model.isLoadingTemperature && model.temperature == nil {
-            loadingCard("正在计算黄金温度与操作指南针…")
+            loadingCard("正在计算黄金温度与市场状态…")
         } else if let error = model.temperatureError, model.temperature == nil {
             errorCard(title: "黄金温度加载失败", message: error) {
                 Task { await model.loadTemperature() }
@@ -121,18 +129,16 @@ struct MacroDashboardView: View {
             if report.hasAvailableData {
                 temperatureHeroCard(report)
                 if report.volatilityAlert && !report.volatilityNote.isEmpty {
-                    volatilityAlertCard(report.volatilityNote)
+                    volatilityAlertCard(MacroPresentation.objectiveVolatilityNote(for: report))
                 }
                 macroRegimeCard(report.macroRegime)
-                actionGuideCard(report.actionGuide)
+                marketStateCard(report)
                 temperatureHistoryCard
                 dimensionsCard(report.dimensions)
-                if !report.actionGuide.disclaimer.isEmpty {
-                    Text(report.actionGuide.disclaimer)
-                        .font(.caption2)
-                        .foregroundStyle(GoldTheme.textFaint)
-                        .padding(.horizontal, 4)
-                }
+                Text(MacroPresentation.objectiveDisclaimer(for: report.actionGuide))
+                    .font(.caption2)
+                    .foregroundStyle(GoldTheme.textFaint)
+                    .padding(.horizontal, 4)
             } else {
                 emptyCard(
                     icon: "arrow.triangle.2.circlepath.circle",
@@ -225,7 +231,7 @@ struct MacroDashboardView: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(GoldTheme.up)
             VStack(alignment: .leading, spacing: 4) {
-                Text("高波动安全阀提醒")
+                Text("高波动状态提示")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.up)
                 Text(note)
@@ -293,43 +299,47 @@ struct MacroDashboardView: View {
         .goldCard(padding: 16)
     }
 
-    private func actionGuideCard(_ guide: MacroActionGuide) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center) {
-                Label("操作指南针", systemImage: "safari.fill")
+    private func marketStateCard(_ report: MacroTemperatureReport) -> some View {
+        let guide = report.actionGuide
+        let statusBadge = MacroPresentation.objectiveStatusBadge(for: guide, level: report.level)
+        let titleText = MacroPresentation.objectiveGuideTitle(for: report)
+        let summaryText = MacroPresentation.objectiveGuideSummary(for: report)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 6) {
+                Label("市场状态解读", systemImage: "safari.fill")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
-                Spacer()
-                HStack(spacing: 4) {
-                    Text("定投系数")
-                        .font(.caption2)
-                        .foregroundStyle(GoldTheme.onGold.opacity(0.8))
-                    Text(MacroPresentation.formatDCAMultiplier(guide.dcaMultiplier))
-                        .font(.caption.bold())
-                        .monospacedDigit()
-                        .foregroundStyle(GoldTheme.onGold)
+
+                Button {
+                    showingGuideHelp = true
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(GoldTheme.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(GoldTheme.gold, in: GoldTheme.capsuleShape)
+                .buttonStyle(.plain)
+                .accessibilityLabel("查看黄金温度计说明")
+                .accessibilityIdentifier("macro.dashboard.guideButton")
+
+                Spacer(minLength: 4)
+
+                Text(statusBadge)
+                    .font(.caption.bold())
+                    .foregroundStyle(GoldTheme.onGold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(GoldTheme.gold, in: GoldTheme.capsuleShape)
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(guide.title.isEmpty ? "当前观察" : guide.title)
-                        .font(.headline)
-                        .foregroundStyle(GoldTheme.text)
-                    if !guide.dcaLabel.isEmpty {
-                        Text(guide.dcaLabel)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(GoldTheme.goldSoft)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(GoldTheme.gold.opacity(0.14), in: GoldTheme.badgeShape)
-                    }
-                }
-                if !guide.summary.isEmpty {
-                    Text(guide.summary)
+                Text(titleText)
+                    .font(.headline)
+                    .foregroundStyle(GoldTheme.text)
+                if !summaryText.isEmpty {
+                    Text(summaryText)
                         .font(.footnote)
                         .foregroundStyle(GoldTheme.textSecondary)
                         .lineSpacing(3)
@@ -339,15 +349,15 @@ struct MacroDashboardView: View {
 
             HStack(spacing: 10) {
                 cushionTile(
-                    title: "年线偏离安全垫",
+                    title: "200日均线偏离",
                     value: MacroPresentation.formatPercent(guide.ma200DeviationPct, signed: true),
-                    note: guide.ma200Note,
+                    note: MacroPresentation.objectiveMa200Note(for: guide),
                     tint: MacroPresentation.changeColor(for: guide.ma200DeviationPct)
                 )
                 cushionTile(
-                    title: "国内溢价划算度",
+                    title: "上海金溢价",
                     value: MacroPresentation.formatPercent(guide.domesticPremiumPct, signed: true),
-                    note: guide.domesticPremiumNote,
+                    note: MacroPresentation.objectiveDomesticPremiumNote(for: guide),
                     tint: MacroPresentation.changeColor(for: guide.domesticPremiumPct)
                 )
             }

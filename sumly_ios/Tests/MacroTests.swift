@@ -1,5 +1,7 @@
 import Foundation
+import SwiftUI
 import Testing
+import UIKit
 @testable import Sumly
 
 // MARK: - URL 契约测试
@@ -45,24 +47,24 @@ import Testing
         "change_1d": 1.8,
         "change_5d": -2.4,
         "volatility_alert": true,
-        "volatility_note": "黄金波动率处于近3年高位，建议分批操作。",
+        "volatility_note": "黄金隐含波动率处于近3年91%高位，历史同期短期振幅往往放大。",
         "macro_regime": {
           "score": 74.2,
           "regime": "tailwind",
-          "label": "长期宏观顺风",
-          "summary": "美债高企叠加央行购金，中长期支撑稳固。"
+          "label": "宏观偏暖",
+          "summary": "美债高企叠加央行购金，中长期宏观指标偏强。"
         },
         "action_guide": {
           "signal": "reduce_pace",
-          "title": "顺风偏热，放慢节奏",
-          "summary": "长期顺风但短期偏热，定投减半、不追高。",
+          "title": "偏热区间 · 关注度升温",
+          "summary": "五维市场热度处于近3年偏高分位，资金关注度升温。",
           "dca_multiplier": 0.5,
-          "dca_label": "减半定投",
+          "dca_label": "关注度偏高",
           "ma200_deviation_pct": 14.35,
-          "ma200_note": "高于200日均线14.35%，短期安全垫偏薄。",
+          "ma200_note": "高于200日均线14.35%，处于年线上方。",
           "domestic_premium_pct": 0.42,
-          "domestic_premium_note": "国内金价小幅溢价，处于正常区间。",
-          "disclaimer": "仅供数据参考，不构成投资建议。"
+          "domestic_premium_note": "国内金价较国际溢价 +0.42%，处于常态区间。",
+          "disclaimer": "数据与温度模型基于公开宏观及市场统计测算，仅反映历史分位与市场热度状态，不构成任何投资建议。"
         },
         "dimensions": [
           {
@@ -102,7 +104,12 @@ import Testing
     #expect(report.volatilityAlert)
     #expect(report.macroRegime.regime == .tailwind)
     #expect(report.actionGuide.dcaMultiplier == 0.5)
+    #expect(report.actionGuide.dcaLabel == "关注度偏高")
     #expect(report.actionGuide.ma200DeviationPct == 14.35)
+    #expect(report.guideHelp == nil)
+    #expect(report.resolvedGuideHelp == .defaultGuide)
+    #expect(!report.resolvedGuideHelp.hasOfficialAccount)
+    #expect(report.resolvedGuideHelp.displayLevels.count == 5)
     #expect(report.dimensions.count == 2)
     #expect(report.dimensions[0].metrics["rsi14"] == 65.2)
     #expect(report.dimensions[1].available == false)
@@ -132,7 +139,7 @@ import Testing
         "macro_regime": {"score": 50, "regime": "neutral", "label": "宏观中性", "summary": ""},
         "action_guide": {
           "signal": "wait", "title": "等待同步", "summary": "", "dca_multiplier": 1.0,
-          "dca_label": "正常定投", "ma200_deviation_pct": null, "ma200_note": "",
+          "dca_label": "热度均衡", "ma200_deviation_pct": null, "ma200_note": "",
           "domestic_premium_pct": null, "domestic_premium_note": "", "disclaimer": "仅供参考"
         },
         "dimensions": [
@@ -368,11 +375,223 @@ import Testing
     #expect(MacroPresentation.formatValue(1.92, unit: "%") == "1.92%")
     #expect(MacroPresentation.formatValue(925.4, unit: "tons") == "925.4 吨")
     #expect(MacroPresentation.formatContracts(195_000, signed: true) == "+19.50 万手")
-    #expect(MacroPresentation.formatDCAMultiplier(1.5) == "1.5x")
+    #expect(MacroPresentation.objectiveStatusLabel(for: .freezing) == "近3年极低分位")
+    #expect(MacroPresentation.objectiveStatusLabel(for: .cool) == "拥挤度较低")
+    #expect(MacroPresentation.objectiveStatusLabel(for: .neutral) == "热度均衡")
+    #expect(MacroPresentation.objectiveStatusLabel(for: .warm) == "关注度偏高")
+    #expect(MacroPresentation.objectiveStatusLabel(for: .hot) == "拥挤度偏高")
 
     #expect(MacroPresentation.normalizedSparkline([]) == [])
     #expect(MacroPresentation.normalizedSparkline([10, 10, 10]) == [0.5, 0.5, 0.5])
     #expect(MacroPresentation.normalizedSparkline([10, 20, 30]) == [0.0, 0.5, 1.0])
+}
+
+@Test func decodesTemperatureGuideHelpWithOfficialAccount() throws {
+    let json = """
+    {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "as_of": "2026-11-21",
+        "model_version": "v1",
+        "degraded": false,
+        "missing_factors": [],
+        "score": 32.4,
+        "level": "cool",
+        "level_label": "偏冷区间",
+        "change_1d": -0.8,
+        "change_5d": -2.1,
+        "volatility_alert": false,
+        "volatility_note": "",
+        "macro_regime": {
+          "score": 71.0,
+          "regime": "tailwind",
+          "label": "宏观偏暖",
+          "summary": "美债与央行购金等长期宏观指标偏强。"
+        },
+        "action_guide": {
+          "signal": "cool_tailwind",
+          "title": "偏冷区间 · 宏观偏暖",
+          "summary": "五维市场热度处于近3年偏低分位，交易拥挤度较低。",
+          "dca_multiplier": 1.2,
+          "dca_label": "拥挤度较低",
+          "ma200_deviation_pct": -3.12,
+          "ma200_note": "低于200日均线3.12%，处于年线下方。",
+          "domestic_premium_pct": -0.42,
+          "domestic_premium_note": "国内金价较国际折价 -0.42%。",
+          "disclaimer": "数据与温度模型基于公开宏观及市场统计测算，仅反映历史分位与市场热度状态，不构成任何投资建议。"
+        },
+        "dimensions": [],
+        "guide_help": {
+          "title": "黄金温度计说明",
+          "methodology": "综合 5 个维度近 3 年滚动历史分位加权合成（0°~100°），仅客观刻画市场冷热与拥挤程度。",
+          "levels": [
+            { "range": "0° ~ 20°", "level": "freezing", "label": "极冷区间", "description": "情绪与交易热度处于近 3 年低位" },
+            { "range": "20° ~ 40°", "level": "cool", "label": "偏冷区间", "description": "交易拥挤度较低，市场情绪尚未过热" },
+            { "range": "40° ~ 60°", "level": "neutral", "label": "中性区间", "description": "多空力量相对均衡，市场热度处于常态" },
+            { "range": "60° ~ 80°", "level": "warm", "label": "偏热区间", "description": "资金关注度升温，交投活跃度偏高" },
+            { "range": "80° ~ 100°", "level": "hot", "label": "极热区间", "description": "短期偏离与多头拥挤度处于高位" }
+          ],
+          "official_account_name": "记金宏观笔记",
+          "official_account_note": "每日宏观数据复盘与模型方法论笔记同步更新于微信公众号"
+        }
+      }
+    }
+    """
+
+    let report = try BackendMacroService.decodeEnvelope(MacroTemperatureReport.self, from: Data(json.utf8))
+    let help = try #require(report.guideHelp)
+    #expect(help.displayTitle == "黄金温度计说明")
+    #expect(help.displayMethodology.contains("5 个维度"))
+    #expect(help.displayLevels.count == 5)
+    #expect(help.displayLevels[0].level == .freezing)
+    #expect(help.displayLevels[0].range == "0° ~ 20°")
+    #expect(help.displayLevels[4].level == .hot)
+    #expect(help.hasOfficialAccount)
+    #expect(help.trimmedOfficialAccountName == "记金宏观笔记")
+    #expect(help.trimmedOfficialAccountNote == "每日宏观数据复盘与模型方法论笔记同步更新于微信公众号")
+    #expect(report.resolvedGuideHelp == help)
+}
+
+@Test func guideHelpPartialOrEmptyFieldsUseObjectiveFallbacks() throws {
+    let partialWithAccount = MacroTemperatureGuideHelp(
+        title: "   ",
+        methodology: "",
+        levels: [],
+        officialAccountName: "  记金数据笔记  ",
+        officialAccountNote: ""
+    )
+    #expect(partialWithAccount.displayTitle == MacroTemperatureGuideHelp.defaultGuide.title)
+    #expect(partialWithAccount.displayMethodology == MacroTemperatureGuideHelp.defaultGuide.methodology)
+    #expect(partialWithAccount.displayLevels.count == 5)
+    #expect(partialWithAccount.hasOfficialAccount)
+    #expect(partialWithAccount.trimmedOfficialAccountName == "记金数据笔记")
+    #expect(partialWithAccount.trimmedOfficialAccountNote == MacroTemperatureGuideHelp.defaultOfficialAccountNote)
+
+    let emptyAccount = MacroTemperatureGuideHelp(
+        title: "黄金温度计说明",
+        methodology: "客观方法论",
+        levels: MacroTemperatureGuideHelp.defaultGuide.levels,
+        officialAccountName: "   ",
+        officialAccountNote: ""
+    )
+    #expect(!emptyAccount.hasOfficialAccount)
+    #expect(emptyAccount.trimmedOfficialAccountNote.isEmpty)
+}
+
+@Test func legacyAdvisoryActionGuideFallsBackToObjectiveCopy() throws {
+    let forbidden = [
+        "操作指南针", "逢低", "加配", "定投", "加仓", "减仓", "止盈", "建仓", "追高", "知识星球", "付费社群", "安全垫", "划算"
+    ]
+
+    let cases: [(MacroTemperatureLevel, String, String, String, String)] = [
+        (.freezing, "加倍定投", "极冷黄金坑，逢低加配", "建议双倍定投分批建仓。", "近3年极低分位"),
+        (.cool, "定投 1.2x", "偏冷蓄势，逢低加配", "市场情绪尚未拥挤，适合按计划分批配置。", "拥挤度较低"),
+        (.neutral, "正常定投", "按计划定投", "温度温和，保持正常定投节奏。", "热度均衡"),
+        (.warm, "减半定投", "顺风偏热，放慢节奏", "长期顺风但短期偏热，定投减半、不追高。", "关注度偏高"),
+        (.hot, "暂停定投", "极度火热，分批止盈", "短期拥挤度极高，建议减仓止盈。", "拥挤度偏高")
+    ]
+
+    for (level, legacyLabel, legacyTitle, legacySummary, expectedBadge) in cases {
+        let report = MacroTemperatureReport(
+            asOf: "2026-11-21",
+            modelVersion: "v1",
+            degraded: false,
+            missingFactors: [],
+            score: 50,
+            level: level,
+            levelLabel: level.defaultLabel,
+            change1d: 0.4,
+            change5d: -0.6,
+            volatilityAlert: true,
+            volatilityNote: "黄金波动率处于近3年高位，建议分批控制仓位。",
+            macroRegime: MacroRegime(score: 70, regime: .tailwind, label: "宏观偏暖", summary: "长期指标偏强"),
+            actionGuide: MacroActionGuide(
+                signal: "legacy",
+                title: legacyTitle,
+                summary: legacySummary,
+                dcaMultiplier: 1.2,
+                dcaLabel: legacyLabel,
+                ma200DeviationPct: 14.35,
+                ma200Note: "高于200日均线14.35%，短期安全垫偏薄。",
+                domesticPremiumPct: -0.42,
+                domesticPremiumNote: "国内折价较划算，适合逢低关注。",
+                disclaimer: ""
+            ),
+            dimensions: []
+        )
+
+        let badge = MacroPresentation.objectiveStatusBadge(for: report.actionGuide, level: report.level)
+        let title = MacroPresentation.objectiveGuideTitle(for: report)
+        let summary = MacroPresentation.objectiveGuideSummary(for: report)
+        let ma200Note = MacroPresentation.objectiveMa200Note(for: report.actionGuide)
+        let premiumNote = MacroPresentation.objectiveDomesticPremiumNote(for: report.actionGuide)
+        let volNote = MacroPresentation.objectiveVolatilityNote(for: report)
+        let disclaimer = MacroPresentation.objectiveDisclaimer(for: report.actionGuide)
+
+        #expect(badge == expectedBadge)
+        #expect(ma200Note.contains("14.35%"))
+        #expect(premiumNote.contains("-0.42%"))
+        #expect(!disclaimer.isEmpty)
+
+        for rendered in [badge, title, summary, ma200Note, premiumNote, volNote] {
+            for word in forbidden {
+                #expect(!rendered.contains(word), "文案「\(rendered)」不应包含违规词「\(word)」")
+            }
+        }
+    }
+}
+
+@Test func objectiveBackendCopyPassesThroughAndDefaultsAreCompliant() {
+    let report = MacroTemperatureReport(
+        asOf: "2026-11-21",
+        modelVersion: "v1",
+        degraded: false,
+        missingFactors: [],
+        score: 34.0,
+        level: .cool,
+        levelLabel: "偏冷区间",
+        change1d: -0.5,
+        change5d: -1.8,
+        volatilityAlert: false,
+        volatilityNote: "黄金隐含波动率（GVZ=28.7）处于近 3 年 91% 高位，历史同期短期振幅往往放大",
+        macroRegime: MacroRegime(score: 72, regime: .tailwind, label: "宏观偏暖", summary: "长期指标偏强"),
+        actionGuide: MacroActionGuide(
+            signal: "cool_tailwind",
+            title: "偏冷区间 · 宏观偏暖",
+            summary: "五维市场热度处于近 3 年偏低分位，同时美债与央行购金等长期宏观指标偏强，整体呈现“宏观偏暖、短线偏冷”特征。",
+            dcaMultiplier: 1.2,
+            dcaLabel: "拥挤度较低",
+            ma200DeviationPct: -3.2,
+            ma200Note: "低于 200 日均线 3.20%，处于年线下方",
+            domesticPremiumPct: -0.42,
+            domesticPremiumNote: "国内金价较国际折价 -0.42%",
+            disclaimer: "数据与温度模型基于公开宏观及市场统计测算，仅反映历史分位与市场热度状态，不构成任何投资建议。"
+        ),
+        dimensions: []
+    )
+
+    #expect(MacroPresentation.objectiveStatusBadge(for: report.actionGuide, level: report.level) == "拥挤度较低")
+    #expect(MacroPresentation.objectiveGuideTitle(for: report) == "偏冷区间 · 宏观偏暖")
+    #expect(MacroPresentation.objectiveGuideSummary(for: report) == report.actionGuide.summary)
+    #expect(MacroPresentation.objectiveMa200Note(for: report.actionGuide) == report.actionGuide.ma200Note)
+    #expect(MacroPresentation.objectiveDomesticPremiumNote(for: report.actionGuide) == report.actionGuide.domesticPremiumNote)
+    #expect(MacroPresentation.objectiveVolatilityNote(for: report) == report.volatilityNote)
+
+    let defaultHelp = MacroTemperatureGuideHelp.defaultGuide
+    #expect(!defaultHelp.hasOfficialAccount)
+    #expect(defaultHelp.displayLevels.count == 5)
+    for level in MacroTemperatureLevel.allCases {
+        #expect(!MacroPresentation.containsAdvisoryTerms(level.defaultLabel))
+        #expect(!MacroPresentation.containsAdvisoryTerms(MacroPresentation.objectiveStatusLabel(for: level)))
+    }
+    for regime in MacroRegimeKind.allCases {
+        #expect(!MacroPresentation.containsAdvisoryTerms(regime.defaultLabel))
+    }
+    for item in defaultHelp.displayLevels {
+        #expect(!MacroPresentation.containsAdvisoryTerms(item.label))
+        #expect(!MacroPresentation.containsAdvisoryTerms(item.description))
+    }
 }
 
 // MARK: - ViewModel 状态机与并发安全测试
@@ -411,16 +630,16 @@ private struct MacroFixtureData {
         volatilityNote: "",
         macroRegime: MacroRegime(score: 68, regime: .tailwind, label: "长期宏观顺风", summary: "央行购金支撑"),
         actionGuide: MacroActionGuide(
-            signal: "normal_dca",
-            title: "按计划定投",
-            summary: "温度温和，保持正常节奏。",
+            signal: "neutral_tailwind",
+            title: "中性区间 · 多空相对均衡",
+            summary: "五维市场热度处于近3年中位区间，多空力量相对均衡。",
             dcaMultiplier: 1.0,
-            dcaLabel: "正常定投",
+            dcaLabel: "热度均衡",
             ma200DeviationPct: 8.2,
-            ma200Note: "偏离温和",
+            ma200Note: "高于200日均线8.20%，处于年线上方",
             domesticPremiumPct: 0.25,
-            domesticPremiumNote: "溢价合理",
-            disclaimer: "仅供参考"
+            domesticPremiumNote: "国内金价较国际溢价 +0.25%",
+            disclaimer: "数据与温度模型基于公开宏观及市场统计测算，仅反映历史分位与市场热度状态，不构成任何投资建议。"
         ),
         dimensions: [
             MacroTemperatureDimension(key: "trend_momentum", name: "趋势与动量", weight: 0.3, score: 52, available: true, status: "neutral", summary: "温和")
@@ -603,4 +822,163 @@ private actor SuspendedDetailService: MacroServicing {
     #expect(model.latestValue == 1.85)
     #expect(model.periodMin?.value == 1.85)
     #expect(model.periodMax?.value == 1.95)
+}
+
+@MainActor @Test func renderComplianceCardAndGuideSheetForVisualReview() async throws {
+    let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first { $0.isKeyWindow }
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("sumly-compliance-ui-review")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+    let helpWithOfficial = MacroTemperatureGuideHelp(
+        title: "黄金温度计说明",
+        methodology: MacroTemperatureGuideHelp.defaultGuide.methodology,
+        levels: MacroTemperatureGuideHelp.defaultGuide.levels,
+        officialAccountName: "记金宏观笔记",
+        officialAccountNote: MacroTemperatureGuideHelp.defaultOfficialAccountNote
+    )
+
+    let report = MacroTemperatureReport(
+        asOf: "2026-11-21",
+        modelVersion: "v1",
+        degraded: false,
+        missingFactors: [],
+        score: 32.4,
+        level: .cool,
+        levelLabel: "偏冷区间",
+        change1d: -1.1,
+        change5d: -3.4,
+        volatilityAlert: false,
+        volatilityNote: "",
+        macroRegime: MacroRegime(
+            score: 74.0,
+            regime: .tailwind,
+            label: "宏观偏暖",
+            summary: "美债高企叠加央行购金，中长期宏观指标偏强。"
+        ),
+        actionGuide: MacroActionGuide(
+            signal: "cool_tailwind",
+            title: "偏冷区间 · 宏观偏暖",
+            summary: "五维市场热度处于近 3 年偏低分位，同时美债与央行购金等长期宏观指标偏强，整体呈现“宏观偏暖、短线偏冷”特征。",
+            dcaMultiplier: 1.2,
+            dcaLabel: "拥挤度较低",
+            ma200DeviationPct: -3.12,
+            ma200Note: "低于 200 日均线 3.12%，处于年线下方",
+            domesticPremiumPct: -0.42,
+            domesticPremiumNote: "国内金价较国际折价 -0.42%",
+            disclaimer: MacroPresentation.defaultDisclaimer
+        ),
+        dimensions: [
+            MacroTemperatureDimension(
+                key: "trend_momentum",
+                name: "趋势与动量",
+                weight: 0.30,
+                score: 30.5,
+                available: true,
+                status: "cool",
+                summary: "短期价格位于 200 日均线下方，动量温和。"
+            )
+        ],
+        guideHelp: helpWithOfficial
+    )
+
+    let legacyReport = MacroTemperatureReport(
+        asOf: "2026-11-21",
+        modelVersion: "v1",
+        degraded: false,
+        missingFactors: [],
+        score: 71.6,
+        level: .warm,
+        levelLabel: "偏热区间",
+        change1d: 1.8,
+        change5d: 4.2,
+        volatilityAlert: true,
+        volatilityNote: "黄金波动率处于近3年高位，建议分批控制仓位。",
+        macroRegime: MacroRegime(score: 72, regime: .tailwind, label: "宏观偏暖", summary: "长期指标偏强"),
+        actionGuide: MacroActionGuide(
+            signal: "reduce_pace",
+            title: "顺风偏热，放慢节奏",
+            summary: "长期顺风但短期偏热，定投减半、不追高。",
+            dcaMultiplier: 0.5,
+            dcaLabel: "减半定投",
+            ma200DeviationPct: 14.35,
+            ma200Note: "高于200日均线14.35%，短期安全垫偏薄。",
+            domesticPremiumPct: 0.42,
+            domesticPremiumNote: "国内溢价不划算。",
+            disclaimer: ""
+        ),
+        dimensions: []
+    )
+
+    let homeCardsPreview = ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("首页温度卡（新版服务端客观文案 + 问号入口）")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(GoldTheme.textSecondary)
+
+            GoldTemperatureCard(
+                temperature: report,
+                treasury: MacroFixtureData.sampleTreasury.summary,
+                isLoading: false,
+                errorMessage: nil,
+                onRetry: {},
+                onOpenDashboard: {}
+            )
+
+            Text("首页温度卡（旧版服务端含定投字段 → 前端自动客观化兜底）")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(GoldTheme.textSecondary)
+                .padding(.top, 4)
+
+            GoldTemperatureCard(
+                temperature: legacyReport,
+                treasury: MacroFixtureData.sampleTreasury.summary,
+                isLoading: false,
+                errorMessage: nil,
+                onRetry: {},
+                onOpenDashboard: {}
+            )
+        }
+        .padding(16)
+    }
+    .background(GoldTheme.background)
+
+    let sheetWithOfficialPreview = MacroTemperatureGuideSheet(
+        help: helpWithOfficial,
+        disclaimer: report.actionGuide.disclaimer,
+        currentLevel: report.level
+    )
+
+    let sheetWithoutOfficialPreview = MacroTemperatureGuideSheet(
+        help: .defaultGuide,
+        disclaimer: report.actionGuide.disclaimer,
+        currentLevel: report.level
+    )
+
+    let fixtures: [(String, AnyView)] = [
+        ("compliance-home-cards", AnyView(homeCardsPreview)),
+        ("compliance-guide-sheet-official", AnyView(sheetWithOfficialPreview)),
+        ("compliance-guide-sheet-default", AnyView(sheetWithoutOfficialPreview))
+    ]
+
+    for (name, rootView) in fixtures {
+        let window = UIWindow(windowScene: scene)
+        let controller = UIHostingController(
+            rootView: rootView
+                .preferredColorScheme(.dark)
+                .tint(GoldTheme.gold)
+        )
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        try await Task.sleep(for: .milliseconds(350))
+        controller.view.layoutIfNeeded()
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let path = directory.appendingPathComponent(name + ".png")
+        try #require(image.pngData()).write(to: path)
+        print("COMPLIANCE_RENDER_ARTIFACT: \(path.path)")
+        window.isHidden = true
+    }
+    previous?.makeKey()
 }
