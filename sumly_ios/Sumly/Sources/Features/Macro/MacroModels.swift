@@ -1303,6 +1303,42 @@ enum MacroPresentation {
         }
     }
 
+    static func sourceLabel(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "—" }
+        switch trimmed.lowercased() {
+        case "treasury": return "美国财政部"
+        case "fred": return "美联储经济数据（FRED）"
+        case "yahoo": return "雅虎财经"
+        case "spdr": return "SPDR 黄金 ETF 官方"
+        case "cftc": return "美国商品期货交易委员会（CFTC）"
+        case "bitcoin": return "Blockchain.com"
+        case "imf": return "国际货币基金组织（IMF）"
+        case "seedcsv": return "历史统计归档"
+        case "derived": return "公开数据衍生计算"
+        default: return trimmed
+        }
+    }
+
+    static func unitLabel(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "—" }
+        switch trimmed.lowercased() {
+        case "trillion_usd": return "万亿美元"
+        case "billion_usd": return "十亿美元"
+        case "million_usd": return "百万美元"
+        case "usd": return "美元"
+        case "percent", "%": return "百分比（%）"
+        case "index": return "指数点"
+        case "tons": return "吨"
+        case "contracts": return "手（期货合约）"
+        case "ratio": return "比值"
+        case "cny/usd": return "人民币/美元"
+        case "cny/g": return "人民币/克"
+        default: return trimmed
+        }
+    }
+
     static func factorDisplayName(_ key: String) -> String {
         switch key.lowercased() {
         case "trend_momentum": "趋势与动量"

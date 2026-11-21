@@ -386,6 +386,61 @@ import UIKit
     #expect(MacroPresentation.normalizedSparkline([10, 20, 30]) == [0.0, 0.5, 1.0])
 }
 
+@Test func sourceLabelLocalizesAllSourcesWithNormalizationAndFallbacks() {
+    let expectedSources: [(String, String)] = [
+        ("treasury", "美国财政部"),
+        ("fred", "美联储经济数据（FRED）"),
+        ("yahoo", "雅虎财经"),
+        ("spdr", "SPDR 黄金 ETF 官方"),
+        ("cftc", "美国商品期货交易委员会（CFTC）"),
+        ("bitcoin", "Blockchain.com"),
+        ("imf", "国际货币基金组织（IMF）"),
+        ("seedcsv", "历史统计归档"),
+        ("derived", "公开数据衍生计算")
+    ]
+
+    for (raw, expected) in expectedSources {
+        #expect(MacroPresentation.sourceLabel(raw) == expected)
+        #expect(MacroPresentation.sourceLabel("  \(raw.uppercased()) \n") == expected)
+    }
+
+    #expect(MacroPresentation.sourceLabel("") == "—")
+    #expect(MacroPresentation.sourceLabel("   \t\n  ") == "—")
+    #expect(MacroPresentation.sourceLabel("CustomVendor") == "CustomVendor")
+    #expect(MacroPresentation.sourceLabel("  CustomVendor  ") == "CustomVendor")
+}
+
+@Test func unitLabelLocalizesAllUnitsWithNormalizationAndFallbacks() {
+    let expectedUnits: [(String, String)] = [
+        ("trillion_usd", "万亿美元"),
+        ("billion_usd", "十亿美元"),
+        ("million_usd", "百万美元"),
+        ("usd", "美元"),
+        ("percent", "百分比（%）"),
+        ("%", "百分比（%）"),
+        ("index", "指数点"),
+        ("tons", "吨"),
+        ("contracts", "手（期货合约）"),
+        ("ratio", "比值"),
+        ("cny/usd", "人民币/美元"),
+        ("cny/g", "人民币/克")
+    ]
+
+    for (raw, expected) in expectedUnits {
+        #expect(MacroPresentation.unitLabel(raw) == expected)
+        #expect(MacroPresentation.unitLabel("  \(raw.uppercased()) \n") == expected)
+    }
+
+    // 兼容服务端 catalog.go 中的混合大小写原值
+    #expect(MacroPresentation.unitLabel("CNY/USD") == "人民币/美元")
+    #expect(MacroPresentation.unitLabel("CNY/g") == "人民币/克")
+
+    #expect(MacroPresentation.unitLabel("") == "—")
+    #expect(MacroPresentation.unitLabel("   \t\n  ") == "—")
+    #expect(MacroPresentation.unitLabel("EUR/USD") == "EUR/USD")
+    #expect(MacroPresentation.unitLabel("  EUR/USD  ") == "EUR/USD")
+}
+
 @Test func decodesTemperatureGuideHelpWithOfficialAccount() throws {
     let json = """
     {

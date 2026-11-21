@@ -423,9 +423,9 @@ struct MacroIndicatorDetailView: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(GoldTheme.text)
 
-            metaRow("数据来源", model.displaySource.isEmpty ? "—" : model.displaySource)
+            metaRow("数据来源", MacroPresentation.sourceLabel(model.displaySource))
             metaRow("更新频率", MacroPresentation.frequencyLabel(model.displayFrequency))
-            metaRow("计量单位", model.displayUnit.isEmpty ? "—" : model.displayUnit)
+            metaRow("计量单位", MacroPresentation.unitLabel(model.displayUnit))
             metaRow("黄金逻辑", MacroPresentation.goldRelationLabel(model.displayGoldRelation))
         }
         .goldCard(padding: 16)
