@@ -11,6 +11,8 @@ struct MacroDashboardView: View {
     @State private var selectedYieldDate: Date?
     @State private var selectedCotDate: Date?
     @State private var showingGuideHelp = false
+    @State private var showingTreasuryPressureGuide = false
+    @State private var showingPanoramaGuide = false
 
     init(
         model: MacroDashboardViewModel,
@@ -76,13 +78,31 @@ struct MacroDashboardView: View {
                 currentLevel: model.temperature?.hasAvailableData == true ? model.temperature?.level : nil
             )
         }
+        .sheet(isPresented: $showingTreasuryPressureGuide) {
+            MacroTreasuryPressureGuideSheet(
+                currentLevel: model.treasuryPressureModel?.level,
+                disclaimer: model.temperature.map { MacroPresentation.objectiveDisclaimer(for: $0.actionGuide) } ?? MacroPresentation.defaultDisclaimer
+            )
+        }
+        .sheet(isPresented: $showingPanoramaGuide) {
+            MacroPanoramaThermometerGuideSheet(
+                currentLevel: model.panoramaThermometerModel.level,
+                disclaimer: model.temperature.map { MacroPresentation.objectiveDisclaimer(for: $0.actionGuide) } ?? MacroPresentation.defaultDisclaimer
+            )
+        }
         .refreshable {
             await model.refreshAll()
         }
         .task {
             await model.loadDashboard()
         }
+        .task(id: model.selectedTab) {
+            if model.selectedTab == .panorama {
+                await model.ensurePanoramaDependenciesLoaded()
+            }
+        }
         .sensoryFeedback(.selection, trigger: model.selectedTab)
+        .sensoryFeedback(.selection, trigger: model.selectedSectionID)
         .sensoryFeedback(.selection, trigger: model.temperatureGoldPriceScale)
         .sensoryFeedback(.selection, trigger: model.treasuryDebtScale)
         .sensoryFeedback(.selection, trigger: model.treasuryYieldScale)
@@ -731,6 +751,12 @@ struct MacroDashboardView: View {
             }
         } else if let report = model.treasury {
             if report.hasAnyData {
+                MacroTreasuryPressureCard(
+                    model: MacroTreasuryPressureModel.make(from: report),
+                    asOf: report.asOf
+                ) {
+                    showingTreasuryPressureGuide = true
+                }
                 treasurySummaryCard(report)
                 extendedRangeBar(selected: model.treasuryRange) { chosen in
                     selectedDebtDate = nil
@@ -1098,20 +1124,45 @@ struct MacroDashboardView: View {
         .goldCard(padding: 16)
     }
 
-    // MARK: - Tab 3: 宏观全景（COT + 6 大板块）
+    // MARK: - Tab 3: 宏观全景（全景温度计 + 6 大板块 + COT）
 
     @ViewBuilder
     private var panoramaTabContent: some View {
-        cotSectionCard
+        let panoramaModel = model.panoramaThermometerModel
+        if panoramaModel.hasAnyData {
+            MacroPanoramaThermometerCard(
+                model: panoramaModel,
+                selectedSectionID: model.selectedSectionID,
+                onToggleSection: { sectionID in
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        model.toggleSectionSelection(sectionID)
+                    }
+                },
+                onClearSelection: {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        model.selectedSectionID = nil
+                    }
+                },
+                onShowGuide: {
+                    showingPanoramaGuide = true
+                }
+            )
+        }
 
         if model.isLoadingCatalog && model.catalog == nil {
+            cotSectionCard
             loadingCard("正在加载 6 大板块宏观指标…")
         } else if let error = model.catalogError, model.catalog == nil {
+            cotSectionCard
             errorCard(title: "宏观指标目录加载失败", message: error) {
                 Task { await model.loadCatalog() }
             }
         } else if let catalog = model.catalog, !catalog.sections.isEmpty {
             sectionFilterBar(sections: catalog.sections)
+
+            if model.selectedSectionID == nil {
+                cotSectionCard
+            }
 
             ForEach(model.filteredSections) { section in
                 VStack(alignment: .leading, spacing: 10) {
@@ -1142,7 +1193,12 @@ struct MacroDashboardView: View {
                     }
                 }
             }
+
+            if model.selectedSectionID != nil {
+                cotSectionCard
+            }
         } else {
+            cotSectionCard
             emptyCard(
                 icon: "square.grid.2x2",
                 title: "宏观指标目录暂为空",

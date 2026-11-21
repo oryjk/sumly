@@ -1345,3 +1345,526 @@ private actor CancellableMacroService: MacroServicing {
     }
     previous?.makeKey()
 }
+
+// MARK: - 美债财政压力表 & 宏观全景温度计套件
+
+@Suite("MacroSupplementaryGauges Tests")
+struct MacroSupplementaryGaugesTests {
+    private static let extraForbiddenWords: [String] = [
+        "偏暖", "操作指南针", "逢低", "加配", "定投", "加仓", "减仓", "止盈",
+        "建仓", "追高", "抄底", "知识星球", "付费社群", "建议", "适合", "划算",
+        "黄金坑", "安全垫", "分批", "仓位", "买入", "卖出", "放慢节奏", "防守",
+        "试探", "便宜", "贵", "买点", "卖点", "机会", "配置", "入场", "离场"
+    ]
+
+    private static func makeSummary(
+        debtToGDP: Double? = 122.8,
+        interestToRevenue: Double? = 18.4,
+        totalDebt: Double? = 36.21,
+        fiscalStress: Double? = 76.5
+    ) -> MacroTreasurySummary {
+        MacroTreasurySummary(
+            totalDebtTrillionUSD: totalDebt,
+            debtChangeYoYTrillion: 2.15,
+            debtToGDPPct: debtToGDP,
+            interestToRevenuePct: interestToRevenue,
+            fiscalStressScore: fiscalStress,
+            yield10yNominalPct: 4.32,
+            yield2yNominalPct: 4.18,
+            spread10y2yPct: 0.14,
+            yield10yRealPct: 1.92,
+            breakeven10yPct: 2.40,
+            tltPrice: 91.25,
+            goldImpactNote: ""
+        )
+    }
+
+    private static func makeIndicator(
+        id: String,
+        name: String = "测试指标",
+        section: String = "treasury_fiscal",
+        unit: String = "%",
+        relation: String = "positive",
+        latestValue: Double? = 50.0,
+        percentile3y: Double? = 60.0
+    ) -> MacroIndicatorSummary {
+        MacroIndicatorSummary(
+            seriesID: id,
+            nameZh: name,
+            section: section,
+            unit: unit,
+            frequency: "daily",
+            source: "fred",
+            goldRelation: relation,
+            plainNote: "",
+            latestDate: "2026-11-21",
+            latestValue: latestValue,
+            change5d: nil,
+            change20d: nil,
+            change3m: nil,
+            changeYoY: nil,
+            percentile3y: percentile3y,
+            sparkline: []
+        )
+    }
+
+    @Test func treasuryPressureFiveTierBoundariesAndClamping() {
+        let cases: [(Double, MacroTreasuryPressureLevel, String)] = [
+            (-10.0, .low, "压力偏低"),
+            (0.0, .low, "压力偏低"),
+            (24.99, .low, "压力偏低"),
+            (25.0, .moderate, "温和区间"),
+            (44.99, .moderate, "温和区间"),
+            (45.0, .elevated, "压力偏高"),
+            (64.99, .elevated, "压力偏高"),
+            (65.0, .high, "高压区间"),
+            (79.99, .high, "高压区间"),
+            (80.0, .extreme, "极高压力"),
+            (100.0, .extreme, "极高压力"),
+            (130.0, .extreme, "极高压力")
+        ]
+
+        for (score, expectedLevel, expectedLabel) in cases {
+            let level = MacroTreasuryPressureLevel.from(score: score)
+            #expect(level == expectedLevel)
+            #expect(level.label == expectedLabel)
+        }
+
+        #expect(MacroTreasuryPressureLevel.from(score: .nan) == .elevated)
+        #expect(MacroTreasuryPressureLevel.from(score: .infinity) == .elevated)
+    }
+
+    @Test func treasuryPressureExtractsDriversAndHandlesSummaryFallbackAndUnavailable() {
+        // 1. 优先使用 summary.fiscalStressScore 与三项核心驱动指标
+        let primary = MacroTreasuryPressureModel.make(
+            summary: Self.makeSummary(debtToGDP: 122.8, interestToRevenue: 18.4, totalDebt: 36.21, fiscalStress: 78.5),
+            cards: [Self.makeIndicator(id: "FISCAL_STRESS", unit: "index", latestValue: 50.0)]
+        )
+        #expect(primary.hasScore)
+        #expect(primary.score == 78.5)
+        #expect(primary.scoreSource == .summary)
+        #expect(primary.scoreText == "78.5")
+        #expect(primary.level == .high)
+        #expect(primary.levelLabel == "高压区间")
+        #expect(primary.drivers.count == 3)
+        #expect(primary.drivers[0].title == "债务 / GDP")
+        #expect(primary.drivers[0].valueText == "122.80%")
+        #expect(primary.drivers[1].title == "付息 / 财政收入")
+        #expect(primary.drivers[1].valueText == "18.40%")
+        #expect(primary.drivers[2].title == "国债总规模")
+        #expect(primary.drivers[2].valueText == "$36.21 万亿")
+
+        // 2. fiscalStressScore 缺失时回退到 cards 中的 FISCAL_STRESS，不编造数据
+        let cardFallback = MacroTreasuryPressureModel.make(
+            summary: Self.makeSummary(debtToGDP: nil, interestToRevenue: nil, totalDebt: nil, fiscalStress: nil),
+            cards: [
+                Self.makeIndicator(id: "fiscal_stress", unit: "index", latestValue: 84.2),
+                Self.makeIndicator(id: "GFDEGDQ188S", unit: "%", latestValue: 121.0),
+                Self.makeIndicator(id: "INTEREST_RATIO", unit: "%", latestValue: 17.5),
+                Self.makeIndicator(id: "US_DEBT_DAILY", unit: "trillion_usd", latestValue: 35.9)
+            ]
+        )
+        #expect(cardFallback.hasScore)
+        #expect(cardFallback.score == 84.2)
+        #expect(cardFallback.scoreSource == .cardFallback)
+        #expect(cardFallback.level == .extreme)
+        #expect(cardFallback.levelLabel == "极高压力")
+        #expect(cardFallback.drivers[0].valueText == "121.00%")
+        #expect(cardFallback.drivers[1].valueText == "17.50%")
+        #expect(cardFallback.drivers[2].valueText == "$35.90 万亿")
+
+        // 3. 完全缺失或非有限值时优雅降级为待同步占位，不编造数值
+        let unavailable = MacroTreasuryPressureModel.make(
+            summary: Self.makeSummary(debtToGDP: nil, interestToRevenue: nil, totalDebt: nil, fiscalStress: .nan),
+            cards: []
+        )
+        #expect(!unavailable.hasScore)
+        #expect(unavailable.score == nil)
+        #expect(unavailable.level == nil)
+        #expect(unavailable.scoreSource == .unavailable)
+        #expect(unavailable.scoreText == "—")
+        #expect(unavailable.levelLabel == "待同步")
+        #expect(unavailable.drivers.allSatisfy { !$0.hasValue && $0.valueText == "—" })
+
+        let sendableCheck: any Sendable = primary
+        #expect(sendableCheck is MacroTreasuryPressureModel)
+    }
+
+    @Test func panoramaThermometerPrefersMacroRegimeAndFallsBackToCatalogByGoldRelation() {
+        let sixSectionsCatalog = MacroIndicatorsCatalog(sections: [
+            // 1. positive 90 + negative 10 (-> 90) + neutral 30 (跳过) => 90° (极热)
+            MacroIndicatorSection(
+                id: "treasury_fiscal",
+                nameZh: "美债与财政信用",
+                description: "",
+                indicators: [
+                    Self.makeIndicator(id: "US_DEBT_DAILY", section: "treasury_fiscal", relation: "positive", percentile3y: 90.0),
+                    Self.makeIndicator(id: "USD_RESERVE_SHARE", section: "treasury_fiscal", relation: "negative", percentile3y: 10.0),
+                    Self.makeIndicator(id: "FYFR", section: "treasury_fiscal", relation: "neutral", percentile3y: 30.0)
+                ]
+            ),
+            // 2. negative 30 (-> 70) + positive 60 => 65° (偏热)
+            MacroIndicatorSection(
+                id: "opportunity_cost",
+                nameZh: "利率与机会成本",
+                description: "",
+                indicators: [
+                    Self.makeIndicator(id: "DFII10", section: "opportunity_cost", relation: "negative", percentile3y: 30.0),
+                    Self.makeIndicator(id: "T10YIE", section: "opportunity_cost", relation: "positive", percentile3y: 60.0),
+                    Self.makeIndicator(id: "DGS2", section: "opportunity_cost", relation: "negative", percentile3y: nil)
+                ]
+            ),
+            // 3. 全为 neutral => 取原始均值 (45 + 55) / 2 = 50° (中性)
+            MacroIndicatorSection(
+                id: "dollar_liquidity",
+                nameZh: "美元与流动性",
+                description: "",
+                indicators: [
+                    Self.makeIndicator(id: "DEXCHUS", section: "dollar_liquidity", relation: "neutral", percentile3y: 45.0),
+                    Self.makeIndicator(id: "NFCI", section: "dollar_liquidity", relation: "mixed", percentile3y: 55.0)
+                ]
+            ),
+            // 4. positive 30 => 30° (偏冷)
+            MacroIndicatorSection(
+                id: "inflation_growth",
+                nameZh: "通胀与增长",
+                description: "",
+                indicators: [
+                    Self.makeIndicator(id: "PCEPILFE", section: "inflation_growth", relation: "positive", percentile3y: 30.0)
+                ]
+            ),
+            // 5. negative 88 (-> 12) => 12° (极冷)
+            MacroIndicatorSection(
+                id: "official_market",
+                nameZh: "贵金属与跨资产",
+                description: "",
+                indicators: [
+                    Self.makeIndicator(id: "GOLD_SILVER_RATIO", section: "official_market", relation: "negative", percentile3y: 88.0)
+                ]
+            ),
+            // 6. 全部无 percentile3y => nil (待同步)
+            MacroIndicatorSection(
+                id: "risk_temperature",
+                nameZh: "资金情绪与波动",
+                description: "",
+                indicators: [
+                    Self.makeIndicator(id: "GVZCLS", section: "risk_temperature", relation: "positive", percentile3y: nil)
+                ]
+            )
+        ])
+
+        // 场景 A：temperature 可用时，综合读数严格同源 macroRegime.score (68.0)
+        let withTemp = MacroPanoramaThermometerModel.make(
+            temperature: MacroFixtureData.sampleTemperature,
+            catalog: sixSectionsCatalog
+        )
+        #expect(withTemp.scoreSource == .macroRegime)
+        #expect(withTemp.score == 68.0)
+        #expect(withTemp.level == .warm)
+        #expect(withTemp.levelLabel == "偏热区间")
+        #expect(withTemp.pillars.count == 6)
+
+        #expect(withTemp.pillars[0].score == 90.0)
+        #expect(withTemp.pillars[0].shortStatusLabel == "极热")
+        #expect(withTemp.pillars[0].validIndicatorCount == 2)
+        #expect(withTemp.pillars[0].totalIndicatorCount == 3)
+
+        #expect(withTemp.pillars[1].score == 65.0)
+        #expect(withTemp.pillars[1].shortStatusLabel == "偏热")
+        #expect(withTemp.pillars[1].validIndicatorCount == 2)
+
+        #expect(withTemp.pillars[2].score == 50.0)
+        #expect(withTemp.pillars[2].shortStatusLabel == "中性")
+        #expect(withTemp.pillars[2].validIndicatorCount == 2)
+
+        #expect(withTemp.pillars[3].score == 30.0)
+        #expect(withTemp.pillars[3].shortStatusLabel == "偏冷")
+
+        #expect(withTemp.pillars[4].score == 12.0)
+        #expect(withTemp.pillars[4].shortStatusLabel == "极冷")
+
+        #expect(withTemp.pillars[5].score == nil)
+        #expect(withTemp.pillars[5].shortStatusLabel == "待同步")
+        #expect(withTemp.pillars[5].validIndicatorCount == 0)
+
+        #expect(withTemp.hotPillarCount == 2)
+        #expect(withTemp.neutralPillarCount == 1)
+        #expect(withTemp.coldPillarCount == 2)
+
+        // 场景 B：temperature == nil 时，按全部方向性指标折算均值无缝兜底：
+        // directional = [90, 90, 70, 60, 30, 12] => sum = 352 / 6 = 58.666...
+        let fallback = MacroPanoramaThermometerModel.make(temperature: nil, catalog: sixSectionsCatalog)
+        #expect(fallback.scoreSource == .catalogFallback)
+        let fallbackScore = fallback.score ?? -1
+        #expect(abs(fallbackScore - (352.0 / 6.0)) < 1e-9)
+        #expect(fallback.level == .neutral)
+
+        // 场景 C：冷启动 temperature（asOf == ""）同样触发 catalog 兜底
+        let coldStart = MacroTemperatureReport(
+            asOf: "",
+            modelVersion: "v1",
+            degraded: true,
+            missingFactors: ["trend_momentum"],
+            score: 50,
+            level: .neutral,
+            levelLabel: "中性区间",
+            change1d: nil,
+            change5d: nil,
+            volatilityAlert: false,
+            volatilityNote: "",
+            macroRegime: MacroRegime(score: 50, regime: .neutral, label: "", summary: ""),
+            actionGuide: MacroFixtureData.sampleTemperature.actionGuide,
+            dimensions: []
+        )
+        let coldFallback = MacroPanoramaThermometerModel.make(temperature: coldStart, catalog: sixSectionsCatalog)
+        #expect(coldFallback.scoreSource == .catalogFallback)
+
+        // 场景 D：全部仅含 neutral 指标时，总分取 neutral 原始均值
+        let neutralOnly = MacroIndicatorsCatalog(sections: [
+            MacroIndicatorSection(
+                id: "only_neutral",
+                nameZh: "纯中性测试",
+                description: "",
+                indicators: [
+                    Self.makeIndicator(id: "N1", relation: "neutral", percentile3y: 40.0),
+                    Self.makeIndicator(id: "N2", relation: "neutral", percentile3y: 80.0)
+                ]
+            )
+        ])
+        let neutralModel = MacroPanoramaThermometerModel.make(temperature: nil, catalog: neutralOnly)
+        #expect(neutralModel.scoreSource == .catalogFallback)
+        #expect(neutralModel.score == 60.0)
+
+        // 场景 E：两者皆空时优雅降级
+        let emptyModel = MacroPanoramaThermometerModel.make(temperature: nil, catalog: nil)
+        #expect(!emptyModel.hasScore)
+        #expect(!emptyModel.hasAnyData)
+        #expect(emptyModel.scoreSource == .unavailable)
+    }
+
+    @Test func pressureGaugeGeometryMatchesInsetCircleAndIndicatorAnglesStrictly() {
+        let gDefault = MacroTreasuryPressureGaugeGeometry(score: 76.5)
+        #expect(gDefault.strokeInset == gDefault.lineWidth / 2)
+        #expect(gDefault.trackRadius == (gDefault.diameter - gDefault.lineWidth) / 2)
+        #expect(gDefault.outerStrokeRadius == gDefault.diameter / 2)
+        #expect(gDefault.center == CGPoint(x: gDefault.diameter / 2, y: gDefault.diameter / 2))
+
+        // 验证 Circle().inset(by: strokeInset) 路径半径与圆心严格吻合，且外描边不溢出边界框
+        let rect = CGRect(x: 0, y: 0, width: gDefault.diameter, height: gDefault.diameter)
+        let pathRect = Circle().inset(by: gDefault.strokeInset).path(in: rect).boundingRect
+        #expect(abs(pathRect.midX - gDefault.center.x) < 1e-6)
+        #expect(abs(pathRect.midY - gDefault.center.y) < 1e-6)
+        #expect(abs(pathRect.width / 2 - gDefault.trackRadius) < 1e-6)
+        #expect(abs(pathRect.height / 2 - gDefault.trackRadius) < 1e-6)
+
+        let strokedOuterRect = pathRect.insetBy(dx: -gDefault.lineWidth / 2, dy: -gDefault.lineWidth / 2)
+        #expect(abs(strokedOuterRect.minX - 0) < 1e-6)
+        #expect(abs(strokedOuterRect.minY - 0) < 1e-6)
+        #expect(abs(strokedOuterRect.maxX - gDefault.diameter) < 1e-6)
+        #expect(abs(strokedOuterRect.maxY - gDefault.diameter) < 1e-6)
+
+        // 起止角度对称（165° 与 375°），50 分严格在正上方 270°
+        #expect(abs(MacroTreasuryPressureGaugeGeometry.startAngleDegrees - 165.0) < 1e-12)
+        #expect(abs(MacroTreasuryPressureGaugeGeometry.endAngleDegrees - 375.0) < 1e-12)
+        #expect(abs((gDefault.startPoint.x - gDefault.center.x) + (gDefault.endPoint.x - gDefault.center.x)) < 1e-9)
+        #expect(abs(gDefault.startPoint.y - gDefault.endPoint.y) < 1e-9)
+
+        let mid = MacroTreasuryPressureGaugeGeometry(score: 50.0)
+        #expect(abs(mid.indicatorAngleDegrees - 270.0) < 1e-9)
+        #expect(abs(mid.indicatorCenter.x - mid.center.x) < 1e-9)
+        #expect(abs(mid.indicatorCenter.y - (mid.center.y - mid.trackRadius)) < 1e-9)
+
+        // 全分值扫描：指示点到圆心距离 == trackRadius，且彩色弧终点与指示点严格重合
+        let testScores: [Double?] = [nil, -15.0, 0.0, 0.05, 25.0, 45.0, 50.0, 65.0, 80.0, 100.0, 140.0, .nan, .infinity]
+        for raw in testScores {
+            let g = MacroTreasuryPressureGaugeGeometry(score: raw)
+            let dx = Double(g.indicatorCenter.x - g.center.x)
+            let dy = Double(g.indicatorCenter.y - g.center.y)
+            let distance = hypot(dx, dy)
+            #expect(abs(distance - Double(g.trackRadius)) < 1e-9)
+            #expect(abs(g.activeArcEndAngleDegrees - g.indicatorAngleDegrees) < 1e-12)
+            #expect(abs(g.activeArcEndPoint.x - g.indicatorCenter.x) < 1e-12)
+            #expect(abs(g.activeArcEndPoint.y - g.indicatorCenter.y) < 1e-12)
+            #expect(g.activeTrimEnd >= MacroTreasuryPressureGaugeGeometry.minimumTrim - 1e-12)
+            #expect(g.activeTrimEnd <= MacroTreasuryPressureGaugeGeometry.arcSpan + 1e-12)
+        }
+
+        let sendableCheck: any Sendable = gDefault
+        #expect(sendableCheck is MacroTreasuryPressureGaugeGeometry)
+    }
+
+    @Test func allSupplementaryGaugeCopyIsStrictlyFreeOfAdvisoryTerms() {
+        var allTexts: [String] = [
+            MacroTreasuryPressureGuideContent.title,
+            MacroTreasuryPressureGuideContent.badgeText,
+            MacroTreasuryPressureGuideContent.methodology,
+            MacroTreasuryPressureGuideContent.goldCreditRelationTitle,
+            MacroTreasuryPressureGuideContent.goldCreditRelationNote,
+            MacroPanoramaThermometerGuideContent.title,
+            MacroPanoramaThermometerGuideContent.badgeText,
+            MacroPanoramaThermometerGuideContent.methodology,
+            MacroPanoramaThermometerGuideContent.pillarRuleTitle,
+            MacroPanoramaThermometerGuideContent.pillarRuleNote,
+            MacroTreasuryPressureModel.objectivePlainNote(for: nil)
+        ]
+
+        for level in MacroTreasuryPressureLevel.allCases {
+            allTexts.append(level.label)
+            allTexts.append(level.rangeText)
+            allTexts.append(level.guideDescription)
+            allTexts.append(MacroTreasuryPressureModel.objectivePlainNote(for: level))
+        }
+
+        for level in MacroTemperatureLevel.allCases {
+            allTexts.append(MacroPanoramaThermometerGuideContent.levelDescription(for: level))
+        }
+
+        // 覆盖全景温度计全部总结分支（混合分化、全偏热、偏热+中性、全偏冷、偏冷+中性、全中性、仅有总分、完全空态）
+        let summaryCases: [(MacroTemperatureReport?, MacroIndicatorsCatalog?)] = [
+            (nil, nil),
+            (MacroFixtureData.sampleTemperature, nil),
+            (nil, MacroIndicatorsCatalog(sections: [
+                MacroIndicatorSection(id: "a", nameZh: "板块A", description: "", indicators: [Self.makeIndicator(id: "A", relation: "positive", percentile3y: 85)]),
+                MacroIndicatorSection(id: "b", nameZh: "板块B", description: "", indicators: [Self.makeIndicator(id: "B", relation: "positive", percentile3y: 15)])
+            ])),
+            (nil, MacroIndicatorsCatalog(sections: [
+                MacroIndicatorSection(id: "a", nameZh: "板块A", description: "", indicators: [Self.makeIndicator(id: "A", relation: "positive", percentile3y: 75)]),
+                MacroIndicatorSection(id: "b", nameZh: "板块B", description: "", indicators: [Self.makeIndicator(id: "B", relation: "positive", percentile3y: 50)])
+            ])),
+            (nil, MacroIndicatorsCatalog(sections: [
+                MacroIndicatorSection(id: "a", nameZh: "板块A", description: "", indicators: [Self.makeIndicator(id: "A", relation: "positive", percentile3y: 85)])
+            ])),
+            (nil, MacroIndicatorsCatalog(sections: [
+                MacroIndicatorSection(id: "a", nameZh: "板块A", description: "", indicators: [Self.makeIndicator(id: "A", relation: "positive", percentile3y: 25)]),
+                MacroIndicatorSection(id: "b", nameZh: "板块B", description: "", indicators: [Self.makeIndicator(id: "B", relation: "positive", percentile3y: 50)])
+            ])),
+            (nil, MacroIndicatorsCatalog(sections: [
+                MacroIndicatorSection(id: "a", nameZh: "板块A", description: "", indicators: [Self.makeIndicator(id: "A", relation: "positive", percentile3y: 18)])
+            ])),
+            (nil, MacroIndicatorsCatalog(sections: [
+                MacroIndicatorSection(id: "a", nameZh: "板块A", description: "", indicators: [Self.makeIndicator(id: "A", relation: "positive", percentile3y: 50)])
+            ]))
+        ]
+
+        for (temp, cat) in summaryCases {
+            let model = MacroPanoramaThermometerModel.make(temperature: temp, catalog: cat)
+            allTexts.append(model.levelLabel)
+            allTexts.append(model.sourceBadgeText)
+            allTexts.append(model.summaryText)
+            for pillar in model.pillars {
+                allTexts.append(pillar.shortStatusLabel)
+            }
+        }
+
+        for text in allTexts {
+            #expect(!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            #expect(!MacroPresentation.containsAdvisoryTerms(text), "文案「\(text)」包含投顾关键词")
+            for word in Self.extraForbiddenWords {
+                #expect(!text.contains(word), "文案「\(text)」包含禁用词「\(word)」")
+            }
+        }
+    }
+
+    @MainActor @Test func dashboardToggleSectionAndEnsurePanoramaDependencies() async {
+        let model = MacroDashboardViewModel(service: MockMacroService())
+        await model.ensurePanoramaDependenciesLoaded()
+        #expect(model.temperature?.macroRegime.score == 68)
+        #expect(model.catalog?.sections.count == 2)
+        #expect(model.panoramaThermometerModel.scoreSource == .macroRegime)
+        #expect(model.panoramaThermometerModel.score == 68)
+
+        model.toggleSectionSelection("treasury_fiscal")
+        #expect(model.selectedSectionID == "treasury_fiscal")
+        #expect(model.filteredSections.map(\.id) == ["treasury_fiscal"])
+
+        // 再次点击同一板块取消筛选
+        model.toggleSectionSelection("treasury_fiscal")
+        #expect(model.selectedSectionID == nil)
+        #expect(model.filteredSections.count == 2)
+    }
+
+    @MainActor @Test func renderSupplementaryGaugesAndGuideSheetsForVisualReview() async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("sumly-supplementary-gauges-review")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let pressureHigh = MacroTreasuryPressureModel.make(
+            summary: Self.makeSummary(debtToGDP: 122.8, interestToRevenue: 18.4, totalDebt: 36.21, fiscalStress: 78.5)
+        )
+        let pressureLow = MacroTreasuryPressureModel.make(
+            summary: Self.makeSummary(debtToGDP: 62.5, interestToRevenue: 7.2, totalDebt: 18.40, fiscalStress: 19.5)
+        )
+        let pressureUnavailable = MacroTreasuryPressureModel.make(
+            summary: Self.makeSummary(debtToGDP: nil, interestToRevenue: nil, totalDebt: 36.21, fiscalStress: nil)
+        )
+
+        let sixCatalog = MacroIndicatorsCatalog(sections: [
+            MacroIndicatorSection(id: "treasury_fiscal", nameZh: "美债与财政信用", description: "", indicators: [Self.makeIndicator(id: "US_DEBT_DAILY", relation: "positive", percentile3y: 92)]),
+            MacroIndicatorSection(id: "opportunity_cost", nameZh: "利率与机会成本", description: "", indicators: [Self.makeIndicator(id: "DFII10", relation: "negative", percentile3y: 35)]),
+            MacroIndicatorSection(id: "dollar_liquidity", nameZh: "美元与流动性", description: "", indicators: [Self.makeIndicator(id: "DTWEXBGS", relation: "negative", percentile3y: 48)]),
+            MacroIndicatorSection(id: "inflation_growth", nameZh: "通胀与增长", description: "", indicators: [Self.makeIndicator(id: "PCEPILFE", relation: "positive", percentile3y: 64)]),
+            MacroIndicatorSection(id: "official_market", nameZh: "贵金属与跨资产", description: "", indicators: [Self.makeIndicator(id: "GOLD_SILVER_RATIO", relation: "negative", percentile3y: 26)]),
+            MacroIndicatorSection(id: "risk_temperature", nameZh: "资金情绪与波动", description: "", indicators: [Self.makeIndicator(id: "GVZCLS", relation: "positive", percentile3y: 22)])
+        ])
+        let panoramaModel = MacroPanoramaThermometerModel.make(
+            temperature: MacroFixtureData.sampleTemperature,
+            catalog: sixCatalog
+        )
+
+        let pressureShowcase = ScrollView {
+            VStack(spacing: 14) {
+                MacroTreasuryPressureCard(model: pressureHigh, asOf: "2026-11-21", onShowGuide: {})
+                MacroTreasuryPressureCard(model: pressureLow, asOf: "2026-11-21", onShowGuide: {})
+                MacroTreasuryPressureCard(model: pressureUnavailable, asOf: "2026-11-21", onShowGuide: {})
+            }
+            .padding(18)
+        }
+        .background(GoldTheme.background)
+
+        let panoramaShowcase = ScrollView {
+            VStack(spacing: 14) {
+                MacroPanoramaThermometerCard(
+                    model: panoramaModel,
+                    selectedSectionID: "treasury_fiscal",
+                    onToggleSection: { _ in },
+                    onClearSelection: {},
+                    onShowGuide: {}
+                )
+            }
+            .padding(18)
+        }
+        .background(GoldTheme.background)
+
+        let fixtures: [(String, CGSize?, AnyView)] = [
+            ("treasury-pressure-cards", CGSize(width: 393, height: 1120), AnyView(pressureShowcase)),
+            ("panorama-thermometer-card", CGSize(width: 393, height: 520), AnyView(panoramaShowcase)),
+            ("treasury-pressure-guide-sheet", nil, AnyView(MacroTreasuryPressureGuideSheet(currentLevel: .high))),
+            ("panorama-thermometer-guide-sheet", nil, AnyView(MacroPanoramaThermometerGuideSheet(currentLevel: .warm)))
+        ]
+
+        for (name, customSize, rootView) in fixtures {
+            let window = UIWindow(windowScene: scene)
+            if let customSize {
+                window.frame = CGRect(origin: .zero, size: customSize)
+            }
+            let controller = UIHostingController(
+                rootView: rootView
+                    .preferredColorScheme(.dark)
+                    .tint(GoldTheme.gold)
+            )
+            window.rootViewController = controller
+            window.makeKeyAndVisible()
+            try await Task.sleep(for: .milliseconds(350))
+            controller.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            let path = directory.appendingPathComponent(name + ".png")
+            try #require(image.pngData()).write(to: path)
+            print("SUPPLEMENTARY_GAUGE_RENDER_ARTIFACT: \(path.path)")
+            window.isHidden = true
+        }
+        previous?.makeKey()
+    }
+}

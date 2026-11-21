@@ -54,6 +54,18 @@ final class MacroDashboardViewModel {
         return sections.filter { $0.id == selectedSectionID }
     }
 
+    var treasuryPressureModel: MacroTreasuryPressureModel? {
+        treasury.map(MacroTreasuryPressureModel.make(from:))
+    }
+
+    var panoramaThermometerModel: MacroPanoramaThermometerModel {
+        MacroPanoramaThermometerModel.make(temperature: temperature, catalog: catalog)
+    }
+
+    func toggleSectionSelection(_ sectionID: String) {
+        selectedSectionID = (selectedSectionID == sectionID) ? nil : sectionID
+    }
+
     var isRefreshingCurrentTab: Bool {
         switch selectedTab {
         case .temperature:
@@ -214,6 +226,22 @@ final class MacroDashboardViewModel {
 
     func refreshAll() async {
         await loadDashboard(force: true)
+    }
+
+    /// 切换至「宏观全景」Tab 时温和补拉缺失的温度或目录数据（不打断进行中请求，也不重复刷失败接口）。
+    func ensurePanoramaDependenciesLoaded() async {
+        let needTemp = temperature == nil && !isLoadingTemperature && temperatureError == nil
+        let needCatalog = catalog == nil && !isLoadingCatalog && catalogError == nil
+        guard needTemp || needCatalog else { return }
+
+        await withTaskGroup(of: Void.self) { group in
+            if needTemp {
+                group.addTask { await self.loadTemperature() }
+            }
+            if needCatalog {
+                group.addTask { await self.loadCatalog() }
+            }
+        }
     }
 
     // MARK: - 分项加载
