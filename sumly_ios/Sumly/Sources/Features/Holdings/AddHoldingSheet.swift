@@ -10,12 +10,13 @@ struct AddHoldingSheet: View {
     @State private var purchasePrice: HoldingPurchasePriceModel
     @State private var timestamp: Date
     @State private var advanced: Bool
-    @State private var selectedPreset: HoldingQuickPreset?
+    @State private var selectedSubPreset: HoldingAssetSubPreset?
     @State private var selectedBook: String
     @State private var quickGramPulse = 0
     @State private var receipt: HoldingReceiptSnapshot?
     private let targetBook: String?
     private let editing: HoldingRecord?
+    private let legacyPresence: HoldingAssetFormLegacyPresence
     private let onSaved: (() -> Void)?
     @AppStorage("holdings.currentBook") private var book = "默认账本"
     @AppStorage("holdings.books") private var savedBooks = "默认账本"
@@ -35,15 +36,16 @@ struct AddHoldingSheet: View {
     }
 
     init(defaultUnitPrice: Double?, date: Date = .now, book: String? = nil, marketBasis: GoldMarketBasis = .domestic,
-         editing: HoldingRecord? = nil, seed: HoldingDraft? = nil, onSaved: (() -> Void)? = nil) {
+         editing: HoldingRecord? = nil, seed: HoldingDraft? = nil, initiallyExpanded: Bool? = nil, onSaved: (() -> Void)? = nil) {
         targetBook = book
         self.editing = editing
+        self.legacyPresence = editing.map(HoldingAssetFormLegacyPresence.init(record:)) ?? .none
         self.onSaved = onSaved
         self.marketBasis = marketBasis
 
         let day = editing?.timestamp ?? min(date, .now)
         _timestamp = State(initialValue: day)
-        _advanced = State(initialValue: editing != nil)
+        _advanced = State(initialValue: initiallyExpanded ?? (editing != nil))
 
         var values: HoldingDraft
         if let editing {
@@ -117,7 +119,7 @@ struct AddHoldingSheet: View {
         .presentationBackground(GoldTheme.background)
         .sensoryFeedback(.selection, trigger: draft.assetType)
         .sensoryFeedback(.selection, trigger: quickGramPulse)
-        .sensoryFeedback(.selection, trigger: selectedPreset)
+        .sensoryFeedback(.selection, trigger: selectedSubPreset)
         .sensoryFeedback(.success, trigger: receipt?.id)
         .task(id: purchasePrice.selectedDay) {
             await purchasePrice.load()
@@ -142,7 +144,7 @@ struct AddHoldingSheet: View {
         }
     }
 
-    // MARK: - Step 1: 顶部 4 形态大视觉图标卡片
+    // MARK: - Step 1: 顶部 4 形态大视觉图标卡片 + 标题栏右侧「其他」小胶囊
 
     private var assetTypeSelector: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -151,25 +153,40 @@ struct AddHoldingSheet: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.textSecondary)
                 Spacer()
-                if draft.assetType == .other {
-                    Text("当前形态：其他")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(GoldTheme.goldSoft)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(GoldTheme.card, in: GoldTheme.capsuleShape)
-                        .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.45), lineWidth: 1))
+                let isOtherSelected = draft.assetType == .other
+                Button {
+                    selectAssetType(.other)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.grid.2x2")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text(GoldAssetType.other.rawValue)
+                            .font(.caption2.weight(isOtherSelected ? .bold : .semibold))
+                    }
+                    .foregroundStyle(isOtherSelected ? GoldTheme.onGold : GoldTheme.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        isOtherSelected ? GoldTheme.gold : GoldTheme.card,
+                        in: GoldTheme.capsuleShape
+                    )
+                    .overlay(
+                        GoldTheme.capsuleShape.strokeBorder(
+                            isOtherSelected ? GoldTheme.gold : GoldTheme.cardStroke,
+                            lineWidth: 1
+                        )
+                    )
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("切换其他黄金形态")
+                .accessibilityAddTraits(isOtherSelected ? .isSelected : [])
             }
 
             HStack(spacing: 10) {
                 ForEach(GoldAssetType.primaryQuickTypes) { type in
                     let isSelected = draft.assetType == type
                     Button {
-                        withAnimation(.easeInOut(duration: 0.16)) {
-                            selectedPreset = nil
-                            draft.selectAssetType(type, applyDefaults: editing == nil)
-                        }
+                        selectAssetType(type)
                     } label: {
                         VStack(spacing: 7) {
                             GoldAssetGlyph(type: type, size: 38, emphasized: isSelected)
@@ -438,150 +455,36 @@ struct AddHoldingSheet: View {
         )
     }
 
-    // MARK: - Step 3: 默认折叠的「补充细节」抽屉
+    // MARK: - Step 3: 默认折叠的「补充细节」抽屉（随顶部黄金形态深度联动）
 
     private var detailsDrawer: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    advanced.toggle()
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("补充细节")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(GoldTheme.text)
-                        Text("纯度、品牌、购买渠道、工费、回收规则、日期、账本、备注")
-                            .font(.caption2)
-                            .foregroundStyle(GoldTheme.textSecondary)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 6)
-                    Image(systemName: advanced ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(GoldTheme.goldSoft)
-                }
-                .padding(14)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if advanced {
-                Divider()
-                    .overlay(GoldTheme.cardStroke)
-                    .padding(.horizontal, 14)
-
-                VStack(alignment: .leading, spacing: 14) {
-                    if editing == nil {
-                        quickPresetStrip
-                    }
-
-                    // 完整 5 形态切换（包含「其他」）
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("全部形态（含其他）")
-                            .font(.caption)
-                            .foregroundStyle(GoldTheme.textSecondary)
-                        Picker("黄金类型", selection: Binding(
-                            get: { draft.assetType },
-                            set: { draft.selectAssetType($0, applyDefaults: editing == nil) }
-                        )) {
-                            ForEach(GoldAssetType.allCases) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                    }
-
-                    // 购买日期与账本
-                    DatePicker(
-                        "购买日期",
-                        selection: Binding(
-                            get: { timestamp },
-                            set: {
-                                timestamp = $0
-                                purchasePrice.selectDate($0)
-                            }
-                        ),
-                        in: ...Date.now,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    .environment(\.locale, Locale(identifier: "zh_CN"))
-                    .font(.subheadline)
-                    .foregroundStyle(GoldTheme.text)
-
-                    HStack {
-                        Text("归属账本")
-                            .font(.subheadline)
-                            .foregroundStyle(GoldTheme.text)
-                        Spacer()
-                        Menu {
-                            ForEach(availableBooks, id: \.self) { name in
-                                Button {
-                                    selectedBook = name
-                                } label: {
-                                    Label(name, systemImage: name == selectedBook ? "checkmark" : "book.closed")
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Text(selectedBook)
-                                    .font(.subheadline.weight(.medium))
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.caption2)
-                            }
-                            .foregroundStyle(GoldTheme.goldSoft)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(GoldTheme.background, in: GoldTheme.capsuleShape)
-                            .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
-                        }
-                    }
-
-                    GoldAdvancedFields(draft: $draft, recentBrands: recentBrands, recentChannels: recentChannels)
-                }
-                .padding(14)
-            }
+        HoldingDetailsDrawerView(
+            draft: $draft,
+            isExpanded: $advanced,
+            timestamp: $timestamp,
+            selectedBook: $selectedBook,
+            selectedSubPreset: $selectedSubPreset,
+            isEditing: editing != nil,
+            legacyPresence: legacyPresence,
+            availableBooks: availableBooks,
+            recentBrands: recentBrands,
+            recentChannels: recentChannels
+        ) { newDate in
+            purchasePrice.selectDate(newDate)
         }
-        .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-        .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
     }
 
-    private var quickPresetStrip: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("快捷场景预设（可选）")
-                .font(.caption)
-                .foregroundStyle(GoldTheme.textSecondary)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(HoldingQuickPreset.allCases) { preset in
-                        let active = selectedPreset == preset
-                        Button {
-                            selectedPreset = preset
-                            preset.apply(to: &draft)
-                            if draft.costMode == .unit {
-                                draft.syncCalculatedTotal()
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: preset.symbol)
-                                    .font(.caption.weight(.semibold))
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(preset.rawValue)
-                                        .font(.caption.bold())
-                                    Text(preset.subtitle)
-                                        .font(.system(size: 10))
-                                        .opacity(active ? 0.85 : 0.7)
-                                }
-                            }
-                            .foregroundStyle(active ? GoldTheme.onGold : GoldTheme.text)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(active ? GoldTheme.gold : GoldTheme.background, in: GoldTheme.subCardShape)
-                            .overlay(GoldTheme.subCardShape.strokeBorder(active ? GoldTheme.gold : GoldTheme.cardStroke, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+    private func selectAssetType(_ newType: GoldAssetType) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            if editing == nil, let previousPreset = selectedSubPreset, previousPreset.assetType != newType {
+                if draft.deductionText == previousPreset.deductionText { draft.deductionText = "" }
+                if draft.discountText == previousPreset.discountText { draft.discountText = "" }
+                if draft.fixedFeeText == previousPreset.fixedFeeText { draft.fixedFeeText = "" }
+                if let suggestedBrand = previousPreset.suggestedBrand, draft.brand == suggestedBrand { draft.brand = "" }
+                if let suggestedChannel = previousPreset.suggestedChannel, draft.channel == suggestedChannel { draft.channel = "" }
             }
+            selectedSubPreset = nil
+            draft.selectAssetType(newType, applyDefaults: editing == nil)
         }
     }
 

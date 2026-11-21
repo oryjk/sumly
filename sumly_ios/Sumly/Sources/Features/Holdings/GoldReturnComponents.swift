@@ -33,60 +33,6 @@ struct GoldInputField: View {
     }
 }
 
-struct GoldAdvancedFields: View {
-    @Binding var draft: HoldingDraft
-    var recentBrands: [String] = []
-    var recentChannels: [String] = []
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("工费方式").font(.caption).foregroundStyle(GoldTheme.textSecondary)
-                Picker("工费方式", selection: $draft.laborPerGram) {
-                    Text("按克").tag(true); Text("总额").tag(false)
-                }.pickerStyle(.segmented)
-            }
-            GoldInputField(title: draft.laborPerGram ? "工费（元/克）" : "工费总额（元）", text: $draft.laborText)
-            GoldInputField(title: "纯度（%）· 9999 = 99.99%", text: $draft.purityText)
-            GoldInputField(title: "其他成本（元）", text: $draft.otherText)
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("品牌 / 名称（可选）", text: $draft.brand).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-                if !recentBrands.isEmpty {
-                    quickTagRow(tags: recentBrands, selected: draft.brand) { draft.brand = $0 }
-                }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("购买渠道（可选）", text: $draft.channel).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-                if !recentChannels.isEmpty {
-                    quickTagRow(tags: recentChannels, selected: draft.channel) { draft.channel = $0 }
-                }
-            }
-            TextField("备注（可选）", text: $draft.note).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-            GoldRecoveryFields(draft: $draft)
-        }.foregroundStyle(GoldTheme.text)
-    }
-
-    private func quickTagRow(tags: [String], selected: String, onSelect: @escaping (String) -> Void) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(tags, id: \.self) { tag in
-                    let isChosen = selected == tag
-                    Button { onSelect(tag) } label: {
-                        Text(tag)
-                            .font(.caption)
-                            .foregroundStyle(isChosen ? GoldTheme.onGold : GoldTheme.goldSoft)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(isChosen ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.capsuleShape)
-                            .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-}
-
 struct GoldRecoveryFields: View {
     @Binding var draft: HoldingDraft
     var body: some View {

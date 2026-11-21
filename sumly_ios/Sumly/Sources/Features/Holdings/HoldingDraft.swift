@@ -157,6 +157,10 @@ struct HoldingDraft: Sendable {
         let purityLabel = purity.isEmpty ? "99.99%" : "\(purity)%"
         let laborValue = number(laborText, optional: true) ?? 0
         if laborValue <= 0 {
+            let discountValue = number(discountText, optional: true) ?? 0
+            if assetType == .accumulation && discountValue > 0 {
+                return "\(purityLabel) · 赎回\(Self.formatGrams(discountValue))%"
+            }
             return "\(purityLabel) · 0工费"
         }
         let formattedLabor = Self.formatGrams(laborValue)
