@@ -2,8 +2,11 @@ import SwiftUI
 import SwiftData
 
 struct AddHoldingSheet: View {
+    private static let detailsParamsAnchorID = "holding.details.params"
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: \HoldingRecord.timestamp, order: .reverse) private var existingRecords: [HoldingRecord]
     let marketBasis: GoldMarketBasis
     @State private var draft: HoldingDraft
@@ -13,6 +16,9 @@ struct AddHoldingSheet: View {
     @State private var selectedSubPreset: HoldingAssetSubPreset?
     @State private var selectedBook: String
     @State private var quickGramPulse = 0
+    @State private var detailsFocusPulse = 0
+    @State private var pendingExpandScroll = false
+    @State private var highlightDetailsDrawer = false
     @State private var receipt: HoldingReceiptSnapshot?
     private let targetBook: String?
     private let editing: HoldingRecord?
@@ -85,18 +91,44 @@ struct AddHoldingSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    assetTypeSelector
-                    coreInputCard
-                    detailsDrawer
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(GoldTheme.up)
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        assetTypeSelector
+                        coreInputCard {
+                            focusDetailsParameters(using: scrollProxy)
+                        }
+                        detailsDrawer
+                            .id(Self.detailsParamsAnchorID)
+                            .overlay {
+                                GoldTheme.holdingsCardShape
+                                    .strokeBorder(
+                                        GoldTheme.gold.opacity(highlightDetailsDrawer ? 0.72 : 0),
+                                        lineWidth: 1.5
+                                    )
+                                    .allowsHitTesting(false)
+                            }
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.footnote)
+                                .foregroundStyle(GoldTheme.up)
+                        }
                     }
+                    .padding(16)
                 }
-                .padding(16)
+                .task(id: detailsFocusPulse) {
+                    guard detailsFocusPulse > 0 else { return }
+                    if pendingExpandScroll {
+                        pendingExpandScroll = false
+                        try? await Task.sleep(for: .milliseconds(reduceMotion ? 30 : 80))
+                        guard !Task.isCancelled else { return }
+                        scrollToDetailsParameters(using: scrollProxy)
+                    }
+                    setDetailsHighlight(true)
+                    try? await Task.sleep(for: .milliseconds(750))
+                    guard !Task.isCancelled else { return }
+                    setDetailsHighlight(false)
+                }
             }
             .background(GoldTheme.background)
             .goldKeyboardDismissable()
@@ -119,11 +151,17 @@ struct AddHoldingSheet: View {
         .presentationBackground(GoldTheme.background)
         .sensoryFeedback(.selection, trigger: draft.assetType)
         .sensoryFeedback(.selection, trigger: quickGramPulse)
+        .sensoryFeedback(.selection, trigger: detailsFocusPulse)
         .sensoryFeedback(.selection, trigger: selectedSubPreset)
         .sensoryFeedback(.success, trigger: receipt?.id)
         .task(id: purchasePrice.selectedDay) {
             await purchasePrice.load()
             syncReferencePriceIntoDraft()
+        }
+        .onChange(of: advanced) { _, isExpanded in
+            if !isExpanded {
+                setDetailsHighlight(false)
+            }
         }
         .onChange(of: purchasePrice.priceText) {
             syncReferencePriceIntoDraft()
@@ -236,7 +274,7 @@ struct AddHoldingSheet: View {
 
     // MARK: - Step 2: 核心克重 + 一键克重胶囊 + 单价/总价实时联动卡片
 
-    private var coreInputCard: some View {
+    private func coreInputCard(onFocusDetails: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             // 克重标题与当前默认参数标签
             HStack(alignment: .center) {
@@ -245,7 +283,7 @@ struct AddHoldingSheet: View {
                     .foregroundStyle(GoldTheme.textSecondary)
                 Spacer(minLength: 6)
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { advanced = true }
+                    onFocusDetails()
                 } label: {
                     HStack(spacing: 4) {
                         Text(draft.defaultsSummaryText)
@@ -260,6 +298,7 @@ struct AddHoldingSheet: View {
                     .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.28), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("展开并定位到纯度与费用细节")
             }
 
             // 大号克重输入框
@@ -471,6 +510,45 @@ struct AddHoldingSheet: View {
             recentChannels: recentChannels
         ) { newDate in
             purchasePrice.selectDate(newDate)
+        }
+    }
+
+    private func focusDetailsParameters(using proxy: ScrollViewProxy) {
+        let wasCollapsed = !advanced
+        if wasCollapsed {
+            if reduceMotion {
+                advanced = true
+            } else {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    advanced = true
+                }
+            }
+        }
+        pendingExpandScroll = wasCollapsed
+        detailsFocusPulse += 1
+
+        if !wasCollapsed {
+            scrollToDetailsParameters(using: proxy)
+        }
+    }
+
+    private func scrollToDetailsParameters(using proxy: ScrollViewProxy) {
+        if reduceMotion {
+            proxy.scrollTo(Self.detailsParamsAnchorID, anchor: .top)
+        } else {
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(Self.detailsParamsAnchorID, anchor: .top)
+            }
+        }
+    }
+
+    private func setDetailsHighlight(_ highlighted: Bool) {
+        if reduceMotion {
+            highlightDetailsDrawer = highlighted
+        } else {
+            withAnimation(.easeOut(duration: highlighted ? 0.18 : 0.35)) {
+                highlightDetailsDrawer = highlighted
+            }
         }
     }
 
