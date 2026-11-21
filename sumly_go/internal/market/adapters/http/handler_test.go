@@ -17,6 +17,9 @@ type marketStub struct{}
 func (marketStub) GetGoldRealtime(context.Context) ([]domain.RealtimePoint, int, error) {
 	return nil, 5, nil
 }
+func (marketStub) GetGoldRealtimeWindow(context.Context, domain.RealtimeWindowMode) (domain.GoldWindow, error) {
+	return domain.GoldWindow{IntervalSeconds: 5, WindowSeconds: 1200}, nil
+}
 
 func (marketStub) GetGoldQuote(context.Context) (domain.GoldQuote, error) {
 	return domain.GoldQuote{}, nil

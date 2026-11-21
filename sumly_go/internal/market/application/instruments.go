@@ -12,6 +12,7 @@ type InstrumentQueries interface {
 	GetGoldQuote(context.Context) (domain.GoldQuote, error)
 	GetGoldDailyKLines(context.Context) ([]domain.DailyBar, error)
 	GetGoldRealtime(context.Context) ([]domain.RealtimePoint, int, error)
+	GetGoldRealtimeWindow(context.Context, domain.RealtimeWindowMode) (domain.GoldWindow, error)
 }
 
 type InstrumentMarket struct {
@@ -55,15 +56,27 @@ func (s *Instruments) Daily(ctx context.Context, id string) (domain.Instrument, 
 	return m.Instrument, p, e
 }
 func (s *Instruments) Realtime(ctx context.Context, id string) (domain.Instrument, domain.GoldWindow, error) {
+	return s.RealtimeWindow(ctx, id, domain.RealtimeWindowMode20m)
+}
+
+func (s *Instruments) RealtimeWindow(ctx context.Context, id string, mode domain.RealtimeWindowMode) (domain.Instrument, domain.GoldWindow, error) {
 	m, e := s.lookup(id)
 	if e != nil {
 		return domain.Instrument{}, domain.GoldWindow{}, e
 	}
-	points, interval, e := m.Service.GetGoldRealtime(ctx)
-	window := domain.GoldWindow{Points: points, IntervalSeconds: interval, WindowSeconds: int(RealtimeWindow.Seconds())}
-	if len(points) > 0 {
-		window.End = points[len(points)-1].Time
-		window.Start = window.End.Add(-RealtimeWindow)
+	if mode != domain.RealtimeWindowModeSession {
+		points, interval, e := m.Service.GetGoldRealtime(ctx)
+		window := domain.GoldWindow{Points: points, IntervalSeconds: interval, WindowSeconds: int(RealtimeWindow.Seconds())}
+		if len(points) > 0 {
+			window.End = points[len(points)-1].Time
+			window.Start = window.End.Add(-RealtimeWindow)
+		}
+		return m.Instrument, window, e
 	}
+	if q, ok := m.Service.(*GoldQuery); ok {
+		window, e := q.getGoldRealtimeWindowForInstrument(ctx, m.Instrument, mode)
+		return m.Instrument, window, e
+	}
+	window, e := m.Service.GetGoldRealtimeWindow(ctx, mode)
 	return m.Instrument, window, e
 }

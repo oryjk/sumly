@@ -37,3 +37,26 @@ func TestClampSourceTimeAndValidRealtimeSkewTolerance(t *testing.T) {
 		t.Fatalf("expected >MaxClockSkew not silently clamped, got %v", got)
 	}
 }
+
+func TestParseRealtimeWindowMode(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want RealtimeWindowMode
+		ok   bool
+	}{
+		{"", RealtimeWindowMode20m, true},
+		{"   ", RealtimeWindowMode20m, true},
+		{"20m", RealtimeWindowMode20m, true},
+		{"20M", RealtimeWindowMode20m, true},
+		{"session", RealtimeWindowModeSession, true},
+		{" SESSION ", RealtimeWindowModeSession, true},
+		{"1h", "", false},
+		{"day", "", false},
+	}
+	for _, tc := range cases {
+		got, ok := ParseRealtimeWindowMode(tc.raw)
+		if ok != tc.ok || got != tc.want {
+			t.Errorf("ParseRealtimeWindowMode(%q) = (%q, %v), want (%q, %v)", tc.raw, got, ok, tc.want, tc.ok)
+		}
+	}
+}

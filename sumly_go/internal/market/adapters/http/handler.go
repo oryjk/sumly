@@ -6,15 +6,24 @@ import (
 
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 	sharedhttpapi "gitee.com/oryjk/sumly/sumly_go/internal/shared/adapters/httpapi"
+	sharederror "gitee.com/oryjk/sumly/sumly_go/internal/shared/domain"
 	"github.com/gin-gonic/gin"
 )
 
 // The HTTP contract uses Beijing time regardless of the database scan location.
 var beijingZone = time.FixedZone("CST", 8*3600)
 
+func formatBeijingRFC3339(t time.Time) string {
+	if t.IsZero() {
+		return t.Format(time.RFC3339)
+	}
+	return t.In(beijingZone).Format(time.RFC3339)
+}
+
 // GoldMarketUseCase 由 application 层实现；行情是公开数据，无需登录。
 type GoldMarketUseCase interface {
 	GetGoldRealtime(context.Context) ([]domain.RealtimePoint, int, error)
+	GetGoldRealtimeWindow(context.Context, domain.RealtimeWindowMode) (domain.GoldWindow, error)
 	GetGoldIntraday(ctx context.Context) ([]domain.IntradayPoint, error)
 	GetGoldQuote(ctx context.Context) (domain.GoldQuote, error)
 	GetGoldDailyKLines(ctx context.Context) ([]domain.DailyBar, error)
@@ -123,11 +132,35 @@ func (h *Handler) GoldIntraday(c *gin.Context) {
 }
 
 // GoldRealtime 返回最后可用窗口，interval_seconds 标明实际五秒采样或分钟回退。
+// 支持可选查询参数 ?window=20m（默认，向后兼容老客户端）与 ?window=session（国际最近 6 小时完整分时）。
 func (h *Handler) GoldRealtime(c *gin.Context) {
-	points, interval, err := h.goldMarket.GetGoldRealtime(c.Request.Context())
-	if err != nil {
-		sharedhttpapi.WriteError(c, err)
+	mode, ok := domain.ParseRealtimeWindowMode(c.Query("window"))
+	if !ok {
+		sharedhttpapi.WriteError(c, sharederror.New(sharederror.KindValidation, "invalid window; allowed: 20m, session"))
 		return
+	}
+	var (
+		points        []domain.RealtimePoint
+		interval      int
+		windowSeconds int
+		err           error
+	)
+	if mode == domain.RealtimeWindowModeSession {
+		window, winErr := h.goldMarket.GetGoldRealtimeWindow(c.Request.Context(), mode)
+		if winErr != nil {
+			sharedhttpapi.WriteError(c, winErr)
+			return
+		}
+		points = window.Points
+		interval = window.IntervalSeconds
+		windowSeconds = window.WindowSeconds
+	} else {
+		points, interval, err = h.goldMarket.GetGoldRealtime(c.Request.Context())
+		if err != nil {
+			sharedhttpapi.WriteError(c, err)
+			return
+		}
+		windowSeconds = int(domain.RealtimeWindow.Seconds())
 	}
 	type pointResponse struct {
 		Time       string  `json:"time"`
@@ -140,9 +173,13 @@ func (h *Handler) GoldRealtime(c *gin.Context) {
 		IntervalSeconds int             `json:"interval_seconds"`
 		WindowSeconds   int             `json:"window_seconds"`
 		Points          []pointResponse `json:"points"`
-	}{Symbol: "XAUUSD", Unit: "CNY/g", IntervalSeconds: interval, WindowSeconds: 1200, Points: make([]pointResponse, 0)}
+	}{Symbol: "XAUUSD", Unit: "CNY/g", IntervalSeconds: interval, WindowSeconds: windowSeconds, Points: make([]pointResponse, 0, len(points))}
 	for _, p := range points {
-		response.Points = append(response.Points, pointResponse{Time: p.Time.Format(time.RFC3339), SourceTime: p.SourceTime.Format(time.RFC3339), Price: p.Price})
+		response.Points = append(response.Points, pointResponse{
+			Time:       formatBeijingRFC3339(p.Time),
+			SourceTime: formatBeijingRFC3339(p.SourceTime),
+			Price:      p.Price,
+		})
 	}
 	sharedhttpapi.WriteSuccess(c, response)
 }

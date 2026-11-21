@@ -6,6 +6,7 @@ import (
 
 	"gitee.com/oryjk/sumly/sumly_go/internal/market/domain"
 	shared "gitee.com/oryjk/sumly/sumly_go/internal/shared/adapters/httpapi"
+	sharederror "gitee.com/oryjk/sumly/sumly_go/internal/shared/domain"
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,6 +15,7 @@ type InstrumentsUseCase interface {
 	Quote(context.Context, string) (domain.Instrument, domain.GoldQuote, error)
 	Daily(context.Context, string) (domain.Instrument, []domain.DailyBar, error)
 	Realtime(context.Context, string) (domain.Instrument, domain.GoldWindow, error)
+	RealtimeWindow(context.Context, string, domain.RealtimeWindowMode) (domain.Instrument, domain.GoldWindow, error)
 }
 type InstrumentsHandler struct{ service InstrumentsUseCase }
 
@@ -72,7 +74,21 @@ func (h *InstrumentsHandler) Daily(c *gin.Context) {
 	shared.WriteSuccess(c, gin.H{"instrument": instrumentDTO(i), "unit": i.Unit, "bars": list})
 }
 func (h *InstrumentsHandler) Realtime(c *gin.Context) {
-	i, window, e := h.service.Realtime(c.Request.Context(), c.Param("instrument"))
+	mode, ok := domain.ParseRealtimeWindowMode(c.Query("window"))
+	if !ok {
+		shared.WriteError(c, sharederror.New(sharederror.KindValidation, "invalid window; allowed: 20m, session"))
+		return
+	}
+	var (
+		i      domain.Instrument
+		window domain.GoldWindow
+		e      error
+	)
+	if mode == domain.RealtimeWindowModeSession {
+		i, window, e = h.service.RealtimeWindow(c.Request.Context(), c.Param("instrument"), mode)
+	} else {
+		i, window, e = h.service.Realtime(c.Request.Context(), c.Param("instrument"))
+	}
 	if e != nil {
 		shared.WriteError(c, e)
 		return
@@ -84,12 +100,16 @@ func (h *InstrumentsHandler) Realtime(c *gin.Context) {
 	}
 	list := make([]pointDTO, 0, len(window.Points))
 	for _, p := range window.Points {
-		list = append(list, pointDTO{p.Time.Format(time.RFC3339), p.SourceTime.Format(time.RFC3339), p.Price})
+		list = append(list, pointDTO{
+			Time:       formatBeijingRFC3339(p.Time),
+			SourceTime: formatBeijingRFC3339(p.SourceTime),
+			Price:      p.Price,
+		})
 	}
 	var start, end string
 	if !window.End.IsZero() {
-		start = window.Start.Format(time.RFC3339)
-		end = window.End.Format(time.RFC3339)
+		start = formatBeijingRFC3339(window.Start)
+		end = formatBeijingRFC3339(window.End)
 	}
 	shared.WriteSuccess(c, gin.H{"instrument": instrumentDTO(i), "unit": i.Unit, "interval_seconds": window.IntervalSeconds, "window_seconds": window.WindowSeconds, "window_start": start, "window_end": end, "points": list})
 }
