@@ -21,6 +21,7 @@ struct MacroTemperatureGuideSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 11) {
+                    dualHorizonOverviewCard
                     methodologyCard
                     levelsCard
 
@@ -60,6 +61,60 @@ struct MacroTemperatureGuideSheet: View {
         }
     }
 
+    // MARK: - 两套指标如何区分
+
+    private var dualHorizonOverviewCard: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label("两套指标如何区分", systemImage: "rectangle.split.2x1")
+                .font(.subheadline.bold())
+                .foregroundStyle(GoldTheme.gold)
+
+            VStack(alignment: .leading, spacing: 7) {
+                horizonGuideRow(
+                    dotColor: GoldTheme.tempCool,
+                    title: "短期 · 交易热度（0~100°）",
+                    detail: "衡量近期交易冷热、趋势偏离与市场拥挤度。"
+                )
+
+                horizonGuideRow(
+                    dotColor: GoldTheme.gold,
+                    title: "长期 · 宏观背景（0~100分）",
+                    detail: "衡量美债规模、财政压力、央行购金与实际利率等大环境强弱。"
+                )
+            }
+
+            Text("两者衡量不同时间尺度，走势可能同向也可能错位。")
+                .font(.caption2)
+                .foregroundStyle(GoldTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .goldCard(padding: 14)
+        .accessibilityIdentifier("macro.guideSheet.dualHorizonOverviewCard")
+    }
+
+    private func horizonGuideRow(dotColor: Color, title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 7, height: 7)
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(GoldTheme.text)
+            }
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(GoldTheme.textSecondary)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(GoldTheme.background, in: GoldTheme.subCardShape)
+        .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+    }
+
     // MARK: - 计算方法论
 
     private var methodologyCard: some View {
@@ -92,7 +147,7 @@ struct MacroTemperatureGuideSheet: View {
     private var levelsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("五档温度区间", systemImage: "thermometer.medium")
+                Label("短期温度五档区间", systemImage: "thermometer.medium")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
                 Spacer()

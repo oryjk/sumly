@@ -127,12 +127,13 @@ struct MacroDashboardView: View {
             }
         } else if let report = model.temperature {
             if report.hasAvailableData {
-                temperatureHeroCard(report)
-                if report.volatilityAlert && !report.volatilityNote.isEmpty {
+                let dual = MacroPresentation.dualHorizonSummary(for: report)
+                temperatureHeroCard(report, dual: dual)
+                if report.volatilityAlert {
                     volatilityAlertCard(MacroPresentation.objectiveVolatilityNote(for: report))
                 }
-                macroRegimeCard(report.macroRegime)
-                marketStateCard(report)
+                macroRegimeCard(dual)
+                dualHorizonComparisonCard(report, dual: dual)
                 temperatureHistoryCard
                 dimensionsCard(report.dimensions)
                 Text(MacroPresentation.objectiveDisclaimer(for: report.actionGuide))
@@ -154,19 +155,45 @@ struct MacroDashboardView: View {
         }
     }
 
-    private func temperatureHeroCard(_ report: MacroTemperatureReport) -> some View {
-        VStack(spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("黄金市场温度")
-                        .font(.headline)
-                        .foregroundStyle(GoldTheme.text)
+    private func temperatureHeroCard(_ report: MacroTemperatureReport, dual: MacroDualHorizonSummary) -> some View {
+        let shortTint = MacroPresentation.temperatureColor(for: dual.shortTermLevel)
+        return VStack(spacing: 14) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text("黄金温度计")
+                            .font(.headline)
+                            .foregroundStyle(GoldTheme.text)
+
+                        Text("短期 · 交易热度")
+                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(shortTint)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(shortTint.opacity(0.14), in: GoldTheme.capsuleShape)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+
+                        Button {
+                            showingGuideHelp = true
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(GoldTheme.textSecondary)
+                                .frame(width: 26, height: 26)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("查看黄金温度计说明")
+                        .accessibilityIdentifier("macro.dashboard.guideButton")
+                    }
+
                     Text("截至 \(MacroDateParser.displayDay(report.asOf)) · 模型 \(report.modelVersion)")
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 if report.degraded {
                     Label("降级模式", systemImage: "exclamationmark.circle.fill")
                         .font(.caption2.weight(.semibold))
@@ -180,10 +207,18 @@ struct MacroDashboardView: View {
             GoldTemperatureGauge(
                 score: report.score,
                 level: report.level,
-                levelLabel: report.levelLabel,
+                levelLabel: dual.shortTermLevelLabel,
                 compact: false
             )
             .padding(.top, 2)
+
+            Text(dual.shortTermDetailNote)
+                .font(.footnote)
+                .foregroundStyle(GoldTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
 
             HStack(spacing: 10) {
                 deltaChip(title: "较前1日", value: report.change1d)
@@ -247,16 +282,16 @@ struct MacroDashboardView: View {
         .overlay(GoldTheme.cardShape.strokeBorder(GoldTheme.up.opacity(0.32), lineWidth: 1))
     }
 
-    private func macroRegimeCard(_ regime: MacroRegime) -> some View {
-        let tint = MacroPresentation.regimeColor(for: regime.regime)
-        let clamped = MacroPresentation.clampedTemperatureScore(regime.score)
+    private func macroRegimeCard(_ dual: MacroDualHorizonSummary) -> some View {
+        let tint = MacroPresentation.regimeColor(for: dual.longTermRegime)
+        let clamped = dual.longTermScore
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("长期宏观底座", systemImage: "globe.americas.fill")
+                Label("长期 · 宏观背景", systemImage: "globe.americas.fill")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
                 Spacer()
-                Text(regime.label.isEmpty ? regime.regime.defaultLabel : regime.label)
+                Text(dual.longTermState)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(tint)
                     .padding(.horizontal, 9)
@@ -264,18 +299,20 @@ struct MacroDashboardView: View {
                     .background(tint.opacity(0.14), in: GoldTheme.capsuleShape)
             }
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(String(format: "%.1f", clamped))
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.text)
-                Text("/ 100")
+                Text("/ 100分")
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
                 Spacer()
                 Text("美债/财政压力/央行购金/实际利率")
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textFaint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
 
             GeometryReader { proxy in
@@ -288,45 +325,29 @@ struct MacroDashboardView: View {
             }
             .frame(height: 7)
 
-            if !regime.summary.isEmpty {
-                Text(regime.summary)
-                    .font(.footnote)
-                    .foregroundStyle(GoldTheme.textSecondary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(dual.longTermDetailNote)
+                .font(.footnote)
+                .foregroundStyle(GoldTheme.textSecondary)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .goldCard(padding: 16)
     }
 
-    private func marketStateCard(_ report: MacroTemperatureReport) -> some View {
+    private func dualHorizonComparisonCard(_ report: MacroTemperatureReport, dual: MacroDualHorizonSummary) -> some View {
         let guide = report.actionGuide
-        let statusBadge = MacroPresentation.objectiveStatusBadge(for: guide, level: report.level)
-        let titleText = MacroPresentation.objectiveGuideTitle(for: report)
-        let summaryText = MacroPresentation.objectiveGuideSummary(for: report)
+        let shortTint = MacroPresentation.temperatureColor(for: dual.shortTermLevel)
+        let longTint = MacroPresentation.regimeColor(for: dual.longTermRegime)
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 6) {
-                Label("市场状态解读", systemImage: "safari.fill")
+                Label("短长周期状态对照", systemImage: "safari.fill")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
 
-                Button {
-                    showingGuideHelp = true
-                } label: {
-                    Image(systemName: "questionmark.circle")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(GoldTheme.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("查看黄金温度计说明")
-                .accessibilityIdentifier("macro.dashboard.guideButton")
-
                 Spacer(minLength: 4)
 
-                Text(statusBadge)
+                Text(dual.combinedPatternLabel)
                     .font(.caption.bold())
                     .foregroundStyle(GoldTheme.onGold)
                     .padding(.horizontal, 10)
@@ -334,18 +355,47 @@ struct MacroDashboardView: View {
                     .background(GoldTheme.gold, in: GoldTheme.capsuleShape)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(titleText)
-                    .font(.headline)
-                    .foregroundStyle(GoldTheme.text)
-                if !summaryText.isEmpty {
-                    Text(summaryText)
-                        .font(.footnote)
-                        .foregroundStyle(GoldTheme.textSecondary)
-                        .lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(shortTint)
+                        .frame(width: 7, height: 7)
+                    Text("短期 \(String(format: "%.1f°", dual.shortTermScore)) · \(dual.shortTermState)")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(GoldTheme.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text("×")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(GoldTheme.textFaint)
+
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(longTint)
+                        .frame(width: 7, height: 7)
+                    Text("长期 \(dual.longTermScoreText) · \(dual.longTermState)")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(GoldTheme.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(GoldTheme.background, in: GoldTheme.subCardShape)
+            .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+
+            Text(dual.combinedSummary)
+                .font(.footnote)
+                .foregroundStyle(GoldTheme.textSecondary)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 10) {
                 cushionTile(
@@ -516,7 +566,7 @@ struct MacroDashboardView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("黄金温度（0~100° · 虚线 20° 冰点 / 80° 过热）")
+                    Text("短期交易温度（0~100° · 虚线 20° 极冷 / 80° 极热）")
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.textSecondary)
                     Chart {
@@ -593,7 +643,7 @@ struct MacroDashboardView: View {
     private func dimensionsCard(_ dimensions: [MacroTemperatureDimension]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("五维温度拆解")
+                Text("短期温度 · 五维拆解")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()

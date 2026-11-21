@@ -131,11 +131,34 @@ enum MacroRegimeKind: String, Codable, Sendable, CaseIterable, Hashable {
 
     var defaultLabel: String {
         switch self {
-        case .tailwind: "宏观偏暖"
-        case .neutral: "宏观中性"
-        case .headwind: "宏观偏弱"
+        case .tailwind: "支撑偏强"
+        case .neutral: "背景中性"
+        case .headwind: "支撑偏弱"
         }
     }
+}
+
+/// 短期交易热度（0~100°）与长期宏观背景（0~100分）分栏解读纯数据模型。
+/// 100% 由客户端枚举与分值映射生成，不透传服务端历史遗留的“偏暖”或投顾表述。
+struct MacroDualHorizonSummary: Sendable, Equatable {
+    let shortTermLevel: MacroTemperatureLevel
+    let shortTermScore: Double
+    let shortTermLevelLabel: String
+    let shortTermCompactTitle: String
+    let shortTermState: String
+    let shortTermCrowding: String
+    let shortTermPlainNote: String
+    let shortTermDetailNote: String
+
+    let longTermRegime: MacroRegimeKind
+    let longTermScore: Double
+    let longTermScoreText: String
+    let longTermState: String
+    let longTermPlainNote: String
+    let longTermDetailNote: String
+
+    let combinedPatternLabel: String
+    let combinedSummary: String
 }
 
 // MARK: - 1. 黄金温度与市场状态解读
@@ -1227,9 +1250,9 @@ enum MacroPresentation {
 
     static func regimeColor(for regime: MacroRegimeKind) -> Color {
         switch regime {
-        case .tailwind: GoldTheme.up
-        case .neutral: GoldTheme.goldSoft
-        case .headwind: GoldTheme.down
+        case .tailwind: GoldTheme.gold
+        case .neutral: GoldTheme.textSecondary
+        case .headwind: GoldTheme.tempFreezing
         }
     }
 
@@ -1304,16 +1327,165 @@ enum MacroPresentation {
 
     static let defaultDisclaimer = "数据与温度模型基于公开宏观及市场统计测算，仅反映历史分位与市场热度状态，不构成任何投资建议。"
 
-    private static let advisoryKeywords: [String] = [
+    static let advisoryKeywords: [String] = [
         "操作指南针", "逢低", "加配", "定投", "加仓", "减仓", "止盈", "建仓", "追高",
         "抄底", "知识星球", "付费社群", "建议", "适合", "划算", "黄金坑", "安全垫",
-        "分批", "仓位", "买入", "卖出", "放慢节奏", "防守", "试探"
+        "分批", "仓位", "买入", "卖出", "放慢节奏", "防守", "试探",
+        "便宜", "贵", "买点", "卖点", "机会", "配置", "入场", "离场"
     ]
 
     static func containsAdvisoryTerms(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         return advisoryKeywords.contains { trimmed.contains($0) }
+    }
+
+    static func dualHorizonSummary(for report: MacroTemperatureReport) -> MacroDualHorizonSummary {
+        dualHorizonSummary(
+            level: report.level,
+            shortScore: report.score,
+            regime: report.macroRegime.regime,
+            longScore: report.macroRegime.score
+        )
+    }
+
+    static func dualHorizonSummary(
+        level: MacroTemperatureLevel,
+        shortScore: Double,
+        regime: MacroRegimeKind,
+        longScore: Double
+    ) -> MacroDualHorizonSummary {
+        let clampedShort = clampedTemperatureScore(shortScore)
+        let clampedLong = clampedTemperatureScore(longScore)
+        let longScoreText = "\(Int(clampedLong.rounded()))分"
+
+        let shortCompactTitle: String
+        let shortState: String
+        let shortCrowding: String
+        let shortPlainNote: String
+        let shortDetailNote: String
+
+        switch level {
+        case .freezing:
+            shortCompactTitle = "极冷 · 交投清淡"
+            shortState = "交投极冷"
+            shortCrowding = "拥挤度极低"
+            shortPlainNote = "近期交投极冷，市场关注度低迷"
+            shortDetailNote = "短期五维热度处于近 3 年极低分位，市场交投清淡、拥挤度极低。"
+        case .cool:
+            shortCompactTitle = "偏冷 · 拥挤度低"
+            shortState = "交投偏冷"
+            shortCrowding = "拥挤度较低"
+            shortPlainNote = "近期交投偏冷，市场情绪未过热"
+            shortDetailNote = "短期五维热度处于近 3 年偏低分位，交易拥挤度较低、情绪尚未过热。"
+        case .neutral:
+            shortCompactTitle = "中性 · 多空均衡"
+            shortState = "热度适中"
+            shortCrowding = "热度均衡"
+            shortPlainNote = "近期交投平稳，多空力量较均衡"
+            shortDetailNote = "短期五维热度处于近 3 年中位区间，多空力量与交投活跃度相对均衡。"
+        case .warm:
+            shortCompactTitle = "偏热 · 关注升温"
+            shortState = "交投偏热"
+            shortCrowding = "关注度偏高"
+            shortPlainNote = "近期交投升温，资金关注度偏高"
+            shortDetailNote = "短期五维热度处于近 3 年偏高分位，资金关注度升温、交投活跃度偏高。"
+        case .hot:
+            shortCompactTitle = "过热 · 拥挤度高"
+            shortState = "交易过热"
+            shortCrowding = "拥挤度偏高"
+            shortPlainNote = "近期交投过热，多头拥挤度偏高"
+            shortDetailNote = "短期五维热度处于近 3 年高位区间，短期偏离与多头拥挤度均处于高位。"
+        }
+
+        let longState: String
+        let longPlainNote: String
+        let longDetailNote: String
+
+        switch regime {
+        case .tailwind:
+            longState = "支撑偏强"
+            longPlainNote = "美债与央行购金等长期支撑较强"
+            longDetailNote = "美债规模、财政压力与央行购金等长期宏观指标整体偏强，中长期基本面支撑较强。"
+        case .neutral:
+            longState = "背景中性"
+            longPlainNote = "实际利率与美债等长期因素均衡"
+            longDetailNote = "实际利率水平与美债规模、央行购金等长期宏观指标力量相对均衡，整体处于中性背景。"
+        case .headwind:
+            longState = "支撑偏弱"
+            longPlainNote = "实际利率偏高等使长期背景偏弱"
+            longDetailNote = "实际利率水平相对偏高且财政与外储端驱动偏弱，中长期宏观支撑相对偏弱。"
+        }
+
+        let combinedPatternLabel: String
+        let combinedSummary: String
+
+        switch (level, regime) {
+        case (.freezing, .tailwind):
+            combinedPatternLabel = "极冷长强"
+            combinedSummary = "短期交投极冷、拥挤度处于近 3 年极低分位，而长期美债与央行购金等宏观支撑偏强，短长周期呈现明显错位。"
+        case (.freezing, .neutral):
+            combinedPatternLabel = "极冷长平"
+            combinedSummary = "短期交投极冷、市场关注度低迷，同时长期实际利率与美债等宏观背景处于中性常态。"
+        case (.freezing, .headwind):
+            combinedPatternLabel = "极冷长弱"
+            combinedSummary = "短期交投极冷、市场活跃度处于近 3 年低位，同时长期宏观指标支撑偏弱，短期低迷与长期偏弱并存。"
+        case (.cool, .tailwind):
+            combinedPatternLabel = "短冷长强"
+            combinedSummary = "短期交投偏冷、交易拥挤度较低，而长期美债与央行购金等宏观支撑依然偏强，短长周期呈现温和错位。"
+        case (.cool, .neutral):
+            combinedPatternLabel = "短冷长平"
+            combinedSummary = "短期交投偏冷、交易拥挤度较低，同时长期宏观基本面各项指标力量相对均衡。"
+        case (.cool, .headwind):
+            combinedPatternLabel = "短冷长弱"
+            combinedSummary = "短期交投偏冷、交易活跃度偏低，同时长期实际利率与财政端等宏观支撑整体偏弱。"
+        case (.neutral, .tailwind):
+            combinedPatternLabel = "短平长强"
+            combinedSummary = "短期交投热度适中、多空力量相对均衡，同时长期美债与央行购金等宏观指标整体偏强。"
+        case (.neutral, .neutral):
+            combinedPatternLabel = "双端中性"
+            combinedSummary = "短期交易热度与长期宏观背景均处于近 3 年中位常态，市场多空与基本面力量相对均衡。"
+        case (.neutral, .headwind):
+            combinedPatternLabel = "短平长弱"
+            combinedSummary = "短期交投热度适中、多空力量均衡，但长期实际利率等宏观指标支撑相对偏弱。"
+        case (.warm, .tailwind):
+            combinedPatternLabel = "短热长强"
+            combinedSummary = "短期交投升温、资金关注度偏高，同时长期美债与央行购金等宏观支撑偏强，短长周期同步偏强。"
+        case (.warm, .neutral):
+            combinedPatternLabel = "短热长平"
+            combinedSummary = "短期交投偏热、资金关注度处于近 3 年偏高分位，而长期宏观基本面整体处于中性常态。"
+        case (.warm, .headwind):
+            combinedPatternLabel = "短热长弱"
+            combinedSummary = "短期交投偏热、资金关注度升温，但长期宏观指标支撑偏弱，短长周期呈现错位特征。"
+        case (.hot, .tailwind):
+            combinedPatternLabel = "过热长强"
+            combinedSummary = "短期交投过热、多头拥挤度处于近 3 年高位，虽有长期宏观支撑偏强，历史同期短期振幅往往放大。"
+        case (.hot, .neutral):
+            combinedPatternLabel = "过热长平"
+            combinedSummary = "短期交投过热、多头拥挤度处于近 3 年高位，长期宏观背景处于中性常态，历史同期短期波动往往放大。"
+        case (.hot, .headwind):
+            combinedPatternLabel = "过热长弱"
+            combinedSummary = "短期交投过热、多头拥挤度处于近 3 年高位，且长期宏观支撑偏弱，短长周期明显错位，历史同期波动往往放大。"
+        }
+
+        return MacroDualHorizonSummary(
+            shortTermLevel: level,
+            shortTermScore: clampedShort,
+            shortTermLevelLabel: level.defaultLabel,
+            shortTermCompactTitle: shortCompactTitle,
+            shortTermState: shortState,
+            shortTermCrowding: shortCrowding,
+            shortTermPlainNote: shortPlainNote,
+            shortTermDetailNote: shortDetailNote,
+            longTermRegime: regime,
+            longTermScore: clampedLong,
+            longTermScoreText: longScoreText,
+            longTermState: longState,
+            longTermPlainNote: longPlainNote,
+            longTermDetailNote: longDetailNote,
+            combinedPatternLabel: combinedPatternLabel,
+            combinedSummary: combinedSummary
+        )
     }
 
     static func objectiveStatusLabel(for level: MacroTemperatureLevel) -> String {

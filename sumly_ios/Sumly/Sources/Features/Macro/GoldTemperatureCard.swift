@@ -218,21 +218,9 @@ struct GoldTemperatureCard: View {
     private var headerRow: some View {
         HStack(spacing: 6) {
             Button(action: onOpenDashboard) {
-                HStack(spacing: 6) {
-                    Label("黄金温度计", systemImage: "thermometer.medium")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(GoldTheme.gold)
-
-                    if let report = temperature, report.hasAvailableData {
-                        let regimeTint = MacroPresentation.regimeColor(for: report.macroRegime.regime)
-                        Text(report.macroRegime.label.isEmpty ? report.macroRegime.regime.defaultLabel : report.macroRegime.label)
-                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                            .foregroundStyle(regimeTint)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(regimeTint.opacity(0.14), in: GoldTheme.capsuleShape)
-                    }
-                }
+                Label("黄金温度计", systemImage: "thermometer.medium")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(GoldTheme.gold)
             }
             .buttonStyle(.plain)
 
@@ -326,59 +314,106 @@ struct GoldTemperatureCard: View {
     }
 
     private func loadedContent(_ report: MacroTemperatureReport) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let dual = MacroPresentation.dualHorizonSummary(for: report)
+        let shortTint = MacroPresentation.temperatureColor(for: dual.shortTermLevel)
+        let longTint = MacroPresentation.regimeColor(for: dual.longTermRegime)
+
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 14) {
                 GoldTemperatureGauge(
                     score: report.score,
                     level: report.level,
-                    levelLabel: report.levelLabel,
+                    levelLabel: dual.shortTermLevelLabel,
                     compact: true
                 )
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(MacroPresentation.objectiveGuideTitle(for: report))
-                        .font(.subheadline.bold())
-                        .foregroundStyle(GoldTheme.text)
-                        .lineLimit(2)
-
-                    Text(MacroPresentation.objectiveGuideSummary(for: report))
-                        .font(.caption)
-                        .foregroundStyle(GoldTheme.textSecondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    HStack(spacing: 6) {
-                        Text(MacroPresentation.objectiveStatusBadge(for: report.actionGuide, level: report.level))
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(GoldTheme.onGold)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(GoldTheme.gold, in: GoldTheme.capsuleShape)
-
-                        if report.volatilityAlert {
-                            Label("高波动", systemImage: "waveform.path.ecg")
-                                .font(.system(size: 10.5, weight: .semibold))
-                                .foregroundStyle(GoldTheme.up)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(GoldTheme.up.opacity(0.14), in: GoldTheme.capsuleShape)
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            horizonMicroTag("短期热度")
+                            Text(dual.shortTermCompactTitle)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundStyle(shortTint)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.82)
                         }
 
-                        if report.degraded {
-                            Text("部分降级")
-                                .font(.system(size: 10.5, weight: .medium))
-                                .foregroundStyle(GoldTheme.goldSoft)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(GoldTheme.goldSoft.opacity(0.12), in: GoldTheme.capsuleShape)
+                        Text(dual.shortTermPlainNote)
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Rectangle()
+                        .fill(GoldTheme.cardStroke)
+                        .frame(height: 1)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            horizonMicroTag("长期宏观")
+                            Text(dual.longTermState)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundStyle(longTint)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.82)
+
+                            Spacer(minLength: 4)
+
+                            Text(dual.longTermScoreText)
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(GoldTheme.textFaint)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
+
+                        Text(dual.longTermPlainNote)
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            if report.volatilityAlert || report.degraded {
+                HStack(spacing: 6) {
+                    if report.volatilityAlert {
+                        Label("短期高波动", systemImage: "waveform.path.ecg")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(GoldTheme.up)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(GoldTheme.up.opacity(0.14), in: GoldTheme.capsuleShape)
+                    }
+
+                    if report.degraded {
+                        Text("部分因子降级")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(GoldTheme.goldSoft)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(GoldTheme.goldSoft.opacity(0.12), in: GoldTheme.capsuleShape)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+            }
+
             quickMacroStrip(report)
         }
+    }
+
+    private func horizonMicroTag(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .foregroundStyle(GoldTheme.textSecondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(GoldTheme.calendarCell, in: GoldTheme.badgeShape)
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     private func quickMacroStrip(_ report: MacroTemperatureReport) -> some View {
