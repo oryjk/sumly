@@ -7,19 +7,25 @@ struct HoldingsCalendarSheet: View {
     let marketBasis: GoldMarketBasis
     let quoteStore: LiveGoldQuoteStore?
     let isEmbeddedTab: Bool
+
     @Query private var records: [HoldingRecord]
     @AppStorage("holdings.books") private var savedBooks = "默认账本"
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var date = Date.now
-    @State private var period = HoldingCalendarPeriod.day
+
     @State private var filter = HoldingCalendarFilter()
     @State private var didInitialize = false
     @State private var showingFilter = false
     @State private var showingAdd = false
+    @State private var showingPoster = false
+    @State private var showingYearMonthPicker = false
+    @State private var statsPeriod: CalendarStatsScope = .month
     @State private var sectionExpansion: [CalendarStatisticsKind: Bool] = [:]
     @State private var model: HoldingsViewModel
+    @State private var calendarVM: HoldingsCalendarViewModel
+    private let skipAutomaticNetworkSync: Bool
+
     init(
         initialBook: String,
         hideAmounts: Bool,
@@ -32,239 +38,451 @@ struct HoldingsCalendarSheet: View {
         self.marketBasis = marketBasis
         self.quoteStore = quoteStore
         self.isEmbeddedTab = isEmbeddedTab
+        self.skipAutomaticNetworkSync = false
         let vm = HoldingsDesignPreview.makeModel(basis: marketBasis)
         if let quoteStore {
             vm.applyExternalQuote(quoteStore.quote(for: marketBasis), failed: quoteStore.isFailed(for: marketBasis))
         }
         _model = State(initialValue: vm)
+        _calendarVM = State(initialValue: HoldingsCalendarViewModel())
     }
 
-    private var events: [HoldingCalendarEvent] { HoldingCalendarLogic.events(records, filter: filter) }
-    private var dayBuckets: [Date: HoldingCalendarDayBucket] { HoldingCalendarLogic.dayBuckets(events) }
-    private var selected: [HoldingCalendarEvent] { HoldingCalendarLogic.select(events, period: period, date: date) }
-    private var books: [String] { Array(Set(records.map(\.bookName) + savedBooks.components(separatedBy: "\n") + [initialBook])).filter { !$0.isEmpty }.sorted() }
-    private var isToday: Bool { Calendar.current.isDateInToday(date) }
-    private var title: String {
-        switch period {
-        case .day: HoldingsSelection.dateText(date)
-        case .month: date.formatted(.dateTime.year().month().locale(Locale(identifier: "zh_CN")))
-        case .year: "\(Calendar.current.component(.year, from: date))年"
+    /// 供单测与模拟器可视化渲染注入预置视图模型，避免外部网络干扰。
+    init(
+        initialBook: String,
+        hideAmounts: Bool,
+        marketBasis: GoldMarketBasis = .domestic,
+        quoteStore: LiveGoldQuoteStore? = nil,
+        isEmbeddedTab: Bool = false,
+        preloadedViewModel: HoldingsCalendarViewModel
+    ) {
+        self.initialBook = initialBook
+        self.hideAmounts = hideAmounts
+        self.marketBasis = marketBasis
+        self.quoteStore = quoteStore
+        self.isEmbeddedTab = isEmbeddedTab
+        self.skipAutomaticNetworkSync = true
+        let vm = HoldingsDesignPreview.makeModel(basis: marketBasis)
+        if let quoteStore {
+            vm.applyExternalQuote(quoteStore.quote(for: marketBasis), failed: quoteStore.isFailed(for: marketBasis))
+        }
+        _model = State(initialValue: vm)
+        _calendarVM = State(initialValue: preloadedViewModel)
+    }
+
+    private var activeQuote: GoldQuote? {
+        quoteStore?.quote(for: marketBasis) ?? model.quote
+    }
+
+    private var books: [String] {
+        Array(Set(records.map(\.bookName) + savedBooks.components(separatedBy: "\n") + [initialBook]))
+            .filter { !$0.isEmpty }
+            .sorted()
+    }
+
+    private var hasActiveFilter: Bool {
+        !filter.keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || filter.kind != "all"
+            || filter.book != initialBook
+    }
+
+    private var recordByID: [UUID: HoldingRecord] {
+        Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+    }
+
+    private var recordsChangeToken: Int {
+        var hasher = Hasher()
+        hasher.combine(records.count)
+        for r in records {
+            hasher.combine(r.id)
+            hasher.combine(r.grams.bitPattern)
+            hasher.combine(r.purity.bitPattern)
+            hasher.combine(r.unitPriceCNY.bitPattern)
+            hasher.combine(r.totalPurchaseCost.bitPattern)
+            hasher.combine(r.timestamp.timeIntervalSinceReferenceDate.bitPattern)
+            hasher.combine(r.disposition)
+            hasher.combine(r.disposedAt?.timeIntervalSinceReferenceDate.bitPattern ?? 0)
+            hasher.combine(r.disposalAmount.bitPattern)
+            hasher.combine(r.bookName)
+            hasher.combine(r.brand)
+            hasher.combine(r.assetType)
+        }
+        return hasher.finalize()
+    }
+
+    private var statsEvents: [HoldingCalendarEvent] {
+        let all = HoldingCalendarLogic.events(records, filter: filter)
+        switch statsPeriod {
+        case .month:
+            return HoldingCalendarLogic.select(all, period: .month, date: calendarVM.focusedMonthDate)
+        case .year:
+            return HoldingCalendarLogic.select(all, period: .year, date: calendarVM.focusedMonthDate)
+        case .all:
+            return all
+        }
+    }
+
+    private var statsTitle: String {
+        switch statsPeriod {
+        case .month: "\(String(calendarVM.focusedYear))年\(calendarVM.focusedMonth)月"
+        case .year: "\(String(calendarVM.focusedYear))年"
         case .all: "全部记录"
         }
     }
+
     var body: some View {
-        let currentEvents = events
-        let currentBuckets = HoldingCalendarLogic.dayBuckets(currentEvents)
-        let currentSelected = HoldingCalendarLogic.select(currentEvents, period: period, date: date)
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if isEmbeddedTab {
-                        HStack {
-                            Text("记金日历")
-                                .font(.title2.bold())
-                                .foregroundStyle(GoldTheme.text)
-                            Spacer()
-                            if !isToday && period != .all {
-                                Button("回到今天") {
-                                    withAnimation(.easeInOut(duration: 0.2)) { date = .now }
-                                }
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(GoldTheme.gold)
-                                .padding(.horizontal, 10)
-                                .frame(height: 30)
-                                .background(GoldTheme.card, in: GoldTheme.capsuleShape)
+                VStack(alignment: .leading, spacing: 14) {
+                    GoldCalendarHeaderView(
+                        companionDays: calendarVM.companionStats.companionDays,
+                        hasRecords: calendarVM.hasAnyRecordsInScope,
+                        showTodayButton: !calendarVM.isViewingToday(),
+                        hasActiveFilter: hasActiveFilter,
+                        onTodayTap: {
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                calendarVM.jumpToToday()
                             }
-                        }
+                        },
+                        onShareTap: { showingPoster = true },
+                        onFilterTap: { showingFilter = true }
+                    )
+
+                    GoldCalendarSegmentedBar(activeTab: $calendarVM.activeTab)
+
+                    switch calendarVM.activeTab {
+                    case .month:
+                        monthTabContent
+                    case .year:
+                        yearTabContent
+                    case .stats:
+                        statsTabContent
                     }
-                    controls
-                    if period != .all { periodNavigation }
-                    if period == .day { calendarGrid(buckets: currentBuckets) }
-                    if period == .month { monthGrid }
-                    summary(selected: currentSelected)
-                    if currentSelected.isEmpty {
-                        ContentUnavailableView("暂无记录", systemImage: "calendar", description: Text("可以切换日期、调整筛选或添加黄金。"))
-                    } else {
-                        Text("记录明细").font(.headline)
-                        ForEach(currentSelected) { event in eventRow(event) }
-                    }
-                }.padding(16)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
             }
             .background(GoldTheme.background)
-            .navigationTitle("记金日历").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("攒金日历")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar(isEmbeddedTab ? .hidden : .visible, for: .navigationBar)
             .toolbar {
                 if !isEmbeddedTab {
-                    ToolbarItem(placement: .cancellationAction) { Button("关闭", systemImage: "xmark") { dismiss() }.labelStyle(.iconOnly) }
-                    if !isToday && period != .all {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("今天") { withAnimation(.easeInOut(duration: 0.2)) { date = .now } }
-                                .font(.subheadline.weight(.semibold))
-                        }
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("关闭", systemImage: "xmark") { dismiss() }
+                            .labelStyle(.iconOnly)
                     }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if !isEmbeddedTab {
-                    Button { showingAdd = true } label: { Label("添加黄金", systemImage: "plus").frame(minHeight: 24) }
-                        .buttonStyle(GoldPrimaryButtonStyle()).padding(.horizontal, 20).padding(.vertical, 12)
-                        .background(GoldTheme.background)
+                    Button { showingAdd = true } label: {
+                        Label("添加黄金", systemImage: "plus").frame(minHeight: 24)
+                    }
+                    .buttonStyle(GoldPrimaryButtonStyle())
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(GoldTheme.background)
                 }
             }
             .modifier(EmbeddedCalendarTabBarSafeArea(isEmbeddedTab: isEmbeddedTab))
         }
-        .tint(GoldTheme.gold).foregroundStyle(GoldTheme.text)
+        .tint(GoldTheme.gold)
+        .foregroundStyle(GoldTheme.text)
         .presentationBackground(GoldTheme.background)
-        .onAppear { if !didInitialize { filter.book = initialBook; didInitialize = true } }
-        .onChange(of: initialBook) { _, updatedBook in
-            if isEmbeddedTab { filter.book = updatedBook }
-        }
-        .task(id: scenePhase) { if quoteStore == nil, scenePhase == .active { await model.start() } }
-        .onChange(of: quoteStore?.quote(for: marketBasis)) { _, latest in
-            if let quoteStore {
-                model.applyExternalQuote(latest, failed: quoteStore.isFailed(for: marketBasis))
+        .onAppear {
+            if !didInitialize {
+                filter.book = initialBook
+                didInitialize = true
             }
+            syncCalendarInputs()
+        }
+        .onChange(of: initialBook) { _, updatedBook in
+            if isEmbeddedTab {
+                filter.book = updatedBook
+            }
+        }
+        .onChange(of: recordsChangeToken) { _, _ in
+            syncCalendarInputs()
+        }
+        .onChange(of: filter) { _, _ in
+            sectionExpansion = [:]
+            syncCalendarInputs()
         }
         .onChange(of: marketBasis) { _, updatedBasis in
             if let quoteStore {
                 model.applyExternalQuote(quoteStore.quote(for: updatedBasis), failed: quoteStore.isFailed(for: updatedBasis))
             }
+            syncCalendarInputs()
         }
-        .onChange(of: date) { sectionExpansion = [:] }
-        .onChange(of: period) { sectionExpansion = [:] }
-        .onChange(of: filter) { sectionExpansion = [:] }
-        .sensoryFeedback(.selection, trigger: period)
-        .sensoryFeedback(.selection, trigger: Calendar.current.startOfDay(for: date))
-        .sheet(isPresented: $showingFilter) { HoldingCalendarFilterSheet(filter: $filter, books: books) }
-        .sheet(isPresented: $showingAdd) { AddHoldingSheet(defaultUnitPrice: model.quote?.cnyPerGram, date: date, book: filter.book ?? initialBook, marketBasis: marketBasis) }
-    }
-    private var controls: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 0) {
-                ForEach(HoldingCalendarPeriod.allCases, id: \.self) { item in
-                    Button { period = item } label: {
-                        Text(item.rawValue).font(.subheadline.bold()).frame(maxWidth: .infinity).frame(height: 42)
-                            .foregroundStyle(period == item ? GoldTheme.onGold : GoldTheme.text)
-                            .background(period == item ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.capsuleShape)
-                    }.buttonStyle(.plain)
-                }
-            }.background(GoldTheme.card, in: GoldTheme.capsuleShape)
-            Button { showingFilter = true } label: {
-                HStack(spacing: 4) { Text("筛选"); Image(systemName: "chevron.down").font(.caption) }
-                    .font(.subheadline.bold()).padding(.horizontal, 13).frame(height: 42)
-                    .foregroundStyle(filter.keyword.isEmpty && filter.kind == "all" ? GoldTheme.text : GoldTheme.gold)
-                    .background(GoldTheme.card, in: GoldTheme.capsuleShape)
+        .onChange(of: activeQuote) { _, latest in
+            if let quoteStore {
+                model.applyExternalQuote(latest, failed: quoteStore.isFailed(for: marketBasis))
+            }
+            syncCalendarInputs()
+        }
+        .onChange(of: calendarVM.selectedDate) { _, _ in
+            sectionExpansion = [:]
+        }
+        .onChange(of: statsPeriod) { _, _ in
+            sectionExpansion = [:]
+        }
+        .task(id: scenePhase) {
+            guard !skipAutomaticNetworkSync else { return }
+            if quoteStore == nil, scenePhase == .active {
+                await model.start()
             }
         }
-    }
-    private var periodNavigation: some View {
-        HStack {
-            Button { shift(-1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }.accessibilityLabel("上一期间")
-            Spacer()
-            Text(period == .day ? date.formatted(.dateTime.year().month().locale(Locale(identifier: "zh_CN"))) : title).font(.title3.bold())
-            Spacer()
-            Button { shift(1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }.accessibilityLabel("下一期间")
-        }.foregroundStyle(GoldTheme.text)
-    }
-    private func shift(_ amount: Int) {
-        let calendar = Calendar.current
-        let component: Calendar.Component = period == .day ? .month : .year
-        let base = calendar.dateInterval(of: component, for: date)?.start ?? date
-        date = calendar.date(byAdding: component, value: amount, to: base) ?? date
-    }
-    private func calendarGrid(buckets: [Date: HoldingCalendarDayBucket]) -> some View {
-        VStack(spacing: 6) {
-            HStack { ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { Text("周" + $0).font(.caption).foregroundStyle(GoldTheme.textFaint).frame(maxWidth: .infinity) } }.padding(.bottom, 8)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 5) {
-                ForEach(HoldingCalendarLogic.days(in: date), id: \.self) { day in
-                    dayCell(day, bucket: buckets[Calendar.current.startOfDay(for: day)])
-                }
-            }
-        }.padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 36, coordinateSpace: .local)
-                    .onEnded { value in
-                        guard abs(value.translation.width) > abs(value.translation.height) * 1.4 else { return }
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            shift(value.translation.width < 0 ? 1 : -1)
-                        }
-                    }
+        .task(id: marketBasis) {
+            guard !skipAutomaticNetworkSync else { return }
+            await calendarVM.loadMarketData(for: marketBasis)
+        }
+        .task(id: calendarVM.focusedYear) {
+            guard !skipAutomaticNetworkSync else { return }
+            await calendarVM.ensureTemperatureCoverageIfNeeded(for: calendarVM.focusedYear)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .marketCacheCleared)) { _ in
+            Task { await calendarVM.clearCachedData() }
+        }
+        .sensoryFeedback(.selection, trigger: calendarVM.activeTab)
+        .sensoryFeedback(.selection, trigger: calendarVM.selectedDayKey)
+        .sheet(isPresented: $showingFilter) {
+            HoldingCalendarFilterSheet(filter: $filter, books: books)
+        }
+        .sheet(isPresented: $showingAdd) {
+            AddHoldingSheet(
+                defaultUnitPrice: activeQuote?.cnyPerGram,
+                date: calendarVM.selectedDate,
+                book: filter.book ?? initialBook,
+                marketBasis: marketBasis
             )
-    }
-    private func dayCell(_ day: Date, bucket: HoldingCalendarDayBucket?) -> some View {
-        let sameMonth = Calendar.current.isDate(day, equalTo: date, toGranularity: .month)
-        let isSelected = Calendar.current.isDate(day, inSameDayAs: date)
-        let isTodayCell = Calendar.current.isDateInToday(day)
-        let purchaseGrams = bucket?.purchaseGrams ?? 0
-        let saleGrams = bucket?.saleGrams ?? 0
-        let giftGrams = bucket?.giftGrams ?? 0
-        return Button { date = day } label: {
-            VStack(spacing: 2) {
-                Text("\(Calendar.current.component(.day, from: day))").font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isSelected ? GoldTheme.gold : isTodayCell ? GoldTheme.goldSoft : sameMonth ? GoldTheme.text : GoldTheme.textFaint)
-                if purchaseGrams > 0 { marker("记", purchaseGrams, color: GoldTheme.gold) }
-                if saleGrams > 0 { marker("卖", saleGrams, color: GoldTheme.up) }
-                if giftGrams > 0 { marker("赠", giftGrams, color: GoldTheme.textSecondary) }
-                if purchaseGrams + saleGrams + giftGrams == 0 { Text(HoldingCalendarLogic.lunar(day)).font(.system(size: 10)).foregroundStyle(GoldTheme.textFaint) }
-                Spacer(minLength: 0)
-            }.padding(.top, 7).frame(maxWidth: .infinity).frame(height: 68)
-                .background(GoldTheme.calendarCell, in: GoldTheme.rangeShape)
-                .overlay {
-                    if isSelected {
-                        GoldTheme.rangeShape.strokeBorder(GoldTheme.gold, lineWidth: 1.5)
-                    } else if isTodayCell {
-                        GoldTheme.rangeShape.strokeBorder(GoldTheme.goldSoft.opacity(0.45), lineWidth: 1)
-                    }
-                }
-        }.buttonStyle(.plain).accessibilityLabel(HoldingsSelection.dateText(day))
-    }
-    private func marker(_ text: String, _ grams: Double, color: Color) -> some View {
-        Text(hideAmounts ? text + "••" : text + grams.formatted(.number.precision(.fractionLength(0...2))))
-            .font(.system(size: 10)).lineLimit(1).minimumScaleFactor(0.7).foregroundStyle(color)
-    }
-    private var monthGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 8) {
-            ForEach(1...12, id: \.self) { month in
-                Button {
-                    var components = Calendar.current.dateComponents([.year], from: date); components.month = month; components.day = 1; components.hour = 12
-                    date = Calendar.current.date(from: components) ?? date
-                } label: {
-                    Text("\(month)月").frame(maxWidth: .infinity).frame(height: 48)
-                        .foregroundStyle(Calendar.current.component(.month, from: date) == month ? GoldTheme.onGold : GoldTheme.text)
-                        .background(Calendar.current.component(.month, from: date) == month ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.rangeShape)
+        }
+        .sheet(isPresented: $showingYearMonthPicker) {
+            GoldCalendarYearMonthPickerSheet(
+                currentYear: calendarVM.focusedYear,
+                currentMonth: calendarVM.focusedMonth
+            ) { year, month in
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                    calendarVM.selectYearMonth(year: year, month: month)
                 }
             }
         }
+        .sheet(isPresented: $showingPoster) {
+            if let posterSnapshot = makePosterSnapshot() {
+                GoldCalendarPosterSheet(
+                    snapshot: posterSnapshot,
+                    initialMode: calendarVM.activeTab == .year ? .yearly : .monthly
+                )
+            }
+        }
     }
-    private func summary(selected: [HoldingCalendarEvent]) -> some View {
-        let stats = HoldingCalendarLogic.stats(selected, quote: model.quote?.cnyPerGram)
-        return VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.headline)
+
+    // MARK: - 1. 「月历」首屏内容
+
+    @ViewBuilder
+    private var monthTabContent: some View {
+        if let monthSummary = calendarVM.focusedMonthSummary {
+            GoldCalendarMonthReportCard(
+                summary: monthSummary,
+                companion: calendarVM.companionStats,
+                layer: calendarVM.effectiveLayer,
+                basis: marketBasis,
+                hideAmounts: hideAmounts
+            )
+        }
+
+        GoldCalendarMonthGridCard(
+            year: calendarVM.focusedYear,
+            month: calendarVM.focusedMonth,
+            focusedMonthDate: calendarVM.focusedMonthDate,
+            selectedDayKey: calendarVM.selectedDayKey,
+            availableLayers: calendarVM.availableLayers,
+            effectiveLayer: calendarVM.effectiveLayer,
+            basis: marketBasis,
+            hideAmounts: hideAmounts,
+            snapshotProvider: { day in calendarVM.daySnapshot(for: day) },
+            onSelectLayer: { layer in
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                    calendarVM.selectLayer(layer)
+                }
+            },
+            onShiftMonth: { delta in
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                    calendarVM.shiftMonth(by: delta)
+                }
+            },
+            onOpenYearMonthPicker: { showingYearMonthPicker = true },
+            onSelectDay: { day in
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
+                    calendarVM.selectDate(day)
+                }
+            }
+        )
+
+        if let daySnap = calendarVM.selectedDaySnapshot {
+            let lookup = recordByID
+            GoldCalendarDayJournalCard(
+                snapshot: daySnap,
+                hasHoldingsInScope: calendarVM.hasAnyRecordsInScope,
+                basis: marketBasis,
+                hideAmounts: hideAmounts,
+                recordLookup: { lookup[$0] },
+                holdingsModel: model,
+                onAddForDay: { showingAdd = true }
+            )
+        }
+    }
+
+    // MARK: - 2. 「年览」内容
+
+    @ViewBuilder
+    private var yearTabContent: some View {
+        if let yearSnap = calendarVM.yearSnapshot {
+            GoldCalendarYearOverviewView(
+                yearSnapshot: yearSnap,
+                hasHoldings: calendarVM.hasAnyRecordsInScope,
+                basis: marketBasis,
+                hideAmounts: hideAmounts,
+                heatmapMode: $calendarVM.yearHeatmapMode,
+                onShiftYear: { delta in
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                        calendarVM.shiftYear(by: delta)
+                    }
+                },
+                onSelectMonth: { month in
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                        calendarVM.jumpToMonth(year: yearSnap.year, month: month)
+                    }
+                },
+                onSelectDay: { dayKey in
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                        calendarVM.jumpToDay(dayKey)
+                    }
+                }
+            )
+        }
+    }
+
+    // MARK: - 3. 「统计」深度对账内容（完整保留原版统计与全量流水）
+
+    private var statsTabContent: some View {
+        let currentEvents = statsEvents
+        let stats = HoldingCalendarLogic.stats(currentEvents, quote: activeQuote?.cnyPerGram)
+        let lookup = recordByID
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 6) {
+                ForEach(CalendarStatsScope.allCases) { scope in
+                    let selected = (statsPeriod == scope)
+                    Button {
+                        statsPeriod = scope
+                    } label: {
+                        Text(scope.rawValue)
+                            .font(.system(.caption, design: .rounded).weight(selected ? .bold : .medium))
+                            .foregroundStyle(selected ? GoldTheme.onGold : GoldTheme.textSecondary)
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .background(selected ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.capsuleShape)
+                            .overlay(
+                                GoldTheme.capsuleShape.strokeBorder(
+                                    selected ? Color.clear : GoldTheme.cardStroke,
+                                    lineWidth: 1
+                                )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Spacer(minLength: 4)
+
+                if statsPeriod != .all {
+                    HStack(spacing: 4) {
+                        Button {
+                            if statsPeriod == .month { calendarVM.shiftMonth(by: -1) } else { calendarVM.shiftYear(by: -1) }
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.caption.weight(.bold))
+                                .frame(width: 28, height: 28)
+                                .background(GoldTheme.card, in: GoldTheme.circleShape)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("上一期间")
+
+                        Text(statsTitle)
+                            .font(.system(.caption, design: .rounded).bold())
+                            .monospacedDigit()
+                            .foregroundStyle(GoldTheme.text)
+                            .lineLimit(1)
+
+                        Button {
+                            if statsPeriod == .month { calendarVM.shiftMonth(by: 1) } else { calendarVM.shiftYear(by: 1) }
+                        } label: {
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .frame(width: 28, height: 28)
+                                .background(GoldTheme.card, in: GoldTheme.circleShape)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("下一期间")
+                    }
+                }
+            }
+
             valuationBasis
             statisticsCard(.purchases, stats: stats.purchases)
             statisticsCard(.sales, stats: stats.sales)
             statisticsCard(.gifts, stats: stats.gifts)
+
+            if currentEvents.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "tray")
+                        .foregroundStyle(GoldTheme.textFaint)
+                    Text("当前所选范围暂无记录，可切换期间或调整筛选。")
+                        .font(.caption)
+                        .foregroundStyle(GoldTheme.textSecondary)
+                    Spacer()
+                }
+                .padding(14)
+                .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+                .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+            } else {
+                Text("记录明细 · \(currentEvents.count) 条")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(GoldTheme.text)
+                    .padding(.top, 2)
+
+                ForEach(currentEvents) { event in
+                    statsEventRow(event, record: recordForEvent(event, in: lookup))
+                }
+            }
         }
     }
+
+    // MARK: - 统计辅助视图与数据桥接
+
     private var noRecordsText: String {
-        switch period {
-        case .day: "当天无记录"
+        switch statsPeriod {
         case .month: "当月无记录"
         case .year: "当年无记录"
         case .all: "暂无记录"
         }
     }
+
     private var valuationBasis: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let quote = model.quote, quote.cnyPerGram.isFinite, quote.cnyPerGram > 0 {
+            if let quote = activeQuote, quote.cnyPerGram.isFinite, quote.cnyPerGram > 0 {
                 Text(hideAmounts ? "估值基准 · \(marketBasis.title) · •••• 元/克" : "估值基准 · \(marketBasis.title) · \(quote.cnyPerGram.moneyText) 元/克")
                 Text("最新可用报价 · " + quote.asOf.formatted(date: .abbreviated, time: .standard))
                     .foregroundStyle(GoldTheme.textFaint)
             } else {
                 Text("\(marketBasis.title)报价暂不可用，预估金额与收益率显示为 —")
             }
-        }.font(.caption).foregroundStyle(GoldTheme.textSecondary)
+        }
+        .font(.caption)
+        .foregroundStyle(GoldTheme.textSecondary)
     }
+
     private func statisticsCard(_ kind: CalendarStatisticsKind, stats: HoldingCalendarCategorySummary) -> some View {
         let expanded = sectionExpansion[kind] ?? (stats.count > 0)
         return VStack(alignment: .leading, spacing: 0) {
@@ -281,24 +499,34 @@ struct HoldingsCalendarSheet: View {
                     Spacer(minLength: 8)
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .font(.caption.bold()).foregroundStyle(GoldTheme.textSecondary)
-                }.frame(minHeight: 44).frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(GoldTheme.holdingsCardShape)
-            }.buttonStyle(.plain)
-                .accessibilityLabel(kind.title + (stats.count == 0 ? "，" + noRecordsText : ""))
-                .accessibilityValue(expanded ? "已展开" : "已收起")
-                .accessibilityHint("轻点以" + (expanded ? "收起" : "展开") + "统计")
+                }
+                .frame(minHeight: 44)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(GoldTheme.holdingsCardShape)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(kind.title + (stats.count == 0 ? "，" + noRecordsText : ""))
+            .accessibilityValue(expanded ? "已展开" : "已收起")
+            .accessibilityHint("轻点以" + (expanded ? "收起" : "展开") + "统计")
+
             if expanded {
                 if stats.count == 0 {
-                    Text("当前所选范围没有" + kind.recordName + "记录，可切换日期或调整筛选。")
-                        .font(.caption).foregroundStyle(GoldTheme.textSecondary).padding(.top, 14)
+                    Text("当前所选范围没有" + kind.recordName + "记录，可切换期间或调整筛选。")
+                        .font(.caption)
+                        .foregroundStyle(GoldTheme.textSecondary)
+                        .padding(.top, 14)
                 } else {
                     statisticsDetails(kind, stats: stats).padding(.top, 18)
                 }
             }
-        }.padding(16).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-            .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+        }
+        .padding(16)
+        .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+        .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
     }
-    @ViewBuilder private func statisticsDetails(_ kind: CalendarStatisticsKind, stats: HoldingCalendarCategorySummary) -> some View {
+
+    @ViewBuilder
+    private func statisticsDetails(_ kind: CalendarStatisticsKind, stats: HoldingCalendarCategorySummary) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 12) {
                 if kind == .sales {
@@ -306,8 +534,12 @@ struct HoldingsCalendarSheet: View {
                     metric("已实现收益(元)", stats.profit?.signedMoneyText ?? "—", color: profitColor(stats.profit), prominent: true)
                 } else {
                     metric(kind == .purchases ? "预估价值(元)" : "当前价值(元)", stats.value?.moneyText ?? "—", prominent: true)
-                    metric(kind == .purchases ? "预估收益(元)" : "购入成本(元)", kind == .purchases ? stats.profit?.signedMoneyText ?? "—" : stats.cost.moneyText,
-                           color: kind == .purchases ? profitColor(stats.profit) : GoldTheme.text, prominent: true)
+                    metric(
+                        kind == .purchases ? "预估收益(元)" : "购入成本(元)",
+                        kind == .purchases ? stats.profit?.signedMoneyText ?? "—" : stats.cost.moneyText,
+                        color: kind == .purchases ? profitColor(stats.profit) : GoldTheme.text,
+                        prominent: true
+                    )
                 }
             }
             if kind != .gifts {
@@ -315,39 +547,128 @@ struct HoldingsCalendarSheet: View {
                     Text(kind == .sales ? "已实现收益率" : "预估收益率").foregroundStyle(GoldTheme.textSecondary)
                     Text(hideAmounts ? "••••" : stats.profitPercent.map { $0.signedMoneyText + "%" } ?? "—")
                         .fontWeight(.semibold).monospacedDigit().foregroundStyle(profitColor(stats.profitPercent))
-                }.font(.subheadline)
+                }
+                .font(.subheadline)
             }
             GoldTheme.cardStroke.frame(height: 1)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 95), alignment: .leading)], alignment: .leading, spacing: 16) {
                 metric(kind.recordName + "笔数", "\(stats.count)")
                 metric("总重量(克)", stats.grams.moneyText)
                 metric("额外费用(元)", stats.fees.moneyText)
-                metric("买入均价(元/克)", stats.average.moneyText)
+                metric("购入均价(元/克)", stats.average.moneyText)
                 if kind == .sales { metric("卖出均价(元/克)", stats.saleAverage.moneyText) }
                 if kind != .gifts { metric("购入总价(元)", stats.cost.moneyText) }
             }
             Text(kind.explanation).font(.caption).foregroundStyle(GoldTheme.textSecondary)
         }
     }
+
     private func profitColor(_ value: Double?) -> Color {
         guard let value else { return GoldTheme.textSecondary }
         return value > 0 ? GoldTheme.up : value < 0 ? GoldTheme.down : GoldTheme.text
     }
+
     private func metric(_ label: String, _ value: String, color: Color = GoldTheme.text, prominent: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label).font(.caption).foregroundStyle(GoldTheme.textSecondary)
-            Text(hideAmounts ? "••••" : value).font(prominent ? .title3.weight(.semibold) : .body.weight(.medium))
-                .monospacedDigit().foregroundStyle(color).lineLimit(1).minimumScaleFactor(0.7)
-        }.frame(maxWidth: .infinity, alignment: .leading)
+            Text(hideAmounts ? "••••" : value)
+                .font(prominent ? .title3.weight(.semibold) : .body.weight(.medium))
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
-    private func eventRow(_ event: HoldingCalendarEvent) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack { Text(event.title); Spacer(); Text(event.kind == "buy" ? "购入" : event.kind == "sold" ? "卖出" : "赠出").foregroundStyle(event.kind == "sold" ? GoldTheme.up : GoldTheme.gold) }
-            HStack {
-                Text(hideAmounts ? "••••" : "\(event.grams.moneyText) 克 · \(event.kind == "sold" ? "实收" : "购入成本") \((event.kind == "sold" ? event.proceeds : event.cost).moneyText) 元")
-                Spacer(); Text(HoldingsSelection.dateText(event.date))
-            }.font(.caption).foregroundStyle(GoldTheme.textSecondary)
-        }.padding(16).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+
+    @ViewBuilder
+    private func statsEventRow(_ event: HoldingCalendarEvent, record: HoldingRecord?) -> some View {
+        let assetType = record.map { GoldAssetType(rawValue: $0.assetType) ?? .other } ?? .other
+        let rowContent = HStack(spacing: 10) {
+            GoldAssetGlyph(type: assetType, size: 28, emphasized: true)
+                .frame(width: 36, height: 36)
+                .background(GoldTheme.background, in: GoldTheme.badgeShape)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text(event.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(GoldTheme.text)
+                    Spacer()
+                    Text(event.kind == "buy" ? "购入" : event.kind == "sold" ? "卖出" : "赠出")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(event.kind == "sold" ? GoldTheme.up : GoldTheme.gold)
+                }
+                HStack {
+                    Text(hideAmounts ? "••••" : "\(event.grams.moneyText) 克 · \(event.kind == "sold" ? "实收" : "购入成本") \((event.kind == "sold" ? event.proceeds : event.cost).moneyText) 元")
+                    Spacer()
+                    Text(HoldingsSelection.dateText(event.date))
+                }
+                .font(.caption)
+                .foregroundStyle(GoldTheme.textSecondary)
+            }
+        }
+        .padding(14)
+        .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+        .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+
+        if let record {
+            NavigationLink {
+                HoldingDetailView(
+                    record: record,
+                    model: model,
+                    marketBasis: marketBasis,
+                    embeddedInNavigationStack: true
+                )
+            } label: {
+                rowContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            rowContent
+        }
+    }
+
+    private func recordForEvent(_ event: HoldingCalendarEvent, in lookup: [UUID: HoldingRecord]) -> HoldingRecord? {
+        let prefixRemoved: String
+        if event.id.hasPrefix("buy-") {
+            prefixRemoved = String(event.id.dropFirst(4))
+        } else if event.id.hasPrefix("dispose-") {
+            prefixRemoved = String(event.id.dropFirst(8))
+        } else {
+            prefixRemoved = event.id
+        }
+        if let uuid = UUID(uuidString: prefixRemoved), let exact = lookup[uuid] {
+            return exact
+        }
+        return lookup[event.purchaseID]
+    }
+
+    private func syncCalendarInputs() {
+        guard !skipAutomaticNetworkSync else { return }
+        calendarVM.syncInputs(
+            items: records.map(\.calendarItem),
+            filter: filter,
+            basis: marketBasis,
+            liveQuote: activeQuote
+        )
+    }
+
+    private func makePosterSnapshot() -> GoldCalendarPosterSnapshot? {
+        guard let yearSnap = calendarVM.yearSnapshot,
+              let monthSummary = yearSnap.monthSummary(calendarVM.focusedMonth) else {
+            return nil
+        }
+        return GoldCalendarPosterSnapshot(
+            year: calendarVM.focusedYear,
+            month: calendarVM.focusedMonth,
+            monthSummary: monthSummary,
+            yearSnapshot: yearSnap,
+            companion: calendarVM.companionStats,
+            basis: marketBasis,
+            layer: calendarVM.effectiveLayer,
+            maskSensitiveAmounts: true
+        )
     }
 }
 
@@ -356,12 +677,15 @@ struct HoldingCalendarFilterSheet: View {
     let books: [String]
     @State private var draft = HoldingCalendarFilter()
     @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("关键词").foregroundStyle(GoldTheme.textSecondary)
-                    TextField("购买渠道／买家／受赠人／品牌", text: $draft.keyword).padding(16).background(GoldTheme.background, in: GoldTheme.rangeShape)
+                    TextField("购买渠道／买家／受赠人／品牌", text: $draft.keyword)
+                        .padding(16)
+                        .background(GoldTheme.background, in: GoldTheme.rangeShape)
                     Text("类型").foregroundStyle(GoldTheme.textSecondary)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 10) {
                         option("全部", selected: draft.kind == "all") { draft.kind = "all" }
@@ -372,26 +696,54 @@ struct HoldingCalendarFilterSheet: View {
                     Text("账本").foregroundStyle(GoldTheme.textSecondary)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 10) {
                         option("全部账本", selected: draft.book == nil) { draft.book = nil }
-                        ForEach(books, id: \.self) { book in option(book, selected: draft.book == book) { draft.book = book } }
+                        ForEach(books, id: \.self) { book in
+                            option(book, selected: draft.book == book) { draft.book = book }
+                        }
                     }
-                }.padding(24)
-            }.background(GoldTheme.card)
-                .navigationTitle("选择筛选项").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭", systemImage: "xmark") { dismiss() }.labelStyle(.iconOnly) } }
-                .safeAreaInset(edge: .bottom) {
-                    HStack(spacing: 16) {
-                        Button("取消") { dismiss() }.frame(maxWidth: .infinity).padding(.vertical, 16).background(GoldTheme.background, in: GoldTheme.capsuleShape)
-                        Button("确定") { filter = draft; dismiss() }.buttonStyle(GoldPrimaryButtonStyle())
-                    }.padding(20).background(GoldTheme.card)
                 }
-        }.foregroundStyle(GoldTheme.text).tint(GoldTheme.gold).presentationDetents([.large]).onAppear { draft = filter }
+                .padding(24)
+            }
+            .background(GoldTheme.card)
+            .navigationTitle("选择筛选项")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭", systemImage: "xmark") { dismiss() }
+                        .labelStyle(.iconOnly)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 16) {
+                    Button("取消") { dismiss() }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(GoldTheme.background, in: GoldTheme.capsuleShape)
+                    Button("确定") { filter = draft; dismiss() }
+                        .buttonStyle(GoldPrimaryButtonStyle())
+                }
+                .padding(20)
+                .background(GoldTheme.card)
+            }
+        }
+        .foregroundStyle(GoldTheme.text)
+        .tint(GoldTheme.gold)
+        .presentationDetents([.large])
+        .onAppear { draft = filter }
     }
+
     private func option(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(.subheadline.bold()).frame(maxWidth: .infinity).padding(.vertical, 18)
+            Text(title)
+                .font(.subheadline.bold())
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
                 .foregroundStyle(selected ? GoldTheme.gold : GoldTheme.text)
                 .background(GoldTheme.background, in: GoldTheme.rangeShape)
-                .overlay { if selected { GoldTheme.rangeShape.strokeBorder(GoldTheme.gold, lineWidth: 1) } }
+                .overlay {
+                    if selected {
+                        GoldTheme.rangeShape.strokeBorder(GoldTheme.gold, lineWidth: 1)
+                    }
+                }
         }
     }
 }
@@ -408,11 +760,41 @@ private struct EmbeddedCalendarTabBarSafeArea: ViewModifier {
     }
 }
 
+private enum CalendarStatsScope: String, CaseIterable, Identifiable {
+    case month = "当月"
+    case year = "当年"
+    case all = "全部"
+
+    var id: String { rawValue }
+}
+
 private enum CalendarStatisticsKind: Hashable {
     case purchases, sales, gifts
-    var title: String { switch self { case .purchases: "记金统计"; case .sales: "卖出统计"; case .gifts: "赠送统计" } }
-    var recordName: String { switch self { case .purchases: "购入"; case .sales: "卖出"; case .gifts: "赠送" } }
-    var icon: String { switch self { case .purchases: "tray.and.arrow.down"; case .sales: "banknote"; case .gifts: "gift" } }
+
+    var title: String {
+        switch self {
+        case .purchases: "记金统计"
+        case .sales: "卖出统计"
+        case .gifts: "赠送统计"
+        }
+    }
+
+    var recordName: String {
+        switch self {
+        case .purchases: "购入"
+        case .sales: "卖出"
+        case .gifts: "赠送"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .purchases: "tray.and.arrow.down"
+        case .sales: "banknote"
+        case .gifts: "gift"
+        }
+    }
+
     var explanation: String {
         switch self {
         case .purchases: "按所选期间购入黄金和最新可用金价估算，包含已赠卖部分；购入总价包含工费与其他成本，预估收益不代表已实现收益。"
