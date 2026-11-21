@@ -98,24 +98,31 @@ struct MarketHomeChartContent: View {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 8) {
                     rangeMenu
-                    HStack(spacing: 8) {
+                        .padding(3)
+                        .background(GoldTheme.card, in: GoldTheme.capsuleShape)
+                        .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+                    HStack(spacing: 6) {
                         scalePicker
                         Spacer(minLength: 0)
                         holdingOverlayToggle
                         resetButton
                     }
+                    .padding(3)
+                    .background(GoldTheme.card, in: GoldTheme.capsuleShape)
+                    .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
                 }
             } else {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     rangeMenu
-                    Rectangle().fill(GoldTheme.cardStroke).frame(width: 1, height: 22)
+                    Rectangle().fill(GoldTheme.cardStroke).frame(width: 1, height: 16)
                         .accessibilityHidden(true)
                     scalePicker
                     holdingOverlayToggle
                     resetButton
                 }
-                .padding(.horizontal, 6)
-                .background(GoldTheme.card, in: GoldTheme.rangeShape)
+                .padding(3)
+                .background(GoldTheme.card, in: GoldTheme.capsuleShape)
+                .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
             }
         }
     }
@@ -130,10 +137,12 @@ struct MarketHomeChartContent: View {
                     }
                 } label: {
                     Text(rangeTitle(range))
-                        .font(.system(size: 12, weight: isSelected ? .bold : .medium, design: .rounded))
+                        .font(.system(size: 13, weight: isSelected ? .bold : .medium, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .foregroundStyle(isSelected ? GoldTheme.onGold : GoldTheme.textSecondary)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 30)
+                        .frame(minHeight: 34, maxHeight: dynamicTypeSize.isAccessibilitySize ? nil : 34)
                         .background(isSelected ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.capsuleShape)
                         .overlay(GoldTheme.capsuleShape.strokeBorder(isSelected ? Color.clear : GoldTheme.cardStroke, lineWidth: 1))
                 }
@@ -151,10 +160,11 @@ struct MarketHomeChartContent: View {
                     Text("保本线")
                         .font(.system(.caption, design: .rounded).weight(.semibold))
                 }
+                .lineLimit(1)
                 .padding(.horizontal, 8)
-                .frame(minHeight: 36)
+                .frame(minHeight: 30)
                 .foregroundStyle(showHoldingOverlay ? GoldTheme.onGold : GoldTheme.goldSoft)
-                .background(showHoldingOverlay ? GoldTheme.gold : GoldTheme.background, in: GoldTheme.rangeShape)
+                .background(showHoldingOverlay ? GoldTheme.gold : GoldTheme.background, in: GoldTheme.capsuleShape)
             }
             .buttonStyle(.plain)
             .fixedSize()
@@ -172,13 +182,16 @@ struct MarketHomeChartContent: View {
             }
         } label: {
             let isQuick = Self.quickRanges.contains(model.range)
-            HStack(spacing: 5) {
-                Text(isQuick ? "更多区间" : rangeTitle(model.range)).fontWeight(.semibold)
+            HStack(spacing: 4) {
+                Text(isQuick ? "更多区间" : rangeTitle(model.range))
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
                 Image(systemName: "chevron.down").font(.caption2.weight(.bold))
-            }.font(.footnote).foregroundStyle(isQuick ? GoldTheme.textSecondary : GoldTheme.goldSoft)
-                .lineLimit(1).minimumScaleFactor(0.75)
-                .padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 38)
-                .contentShape(Rectangle())
+            }
+            .foregroundStyle(isQuick ? GoldTheme.textSecondary : GoldTheme.goldSoft)
+            .lineLimit(1).minimumScaleFactor(0.75)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 30)
+            .contentShape(GoldTheme.capsuleShape)
         }
         .accessibilityLabel("时间区间")
         .accessibilityValue(rangeTitle(model.range))
@@ -188,25 +201,39 @@ struct MarketHomeChartContent: View {
     private var scalePicker: some View {
         HStack(spacing: 2) {
             ForEach(ChartPriceScale.allCases, id: \.self) { scale in
+                let isSelected = model.priceScale == scale
                 Button { model.priceScale = scale } label: {
-                    Text(scale.rawValue).font(.system(.footnote, design: .rounded).weight(.semibold))
-                        .padding(.horizontal, 8).frame(minWidth: 42, minHeight: 36)
-                        .foregroundStyle(model.priceScale == scale ? GoldTheme.onGold : GoldTheme.textSecondary)
-                        .background(model.priceScale == scale ? GoldTheme.gold : GoldTheme.card, in: GoldTheme.rangeShape)
+                    Text(scale.rawValue)
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .lineLimit(1)
+                        .padding(.horizontal, 7)
+                        .frame(minWidth: 38, minHeight: 30)
+                        .foregroundStyle(isSelected ? GoldTheme.onGold : GoldTheme.textSecondary)
+                        .background(isSelected ? GoldTheme.gold : Color.clear, in: GoldTheme.capsuleShape)
+                        .contentShape(GoldTheme.capsuleShape)
                 }.buttonStyle(.plain)
                     .accessibilityLabel(scale.rawValue + "价格刻度")
-                    .accessibilityAddTraits(model.priceScale == scale ? .isSelected : [])
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                     .accessibilityIdentifier(scale == .linear ? "chart.scale.linear" : "chart.scale.log")
             }
-        }.padding(3).background(GoldTheme.card, in: GoldTheme.rangeShape).fixedSize()
+        }
+        .background(GoldTheme.background, in: GoldTheme.capsuleShape)
+        .fixedSize()
     }
 
     private var resetButton: some View {
         Button { model.resetViewport() } label: {
-            Label("复位", systemImage: "arrow.counterclockwise")
-                .font(.footnote.weight(.semibold)).padding(.horizontal, 8).frame(minHeight: 38)
-                .foregroundStyle(model.canReset ? GoldTheme.goldSoft : GoldTheme.textFaint)
-                .contentShape(Rectangle())
+            HStack(spacing: 3) {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.caption2.weight(.semibold))
+                Text("复位")
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+            }
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .frame(minHeight: 30)
+            .foregroundStyle(model.canReset ? GoldTheme.goldSoft : GoldTheme.textFaint)
+            .contentShape(GoldTheme.capsuleShape)
         }.buttonStyle(.plain).disabled(!model.canReset)
             .fixedSize().accessibilityIdentifier("chart.reset")
     }
@@ -298,6 +325,15 @@ struct MarketHomeChartContent: View {
         let domain = model.priceScale.domain(data.map(\.price))
         let baseline = domain.lowerBound
         let statistics = model.windowStatistics
+        let resolvedMarkers: [ChartHoldingMarkerResolver.ResolvedMarker] = {
+            guard showHoldingOverlay, let overlay = holdingOverlay, model.range != .realtime else { return [] }
+            return ChartHoldingMarkerResolver.resolve(
+                markers: overlay.markers,
+                curvePoints: data,
+                scale: model.priceScale,
+                domain: domain
+            )
+        }()
         return ZStack {
             Chart {
                 ForEach(data, id: \.date) { point in
@@ -342,15 +378,29 @@ struct MarketHomeChartContent: View {
                                     .background(GoldTheme.goldSoft.opacity(0.92), in: GoldTheme.rangeShape)
                             }
                     }
-                    if model.range != .realtime {
-                        ForEach(overlay.markers) { marker in
-                            if let scaled = model.priceScale.value(marker.averageUnitPrice),
-                               domain.contains(scaled) {
-                                PointMark(x: .value("买入时间", marker.date), y: .value("买入单价", scaled))
-                                    .foregroundStyle(GoldTheme.up)
-                                    .symbolSize(46)
-                            }
+                    ForEach(resolvedMarkers) { item in
+                        if let range = item.connectorRange, let anchor = item.scaledMarketAnchor {
+                            RuleMark(
+                                x: .value("时间", item.marker.date),
+                                yStart: .value("价格刻度", range.lowerBound),
+                                yEnd: .value("价格刻度", range.upperBound)
+                            )
+                            .foregroundStyle(GoldTheme.up.opacity(0.45))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2.5, 2.5]))
+
+                            PointMark(
+                                x: .value("时间", item.marker.date),
+                                y: .value("价格刻度", anchor)
+                            )
+                            .foregroundStyle(GoldTheme.up.opacity(0.55))
+                            .symbolSize(16)
                         }
+                        PointMark(
+                            x: .value("时间", item.marker.date),
+                            y: .value("价格刻度", item.scaledCost)
+                        )
+                        .foregroundStyle(GoldTheme.up)
+                        .symbolSize(46)
                     }
                 }
                 if let point = model.selectedPoint {
@@ -500,5 +550,113 @@ private struct MarketDashboardLayout: Layout {
                        proposal: ProposedViewSize(width: bounds.width, height: heights[index]))
             y += heights[index] + spacing
         }
+    }
+}
+
+/// 走势图买入红点与当日大盘曲线落点的纯计算逻辑（Sendable，独立可测）。
+enum ChartHoldingMarkerResolver: Sendable {
+    struct ResolvedMarker: Identifiable, Equatable, Sendable {
+        let marker: MarketHoldingOverlay.PurchaseMarker
+        /// 真实买入综合均价在当前价格刻度下的纵坐标。
+        let scaledCost: Double
+        /// 匹配到的当日/区间大盘参考金价（人民币/克，未做刻度映射）。
+        let marketAnchorPrice: Double?
+        /// 大盘参考金价在当前价格刻度下的纵坐标（仅当落在 domain 内时有效）。
+        let scaledMarketAnchor: Double?
+
+        var id: Date { marker.id }
+
+        /// 垂直细虚线连接范围（保证 lowerBound < upperBound 且两端均在 domain 内）。
+        var connectorRange: ClosedRange<Double>? {
+            guard let anchor = scaledMarketAnchor else { return nil }
+            let low = min(scaledCost, anchor)
+            let high = max(scaledCost, anchor)
+            guard high - low > 1e-9 else { return nil }
+            return low...high
+        }
+    }
+
+    /// 为指定买入日期匹配大盘金价：
+    /// 1. 优先精确命中同一自然日的交易日收盘价；
+    /// 2. 若落在休市/周末（介于前后两交易日之间），按时间比例在前后两点间线性插值；
+    /// 3. 若早于曲线首点或晚于末点，回退至同一区间内最近的交易日价格；
+    /// 4. 空曲线或无有效正价格时返回 nil。
+    static func marketAnchorPrice(
+        for date: Date,
+        in points: [MarketChartPoint],
+        calendar: Calendar = .current
+    ) -> Double? {
+        let valid = points
+            .filter { $0.price.isFinite && $0.price > 0 }
+            .sorted { $0.date < $1.date }
+        return marketAnchorPriceSorted(for: date, in: valid, calendar: calendar)
+    }
+
+    /// 将持仓买入标记安全映射至当前刻度与纵轴 domain：
+    /// - 真实买入均价若超出 domain 则跳过不绘制；
+    /// - 仅当大盘锚点坐标也位于 domain 内时，才提供垂直连接线与曲线锚点。
+    static func resolve(
+        markers: [MarketHoldingOverlay.PurchaseMarker],
+        curvePoints: [MarketChartPoint],
+        scale: ChartPriceScale,
+        domain: ClosedRange<Double>,
+        calendar: Calendar = .current
+    ) -> [ResolvedMarker] {
+        let validPoints = curvePoints
+            .filter { $0.price.isFinite && $0.price > 0 }
+            .sorted { $0.date < $1.date }
+
+        return markers.compactMap { marker in
+            guard let scaledCost = scale.value(marker.averageUnitPrice),
+                  domain.contains(scaledCost) else {
+                return nil
+            }
+            let anchorPrice = marketAnchorPriceSorted(for: marker.date, in: validPoints, calendar: calendar)
+            let scaledAnchor: Double? = anchorPrice.flatMap { price in
+                guard let scaled = scale.value(price), domain.contains(scaled) else { return nil }
+                return scaled
+            }
+            return ResolvedMarker(
+                marker: marker,
+                scaledCost: scaledCost,
+                marketAnchorPrice: anchorPrice,
+                scaledMarketAnchor: scaledAnchor
+            )
+        }
+    }
+
+    private static func marketAnchorPriceSorted(
+        for date: Date,
+        in sortedPoints: [MarketChartPoint],
+        calendar: Calendar
+    ) -> Double? {
+        guard !sortedPoints.isEmpty else { return nil }
+
+        if let exact = sortedPoints.last(where: { calendar.isDate($0.date, inSameDayAs: date) }) {
+            return exact.price
+        }
+        if date <= sortedPoints[0].date {
+            return sortedPoints[0].price
+        }
+        if date >= sortedPoints[sortedPoints.count - 1].date {
+            return sortedPoints[sortedPoints.count - 1].price
+        }
+
+        var low = 0
+        var high = sortedPoints.count - 1
+        while low + 1 < high {
+            let mid = (low + high) / 2
+            if sortedPoints[mid].date < date {
+                low = mid
+            } else {
+                high = mid
+            }
+        }
+        let previous = sortedPoints[low]
+        let next = sortedPoints[high]
+        let span = next.date.timeIntervalSince(previous.date)
+        guard span > 0 else { return previous.price }
+        let ratio = date.timeIntervalSince(previous.date) / span
+        return previous.price + (next.price - previous.price) * ratio
     }
 }
