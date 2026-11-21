@@ -2,10 +2,13 @@ package macrohttp
 
 import (
 	"context"
+	"crypto/subtle"
+	"strings"
 	"time"
 
 	"gitee.com/oryjk/sumly/sumly_go/internal/macro/domain"
 	sharedhttpapi "gitee.com/oryjk/sumly/sumly_go/internal/shared/adapters/httpapi"
+	sharederror "gitee.com/oryjk/sumly/sumly_go/internal/shared/domain"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,14 +21,33 @@ type QueryUseCase interface {
 	GetIndicatorDetail(ctx context.Context, seriesID, rawRange string) (domain.IndicatorDetail, error)
 	GetGoldCot(ctx context.Context, rawRange string) (domain.CotDashboard, error)
 	GetSyncStatus(ctx context.Context) (domain.SyncStatusOverview, error)
+	GetStrategyBrief(ctx context.Context, officialAccountName string) (domain.StrategyBrief, error)
+}
+
+type HandlerOptions struct {
+	OfficialAccountName string
+	OfficialAccountNote string
+	InternalToken       string
 }
 
 type Handler struct {
-	query QueryUseCase
+	query               QueryUseCase
+	officialAccountName string
+	officialAccountNote string
+	internalToken       string
 }
 
 func NewHandler(query QueryUseCase) *Handler {
-	return &Handler{query: query}
+	return NewHandlerWithOptions(query, HandlerOptions{})
+}
+
+func NewHandlerWithOptions(query QueryUseCase, opts HandlerOptions) *Handler {
+	return &Handler{
+		query:               query,
+		officialAccountName: strings.TrimSpace(opts.OfficialAccountName),
+		officialAccountNote: strings.TrimSpace(opts.OfficialAccountNote),
+		internalToken:       strings.TrimSpace(opts.InternalToken),
+	}
 }
 
 func (h *Handler) RegisterPublicRoutes(group *gin.RouterGroup) {
@@ -37,6 +59,26 @@ func (h *Handler) RegisterPublicRoutes(group *gin.RouterGroup) {
 	macro.GET("/indicators/:series_id", h.IndicatorDetail)
 	macro.GET("/cot/gold", h.GoldCot)
 	macro.GET("/sync/status", h.SyncStatus)
+}
+
+func (h *Handler) RegisterInternalRoutes(group *gin.RouterGroup) {
+	macro := group.Group("/macro")
+	macro.GET("/strategy-brief", h.StrategyBrief)
+}
+
+type GuideHelpLevelResponse struct {
+	Range       string `json:"range"`
+	Level       string `json:"level"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+type GuideHelpResponse struct {
+	Title               string                   `json:"title"`
+	Methodology         string                   `json:"methodology"`
+	Levels              []GuideHelpLevelResponse `json:"levels"`
+	OfficialAccountName string                   `json:"official_account_name"`
+	OfficialAccountNote string                   `json:"official_account_note"`
 }
 
 type TemperatureResponse struct {
@@ -54,6 +96,53 @@ type TemperatureResponse struct {
 	MacroRegime     MacroRegimeResponse            `json:"macro_regime"`
 	ActionGuide     ActionGuideResponse            `json:"action_guide"`
 	Dimensions      []TemperatureDimensionResponse `json:"dimensions"`
+	GuideHelp       *GuideHelpResponse             `json:"guide_help,omitempty"`
+}
+
+type StrategyFrameworkResponse struct {
+	Signal                  string  `json:"signal"`
+	Level                   string  `json:"level"`
+	MacroRegime             string  `json:"macro_regime"`
+	Title                   string  `json:"title"`
+	HistoricalPerspective   string  `json:"historical_perspective"`
+	ReferencePaceMultiplier float64 `json:"reference_pace_multiplier"`
+	ReferencePaceLabel      string  `json:"reference_pace_label"`
+	RiskNotice              string  `json:"risk_notice"`
+}
+
+type StrategyKeyMetricsResponse struct {
+	GoldPriceUSD          *float64 `json:"gold_price_usd"`
+	MA200DeviationPct     *float64 `json:"ma200_deviation_pct"`
+	DomesticPremiumPct    *float64 `json:"domestic_premium_pct"`
+	TotalDebtTrillionUSD  *float64 `json:"total_debt_trillion_usd"`
+	DebtChangeYoYTrillion *float64 `json:"debt_change_yoy_trillion"`
+	DebtToGDPPct          *float64 `json:"debt_to_gdp_pct"`
+	FiscalStressScore     *float64 `json:"fiscal_stress_score"`
+	Yield10YNominalPct    *float64 `json:"yield_10y_nominal_pct"`
+	Yield10YRealPct       *float64 `json:"yield_10y_real_pct"`
+	Breakeven10YPct       *float64 `json:"breakeven_10y_pct"`
+	CotDate               string   `json:"cot_date"`
+	CotMMNet              *float64 `json:"cot_mm_net"`
+	CotOpenInterest       *float64 `json:"cot_open_interest"`
+	CotMMNetRatioPct      *float64 `json:"cot_mm_net_ratio_pct"`
+}
+
+type StrategyBriefResponse struct {
+	AsOf                 string                     `json:"as_of"`
+	ModelVersion         string                     `json:"model_version"`
+	Degraded             bool                       `json:"degraded"`
+	Score                float64                    `json:"score"`
+	Level                string                     `json:"level"`
+	LevelLabel           string                     `json:"level_label"`
+	Change1D             *float64                   `json:"change_1d"`
+	Change5D             *float64                   `json:"change_5d"`
+	VolatilityAlert      bool                       `json:"volatility_alert"`
+	VolatilityNote       string                     `json:"volatility_note"`
+	MacroRegime          MacroRegimeResponse        `json:"macro_regime"`
+	Framework            StrategyFrameworkResponse  `json:"framework"`
+	KeyMetrics           StrategyKeyMetricsResponse `json:"key_metrics"`
+	OfficialAccountReply string                     `json:"official_account_reply"`
+	CommunityBrief       string                     `json:"community_brief"`
 }
 
 type MacroRegimeResponse struct {
@@ -255,6 +344,16 @@ func (h *Handler) Temperature(c *gin.Context) {
 			Metrics:   metrics,
 		})
 	}
+	guideHelp := domain.BuildGuideHelp(h.officialAccountName, h.officialAccountNote)
+	helpLevels := make([]GuideHelpLevelResponse, 0, len(guideHelp.Levels))
+	for _, lv := range guideHelp.Levels {
+		helpLevels = append(helpLevels, GuideHelpLevelResponse{
+			Range:       lv.Range,
+			Level:       lv.Level,
+			Label:       lv.Label,
+			Description: lv.Description,
+		})
+	}
 	sharedhttpapi.WriteSuccess(c, TemperatureResponse{
 		AsOf:            snap.AsOf,
 		ModelVersion:    snap.ModelVersion,
@@ -286,7 +385,89 @@ func (h *Handler) Temperature(c *gin.Context) {
 			Disclaimer:          snap.ActionGuide.Disclaimer,
 		},
 		Dimensions: dims,
+		GuideHelp: &GuideHelpResponse{
+			Title:               guideHelp.Title,
+			Methodology:         guideHelp.Methodology,
+			Levels:              helpLevels,
+			OfficialAccountName: guideHelp.OfficialAccountName,
+			OfficialAccountNote: guideHelp.OfficialAccountNote,
+		},
 	})
+}
+
+func (h *Handler) StrategyBrief(c *gin.Context) {
+	if h.internalToken == "" {
+		sharedhttpapi.WriteError(c, sharederror.ErrNotFound)
+		return
+	}
+	candidate := extractInternalToken(c)
+	if candidate == "" || subtle.ConstantTimeCompare([]byte(candidate), []byte(h.internalToken)) != 1 {
+		sharedhttpapi.WriteError(c, sharederror.ErrUnauthorized)
+		return
+	}
+
+	brief, err := h.query.GetStrategyBrief(c.Request.Context(), h.officialAccountName)
+	if err != nil {
+		sharedhttpapi.WriteError(c, err)
+		return
+	}
+	sharedhttpapi.WriteSuccess(c, StrategyBriefResponse{
+		AsOf:            brief.AsOf,
+		ModelVersion:    brief.ModelVersion,
+		Degraded:        brief.Degraded,
+		Score:           brief.Score,
+		Level:           brief.Level,
+		LevelLabel:      brief.LevelLabel,
+		Change1D:        brief.Change1D,
+		Change5D:        brief.Change5D,
+		VolatilityAlert: brief.VolatilityAlert,
+		VolatilityNote:  brief.VolatilityNote,
+		MacroRegime: MacroRegimeResponse{
+			Score:   brief.MacroRegime.Score,
+			Regime:  brief.MacroRegime.Regime,
+			Label:   brief.MacroRegime.Label,
+			Summary: brief.MacroRegime.Summary,
+		},
+		Framework: StrategyFrameworkResponse{
+			Signal:                  brief.Framework.Signal,
+			Level:                   brief.Framework.Level,
+			MacroRegime:             brief.Framework.MacroRegime,
+			Title:                   brief.Framework.Title,
+			HistoricalPerspective:   brief.Framework.HistoricalPerspective,
+			ReferencePaceMultiplier: brief.Framework.ReferencePaceMultiplier,
+			ReferencePaceLabel:      brief.Framework.ReferencePaceLabel,
+			RiskNotice:              brief.Framework.RiskNotice,
+		},
+		KeyMetrics: StrategyKeyMetricsResponse{
+			GoldPriceUSD:          brief.KeyMetrics.GoldPriceUSD,
+			MA200DeviationPct:     brief.KeyMetrics.MA200DeviationPct,
+			DomesticPremiumPct:    brief.KeyMetrics.DomesticPremiumPct,
+			TotalDebtTrillionUSD:  brief.KeyMetrics.TotalDebtTrillionUSD,
+			DebtChangeYoYTrillion: brief.KeyMetrics.DebtChangeYoYTrillion,
+			DebtToGDPPct:          brief.KeyMetrics.DebtToGDPPct,
+			FiscalStressScore:     brief.KeyMetrics.FiscalStressScore,
+			Yield10YNominalPct:    brief.KeyMetrics.Yield10YNominalPct,
+			Yield10YRealPct:       brief.KeyMetrics.Yield10YRealPct,
+			Breakeven10YPct:       brief.KeyMetrics.Breakeven10YPct,
+			CotDate:               brief.KeyMetrics.CotDate,
+			CotMMNet:              brief.KeyMetrics.CotMMNet,
+			CotOpenInterest:       brief.KeyMetrics.CotOpenInterest,
+			CotMMNetRatioPct:      brief.KeyMetrics.CotMMNetRatioPct,
+		},
+		OfficialAccountReply: brief.OfficialAccountReply,
+		CommunityBrief:       brief.CommunityBrief,
+	})
+}
+
+func extractInternalToken(c *gin.Context) string {
+	if token := strings.TrimSpace(c.GetHeader("X-Macro-Internal-Token")); token != "" {
+		return token
+	}
+	authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
+	if len(authHeader) > len("Bearer ") && strings.EqualFold(authHeader[:len("Bearer ")], "Bearer ") {
+		return strings.TrimSpace(authHeader[len("Bearer "):])
+	}
+	return ""
 }
 
 func (h *Handler) TemperatureHistory(c *gin.Context) {

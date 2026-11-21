@@ -90,22 +90,31 @@ func TestLoadConfigMacroDefaultsAndOverrides(t *testing.T) {
 	t.Setenv("WECHAT_APP_SECRET", "appsecret")
 	t.Setenv("FRED_API_KEY", "")
 	t.Setenv("MACRO_SYNC_ENABLED", "")
+	t.Setenv("MACRO_OFFICIAL_ACCOUNT_NAME", "")
+	t.Setenv("MACRO_OFFICIAL_ACCOUNT_NOTE", "")
+	t.Setenv("MACRO_INTERNAL_TOKEN", "")
 
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.FREDAPIKey != "" || !cfg.MacroSyncEnabled {
-		t.Fatalf("expected optional empty FRED_API_KEY and default MacroSyncEnabled=true, got %+v", cfg)
+	if cfg.FREDAPIKey != "" || !cfg.MacroSyncEnabled || cfg.MacroOfficialAccountName != "" || cfg.MacroOfficialAccountNote != "" || cfg.MacroInternalToken != "" {
+		t.Fatalf("expected optional empty macro defaults and MacroSyncEnabled=true, got %+v", cfg)
 	}
 
 	t.Setenv("FRED_API_KEY", "test-fred-key")
 	t.Setenv("MACRO_SYNC_ENABLED", "false")
+	t.Setenv("MACRO_OFFICIAL_ACCOUNT_NAME", "  黄金观察室  ")
+	t.Setenv("MACRO_OFFICIAL_ACCOUNT_NOTE", "  自定义方法论注记  ")
+	t.Setenv("MACRO_INTERNAL_TOKEN", "  internal-secret-token  ")
 	cfg, err = LoadConfig()
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
 	if cfg.FREDAPIKey != "test-fred-key" || cfg.MacroSyncEnabled {
 		t.Fatalf("expected FREDAPIKey=test-fred-key and MacroSyncEnabled=false, got %+v", cfg)
+	}
+	if cfg.MacroOfficialAccountName != "黄金观察室" || cfg.MacroOfficialAccountNote != "自定义方法论注记" || cfg.MacroInternalToken != "internal-secret-token" {
+		t.Fatalf("unexpected macro compliance/internal config: %+v", cfg)
 	}
 }

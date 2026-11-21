@@ -29,19 +29,7 @@ func (q *MacroQuery) GetTemperature(ctx context.Context) (domain.TemperatureSnap
 		return domain.EmptyTemperatureSnapshot(), nil
 	}
 	if point.Snapshot != nil {
-		snap := *point.Snapshot
-		if snap.MissingFactors == nil {
-			snap.MissingFactors = []string{}
-		}
-		if snap.Dimensions == nil {
-			snap.Dimensions = []domain.TemperatureDimension{}
-		}
-		for i := range snap.Dimensions {
-			if snap.Dimensions[i].Metrics == nil {
-				snap.Dimensions[i].Metrics = map[string]float64{}
-			}
-		}
-		return snap, nil
+		return domain.SanitizePublicTemperatureSnapshot(*point.Snapshot), nil
 	}
 	fallback := domain.EmptyTemperatureSnapshot()
 	fallback.AsOf = domain.FormatDate(point.Date)
@@ -52,7 +40,78 @@ func (q *MacroQuery) GetTemperature(ctx context.Context) (domain.TemperatureSnap
 	if point.MissingFactors != nil {
 		fallback.MissingFactors = point.MissingFactors
 	}
-	return fallback, nil
+	return domain.SanitizePublicTemperatureSnapshot(fallback), nil
+}
+
+// GetStrategyBrief builds the protected internal personal-framework & IP content brief
+// strictly from read-only persisted macro snapshots and series.
+func (q *MacroQuery) GetStrategyBrief(ctx context.Context, officialAccountName string) (domain.StrategyBrief, error) {
+	snap, err := q.GetTemperature(ctx)
+	if err != nil {
+		return domain.StrategyBrief{}, err
+	}
+
+	treasurySummary, err := q.loadTreasurySummary(ctx)
+	if err != nil {
+		return domain.StrategyBrief{}, err
+	}
+
+	cotObs, err := q.reader.LoadCotObservations(ctx, domain.SeriesGoldCOT)
+	if err != nil {
+		return domain.StrategyBrief{}, err
+	}
+	cleanCot := domain.SanitizeCotObservations(cotObs)
+	var latestCot *domain.CotObservation
+	if len(cleanCot) > 0 {
+		last := cleanCot[len(cleanCot)-1]
+		latestCot = &last
+	}
+
+	return domain.BuildStrategyBrief(domain.StrategyBriefInput{
+		Snapshot:            snap,
+		Treasury:            &treasurySummary,
+		LatestCot:           latestCot,
+		OfficialAccountName: officialAccountName,
+	}), nil
+}
+
+func (q *MacroQuery) loadTreasurySummary(ctx context.Context) (domain.TreasurySummary, error) {
+	seriesIDs := []string{
+		domain.SeriesUSDebtDaily,
+		domain.SeriesGFDEBTN,
+		domain.SeriesGFDEGDQ188S,
+		domain.SeriesInterestRatio,
+		domain.SeriesFiscalStress,
+		domain.SeriesDGS10,
+		domain.SeriesDGS2,
+		domain.SeriesTreasury10Y2YSpread,
+		domain.SeriesDFII10,
+		domain.SeriesT10YIE,
+		domain.SeriesTLT,
+	}
+	obsMap, err := q.reader.LoadObservationsBySeries(ctx, seriesIDs)
+	if err != nil {
+		return domain.TreasurySummary{}, err
+	}
+	debtRaw := domain.SanitizeObservations(obsMap[domain.SeriesUSDebtDaily])
+	if len(debtRaw) == 0 {
+		debtRaw = domain.SanitizeObservations(obsMap[domain.SeriesGFDEBTN])
+	}
+	summary := domain.TreasurySummary{
+		TotalDebtTrillionUSD:  latestValuePtr(debtRaw, 4),
+		DebtChangeYoYTrillion: domain.CalculateChanges(debtRaw).ChangeYoY,
+		DebtToGDPPct:          latestValuePtr(obsMap[domain.SeriesGFDEGDQ188S], 2),
+		InterestToRevenuePct:  latestValuePtr(obsMap[domain.SeriesInterestRatio], 2),
+		FiscalStressScore:     latestValuePtr(obsMap[domain.SeriesFiscalStress], 1),
+		Yield10YNominalPct:    latestValuePtr(obsMap[domain.SeriesDGS10], 2),
+		Yield2YNominalPct:     latestValuePtr(obsMap[domain.SeriesDGS2], 2),
+		Spread10Y2YPct:        latestValuePtr(obsMap[domain.SeriesTreasury10Y2YSpread], 2),
+		Yield10YRealPct:       latestValuePtr(obsMap[domain.SeriesDFII10], 2),
+		Breakeven10YPct:       latestValuePtr(obsMap[domain.SeriesT10YIE], 2),
+		TLTPrice:              latestValuePtr(obsMap[domain.SeriesTLT], 2),
+	}
+	summary.GoldImpactNote = buildTreasuryGoldImpactNote(summary)
+	return summary, nil
 }
 
 func (q *MacroQuery) GetTemperatureHistory(ctx context.Context, rawRange string) (domain.Range, []domain.TemperatureDailyPoint, error) {

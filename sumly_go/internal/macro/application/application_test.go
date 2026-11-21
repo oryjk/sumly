@@ -243,4 +243,11 @@ func TestMacroQueryColdStartAndValidation(t *testing.T) {
 	if _, err := query.GetIndicatorDetail(ctx, "UNKNOWN_SERIES", "5y"); err == nil {
 		t.Fatalf("expected not found error for unknown series")
 	}
+	brief, err := query.GetStrategyBrief(ctx, "测试公众号")
+	if err != nil {
+		t.Fatalf("GetStrategyBrief failed on cold start: %v", err)
+	}
+	if !brief.Degraded || brief.OfficialAccountReply == "" || brief.CommunityBrief == "" {
+		t.Fatalf("unexpected cold start strategy brief: %+v", brief)
+	}
 }

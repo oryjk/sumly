@@ -2,6 +2,7 @@ package domain
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -255,5 +256,279 @@ func TestLevelForScoreBoundaries(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("LevelForScore(%.1f) = %s, want %s", tc.score, got, tc.want)
 		}
+	}
+}
+
+var forbiddenAdvisoryWords = []string{
+	"逢低加配", "建仓", "加仓", "减仓", "止盈", "追高", "定投",
+	"适合", "建议", "划算", "黄金坑", "防守", "试探",
+	"击球区", "落袋", "重仓", "低吸", "追涨", "加配", "减配",
+	"减半", "暂停", "分批", "仓位", "性价比", "买金", "筹码",
+	"择时", "满仓", "杀跌", "切忌", "谨防", "严控",
+}
+
+func assertNoForbiddenAdvisoryWords(t *testing.T, field, text string) {
+	t.Helper()
+	cleaned := strings.ReplaceAll(text, "不构成任何投资建议", "")
+	cleaned = strings.ReplaceAll(cleaned, "不构成投资建议", "")
+	for _, word := range forbiddenAdvisoryWords {
+		if strings.Contains(cleaned, word) {
+			t.Errorf("public field %s contains forbidden advisory word %q: %q", field, word, text)
+		}
+	}
+}
+
+func TestPublicTemperatureCopyContainsNoAdvisoryTerms(t *testing.T) {
+	levels := []struct {
+		level string
+		score float64
+	}{
+		{LevelFreezing, 12.5},
+		{LevelCool, 31.4},
+		{LevelNeutral, 50.0},
+		{LevelWarm, 72.8},
+		{LevelHot, 89.3},
+	}
+	regimes := []struct {
+		regime string
+		score  float64
+	}{
+		{RegimeTailwind, 72.0},
+		{RegimeNeutral, 50.0},
+		{RegimeHeadwind, 28.0},
+	}
+	floatPtr := func(v float64) *float64 { return &v }
+	ma200Cases := []*float64{nil, floatPtr(-17.2), floatPtr(4.5), floatPtr(15.6), floatPtr(26.8)}
+	premCases := []*float64{nil, floatPtr(-0.42), floatPtr(0.75), floatPtr(2.40)}
+
+	for _, lv := range levels {
+		assertNoForbiddenAdvisoryWords(t, "level_label", LabelForLevel(lv.level))
+		for _, rg := range regimes {
+			regime := DescribeMacroRegime(rg.regime, rg.score)
+			assertNoForbiddenAdvisoryWords(t, "macro_regime.label", regime.Label)
+			assertNoForbiddenAdvisoryWords(t, "macro_regime.summary", regime.Summary)
+			for _, volAlert := range []bool{false, true} {
+				for _, ma := range ma200Cases {
+					for _, prem := range premCases {
+						guide := BuildActionGuide(regime, lv.level, lv.score, ma, prem, volAlert)
+						assertNoForbiddenAdvisoryWords(t, "action_guide.title", guide.Title)
+						assertNoForbiddenAdvisoryWords(t, "action_guide.summary", guide.Summary)
+						assertNoForbiddenAdvisoryWords(t, "action_guide.dca_label", guide.DCALabel)
+						assertNoForbiddenAdvisoryWords(t, "action_guide.ma200_note", guide.MA200Note)
+						assertNoForbiddenAdvisoryWords(t, "action_guide.domestic_premium_note", guide.DomesticPremiumNote)
+						assertNoForbiddenAdvisoryWords(t, "action_guide.disclaimer", guide.Disclaimer)
+						if guide.Disclaimer != DefaultDisclaimer {
+							t.Fatalf("unexpected disclaimer: %q", guide.Disclaimer)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Empty snapshot & computed snapshot volatility notes must also be free of advisory wording.
+	empty := EmptyTemperatureSnapshot()
+	assertNoForbiddenAdvisoryWords(t, "empty.volatility_note", empty.VolatilityNote)
+	assertNoForbiddenAdvisoryWords(t, "empty.macro_regime.summary", empty.MacroRegime.Summary)
+	assertNoForbiddenAdvisoryWords(t, "empty.action_guide.summary", empty.ActionGuide.Summary)
+
+	help := BuildGuideHelp("测试号", "")
+	assertNoForbiddenAdvisoryWords(t, "guide_help.title", help.Title)
+	assertNoForbiddenAdvisoryWords(t, "guide_help.methodology", help.Methodology)
+	assertNoForbiddenAdvisoryWords(t, "guide_help.official_account_note", help.OfficialAccountNote)
+	for _, lv := range help.Levels {
+		assertNoForbiddenAdvisoryWords(t, "guide_help.level.label", lv.Label)
+		assertNoForbiddenAdvisoryWords(t, "guide_help.level.description", lv.Description)
+	}
+}
+
+func TestSanitizePublicTemperatureSnapshotCleansLegacyAdvisoryCopy(t *testing.T) {
+	dev := -17.2
+	prem := -0.42
+	legacy := TemperatureSnapshot{
+		AsOf:            "2026-04-01",
+		ModelVersion:    ModelVersionV1,
+		Score:           32.5,
+		Level:           LevelCool,
+		LevelLabel:      "偏冷蓄势",
+		VolatilityAlert: true,
+		VolatilityNote:  "黄金隐含波动率（GVZ=28.7）处于近 3 年 91% 极端高位，建议控制单笔仓位、拉长分批节奏。",
+		MacroRegime: MacroRegime{
+			Score:   25.0,
+			Regime:  RegimeHeadwind,
+			Label:   "长期宏观逆风",
+			Summary: "实际利率偏高且财政/去美元化驱动偏弱，建议降低定投系数并严控追高。",
+		},
+		ActionGuide: ActionGuide{
+			Signal:              "hold_dca",
+			Title:               "偏冷蓄势 · 逢低加配",
+			Summary:             "适合稳步定投或逢回调加仓",
+			DCAMultiplier:       1.0,
+			DCALabel:            "标准定投 1.0x",
+			MA200DeviationPct:   &dev,
+			MA200Note:           "低于年线，长期安全垫较厚",
+			DomesticPremiumPct:  &prem,
+			DomesticPremiumNote: "当前国内买金性价比偏高",
+			Disclaimer:          "旧免责声明",
+		},
+	}
+
+	got := SanitizePublicTemperatureSnapshot(legacy)
+	assertNoForbiddenAdvisoryWords(t, "sanitized.level_label", got.LevelLabel)
+	assertNoForbiddenAdvisoryWords(t, "sanitized.volatility_note", got.VolatilityNote)
+	assertNoForbiddenAdvisoryWords(t, "sanitized.macro_regime.label", got.MacroRegime.Label)
+	assertNoForbiddenAdvisoryWords(t, "sanitized.macro_regime.summary", got.MacroRegime.Summary)
+	assertNoForbiddenAdvisoryWords(t, "sanitized.action_guide.title", got.ActionGuide.Title)
+	assertNoForbiddenAdvisoryWords(t, "sanitized.action_guide.summary", got.ActionGuide.Summary)
+	assertNoForbiddenAdvisoryWords(t, "sanitized.action_guide.dca_label", got.ActionGuide.DCALabel)
+	assertNoForbiddenAdvisoryWords(t, "sanitized.action_guide.ma200_note", got.ActionGuide.MA200Note)
+	assertNoForbiddenAdvisoryWords(t, "sanitized.action_guide.domestic_premium_note", got.ActionGuide.DomesticPremiumNote)
+	if got.ActionGuide.DCAMultiplier != 1.0 {
+		t.Fatalf("expected DCAMultiplier preserved as 1.0, got %.1f", got.ActionGuide.DCAMultiplier)
+	}
+	if got.ActionGuide.MA200DeviationPct == nil || *got.ActionGuide.MA200DeviationPct != -17.2 {
+		t.Fatalf("expected MA200DeviationPct preserved, got %v", got.ActionGuide.MA200DeviationPct)
+	}
+	if got.ActionGuide.DomesticPremiumPct == nil || *got.ActionGuide.DomesticPremiumPct != -0.42 {
+		t.Fatalf("expected DomesticPremiumPct preserved, got %v", got.ActionGuide.DomesticPremiumPct)
+	}
+}
+
+func TestBuildGuideHelpOfficialAccountOptions(t *testing.T) {
+	t.Run("empty config leaves official account fields empty", func(t *testing.T) {
+		h := BuildGuideHelp("", "")
+		if h.Title != "黄金温度计说明" || len(h.Levels) != 5 {
+			t.Fatalf("unexpected guide help: %+v", h)
+		}
+		if h.OfficialAccountName != "" || h.OfficialAccountNote != "" {
+			t.Fatalf("expected empty official account fields, got name=%q note=%q", h.OfficialAccountName, h.OfficialAccountNote)
+		}
+	})
+
+	t.Run("configured name without note uses restrained default note", func(t *testing.T) {
+		h := BuildGuideHelp("  金市观察笔记  ", "   ")
+		if h.OfficialAccountName != "金市观察笔记" {
+			t.Fatalf("unexpected account name: %q", h.OfficialAccountName)
+		}
+		if h.OfficialAccountNote != DefaultOfficialAccountNote {
+			t.Fatalf("expected default note %q, got %q", DefaultOfficialAccountNote, h.OfficialAccountNote)
+		}
+	})
+
+	t.Run("configured name and custom note preserves custom note", func(t *testing.T) {
+		h := BuildGuideHelp("金市观察笔记", "自定义公众号说明")
+		if h.OfficialAccountName != "金市观察笔记" || h.OfficialAccountNote != "自定义公众号说明" {
+			t.Fatalf("unexpected account fields: %+v", h)
+		}
+	})
+}
+
+func TestStrategyMappingAllCombinationsAndBriefGeneration(t *testing.T) {
+	levels := []struct {
+		level string
+		score float64
+	}{
+		{LevelFreezing, 15.0},
+		{LevelCool, 30.0},
+		{LevelNeutral, 50.0},
+		{LevelWarm, 70.0},
+		{LevelHot, 88.5},
+	}
+	regimes := []string{RegimeTailwind, RegimeNeutral, RegimeHeadwind}
+
+	for _, lv := range levels {
+		for _, rg := range regimes {
+			for _, volAlert := range []bool{false, true} {
+				regime := DescribeMacroRegime(rg, 50)
+				publicGuide := BuildActionGuide(regime, lv.level, lv.score, nil, nil, volAlert)
+				fw := MapStrategyFramework(lv.level, rg, lv.score, volAlert)
+
+				if fw.Signal != publicGuide.Signal {
+					t.Errorf("(%s,%s) signal mismatch: fw=%q guide=%q", lv.level, rg, fw.Signal, publicGuide.Signal)
+				}
+				if fw.ReferencePaceMultiplier != publicGuide.DCAMultiplier {
+					t.Errorf("(%s,%s) multiplier mismatch: fw=%.1f guide=%.1f", lv.level, rg, fw.ReferencePaceMultiplier, publicGuide.DCAMultiplier)
+				}
+				if fw.Title == "" || fw.HistoricalPerspective == "" || fw.ReferencePaceLabel == "" || fw.RiskNotice == "" {
+					t.Errorf("(%s,%s) has empty framework fields: %+v", lv.level, rg, fw)
+				}
+				if !strings.Contains(fw.RiskNotice, "不构成任何投资建议") {
+					t.Errorf("(%s,%s) risk notice missing disclaimer: %q", lv.level, rg, fw.RiskNotice)
+				}
+			}
+		}
+	}
+
+	c1 := 1.8
+	c5 := -2.3
+	dev := 8.4
+	prem := 0.65
+	debt := 36.45
+	debtYoY := 2.15
+	debtGDP := 123.5
+	fiscal := 78.2
+	y10 := 4.42
+	realY10 := 2.08
+	be10 := 2.34
+
+	snap := TemperatureSnapshot{
+		AsOf:            "2026-04-10",
+		ModelVersion:    ModelVersionV1,
+		Degraded:        false,
+		MissingFactors:  []string{},
+		Score:           34.2,
+		Level:           LevelCool,
+		LevelLabel:      LabelForLevel(LevelCool),
+		Change1D:        &c1,
+		Change5D:        &c5,
+		VolatilityAlert: true,
+		VolatilityNote:  "黄金隐含波动率（GVZ=28.7）处于近 3 年 91% 高位，历史同期短期振幅往往放大。",
+		MacroRegime:     DescribeMacroRegime(RegimeTailwind, 74.5),
+		ActionGuide:     BuildActionGuide(DescribeMacroRegime(RegimeTailwind, 74.5), LevelCool, 34.2, &dev, &prem, true),
+		Dimensions: []TemperatureDimension{
+			{Key: DimTrendMomentum, Name: "趋势与动量", Weight: 0.30, Score: 42.0, Available: true, Status: LevelNeutral, Summary: "动量读数 42.0", Metrics: map[string]float64{"gold_price_usd": 2980.5, "ma200_deviation_pct": 8.4}},
+			{Key: DimPositioning, Name: "交易拥挤度", Weight: 0.25, Score: 28.0, Available: true, Status: LevelCool, Summary: "拥挤度 28.0", Metrics: map[string]float64{"mm_net_ratio_pct": 21.5}},
+			{Key: DimDomesticPremium, Name: "国内溢价热度", Weight: 0.15, Score: 35.0, Available: true, Status: LevelCool, Summary: "溢价热度 35.0", Metrics: map[string]float64{"shanghai_premium_pct": 0.65}},
+			{Key: DimFlowCrossAsset, Name: "资金与跨资产", Weight: 0.15, Score: 31.0, Available: true, Status: LevelCool, Summary: "资金流读数 31.0", Metrics: map[string]float64{}},
+			{Key: DimMacroPulse, Name: "短期宏观脉冲", Weight: 0.15, Score: 33.0, Available: true, Status: LevelCool, Summary: "宏观脉冲 33.0", Metrics: map[string]float64{}},
+		},
+	}
+
+	brief := BuildStrategyBrief(StrategyBriefInput{
+		Snapshot: snap,
+		Treasury: &TreasurySummary{
+			TotalDebtTrillionUSD:  &debt,
+			DebtChangeYoYTrillion: &debtYoY,
+			DebtToGDPPct:          &debtGDP,
+			FiscalStressScore:     &fiscal,
+			Yield10YNominalPct:    &y10,
+			Yield10YRealPct:       &realY10,
+			Breakeven10YPct:       &be10,
+		},
+		LatestCot: &CotObservation{
+			Date:         d(2026, 4, 7),
+			MMLong:       220000,
+			MMShort:      50000,
+			MMNet:        170000,
+			OpenInterest: 500000,
+		},
+		OfficialAccountName: "测试宏观笔记",
+	})
+
+	for _, want := range []string{"测试宏观笔记", "2026-04-10", "34.2°", "36.45 万亿美元", "2.08%", "1.2x", "我个人的黄金量化观察框架", "不构成任何投资建议"} {
+		if !strings.Contains(brief.OfficialAccountReply, want) {
+			t.Errorf("OfficialAccountReply missing %q:\n%s", want, brief.OfficialAccountReply)
+		}
+	}
+	for _, want := range []string{"# 测试宏观笔记", "## 1. 黄金温度与宏观底座", "## 2. 五维情绪分位拆解", "## 3. 美债与 CFTC COT 关键指标", "## 4. 我的个人观察框架记录", "趋势与动量", "170000", "34.00%", "1.2x", "个人观察框架"} {
+		if !strings.Contains(brief.CommunityBrief, want) {
+			t.Errorf("CommunityBrief missing %q:\n%s", want, brief.CommunityBrief)
+		}
+	}
+
+	// Cold-start degraded snapshot should still render safely without panicking.
+	coldBrief := BuildStrategyBrief(StrategyBriefInput{Snapshot: EmptyTemperatureSnapshot()})
+	if coldBrief.OfficialAccountReply == "" || coldBrief.CommunityBrief == "" {
+		t.Fatalf("expected non-empty cold-start templates")
 	}
 }

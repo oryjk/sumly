@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,4 +171,234 @@ func TestMacroHTTPHandlersContract(t *testing.T) {
 			t.Fatalf("GET %s expected %d, got %d body=%s", tc.url, tc.code, out.Code, out.Body.String())
 		}
 	}
+}
+
+func TestTemperaturePublicComplianceAndGuideHelp(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	d2 := time.Date(2026, 2, 10, 0, 0, 0, 0, time.UTC)
+	price := 2880.5
+	dev := -17.2
+	prem := -0.42
+	// Intentionally store legacy advisory copy in the backing store to verify HTTP read path sanitizes it.
+	legacySnap := domain.TemperatureSnapshot{
+		AsOf:            "2026-02-10",
+		ModelVersion:    domain.ModelVersionV1,
+		Degraded:        false,
+		MissingFactors:  []string{},
+		Score:           31.5,
+		Level:           domain.LevelCool,
+		LevelLabel:      "偏冷蓄势",
+		VolatilityAlert: true,
+		VolatilityNote:  "黄金隐含波动率（GVZ=28.7）处于近 3 年 91% 极端高位，建议控制单笔仓位、拉长分批节奏。",
+		MacroRegime: domain.MacroRegime{
+			Score:   72.0,
+			Regime:  domain.RegimeTailwind,
+			Label:   "长期宏观顺风",
+			Summary: "建议分批建仓",
+		},
+		ActionGuide: domain.ActionGuide{
+			Signal:              "accumulate",
+			Title:               "偏冷蓄势 · 逢低加配",
+			Summary:             "适合稳步定投或逢回调加仓",
+			DCAMultiplier:       1.2,
+			DCALabel:            "偏冷加配 1.2x",
+			MA200DeviationPct:   &dev,
+			MA200Note:           "低于年线，安全垫较厚",
+			DomesticPremiumPct:  &prem,
+			DomesticPremiumNote: "当前国内买金性价比偏高",
+			Disclaimer:          "旧免责声明",
+		},
+		Dimensions: domain.EmptyTemperatureSnapshot().Dimensions,
+	}
+
+	store := stubReadStore{
+		temp: []domain.TemperatureDailyPoint{
+			{Date: d2, Score: 31.5, Level: domain.LevelCool, GoldPriceUSD: &price, Snapshot: &legacySnap},
+		},
+	}
+
+	cases := []struct {
+		name        string
+		opts        HandlerOptions
+		wantAccName string
+		wantAccNote string
+	}{
+		{
+			name:        "without official account config",
+			opts:        HandlerOptions{},
+			wantAccName: "",
+			wantAccNote: "",
+		},
+		{
+			name:        "with official account name only",
+			opts:        HandlerOptions{OfficialAccountName: "数里黄金笔记"},
+			wantAccName: "数里黄金笔记",
+			wantAccNote: domain.DefaultOfficialAccountNote,
+		},
+		{
+			name:        "with official account name and custom note",
+			opts:        HandlerOptions{OfficialAccountName: "数里黄金笔记", OfficialAccountNote: "每周宏观方法论拆解"},
+			wantAccName: "数里黄金笔记",
+			wantAccNote: "每周宏观方法论拆解",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := NewHandlerWithOptions(application.NewMacroQuery(store), tc.opts)
+			router := gin.New()
+			handler.RegisterPublicRoutes(router.Group("/api/v1/app"))
+
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/app/macro/temperature", nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+
+			var env struct {
+				Code    int                 `json:"code"`
+				Message string              `json:"message"`
+				Data    TemperatureResponse `json:"data"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+				t.Fatalf("unmarshal response: %v", err)
+			}
+			if env.Code != 0 || env.Message != "ok" {
+				t.Fatalf("unexpected envelope: %+v", env)
+			}
+			// Backward-compatible fields preserved
+			if env.Data.ActionGuide.Signal != "accumulate" || env.Data.ActionGuide.DCAMultiplier != 1.2 {
+				t.Fatalf("expected backward-compatible signal/multiplier, got %+v", env.Data.ActionGuide)
+			}
+			if env.Data.ActionGuide.MA200DeviationPct == nil || *env.Data.ActionGuide.MA200DeviationPct != -17.2 {
+				t.Fatalf("expected ma200_deviation_pct=-17.2, got %v", env.Data.ActionGuide.MA200DeviationPct)
+			}
+			if env.Data.ActionGuide.DomesticPremiumPct == nil || *env.Data.ActionGuide.DomesticPremiumPct != -0.42 {
+				t.Fatalf("expected domestic_premium_pct=-0.42, got %v", env.Data.ActionGuide.DomesticPremiumPct)
+			}
+			// Advisory words must not leak in public payload
+			for _, bad := range []string{"逢低加配", "建仓", "加仓", "定投", "适合", "仓位", "分批", "性价比"} {
+				if strings.Contains(rec.Body.String(), bad) {
+					t.Fatalf("public temperature payload leaked forbidden term %q: %s", bad, rec.Body.String())
+				}
+			}
+			// GuideHelp checks
+			if env.Data.GuideHelp == nil {
+				t.Fatalf("expected guide_help present in response")
+			}
+			if env.Data.GuideHelp.Title != "黄金温度计说明" || len(env.Data.GuideHelp.Levels) != 5 {
+				t.Fatalf("unexpected guide_help: %+v", env.Data.GuideHelp)
+			}
+			if env.Data.GuideHelp.OfficialAccountName != tc.wantAccName || env.Data.GuideHelp.OfficialAccountNote != tc.wantAccNote {
+				t.Fatalf("guide_help account mismatch: got (%q, %q), want (%q, %q)",
+					env.Data.GuideHelp.OfficialAccountName, env.Data.GuideHelp.OfficialAccountNote,
+					tc.wantAccName, tc.wantAccNote)
+			}
+		})
+	}
+}
+
+func TestInternalStrategyBriefAuthAndPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	d1 := time.Date(2025, 2, 10, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2026, 2, 10, 0, 0, 0, 0, time.UTC)
+	price := 2910.0
+	snap := domain.EmptyTemperatureSnapshot()
+	snap.AsOf = "2026-02-10"
+	snap.Degraded = false
+	snap.Score = 29.4
+	snap.Level = domain.LevelCool
+	snap.LevelLabel = domain.LabelForLevel(domain.LevelCool)
+	snap.MacroRegime = domain.DescribeMacroRegime(domain.RegimeTailwind, 71.5)
+	snap.ActionGuide = domain.BuildActionGuide(snap.MacroRegime, domain.LevelCool, 29.4, nil, nil, false)
+
+	store := stubReadStore{
+		obs: map[string][]domain.Observation{
+			domain.SeriesUSDebtDaily: {{Date: d1, Value: 34.2}, {Date: d2, Value: 36.4}},
+			domain.SeriesDFII10:      {{Date: d2, Value: 2.05}},
+			domain.SeriesDGS10:       {{Date: d2, Value: 4.45}},
+		},
+		cot: []domain.CotObservation{
+			{Date: d2, MMLong: 210000, MMShort: 40000, MMNet: 170000, OpenInterest: 500000},
+		},
+		temp: []domain.TemperatureDailyPoint{
+			{Date: d2, Score: 29.4, Level: domain.LevelCool, GoldPriceUSD: &price, Snapshot: &snap},
+		},
+	}
+
+	t.Run("unconfigured token returns 404 and never exposes endpoint", func(t *testing.T) {
+		h := NewHandlerWithOptions(application.NewMacroQuery(store), HandlerOptions{InternalToken: ""})
+		r := gin.New()
+		h.RegisterInternalRoutes(r.Group("/api/v1/internal"))
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/internal/macro/strategy-brief", nil)
+		req.Header.Set("X-Macro-Internal-Token", "any-token")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 when unconfigured, got %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("configured token enforces constant-time auth via header or bearer", func(t *testing.T) {
+		const secret = "super-secret-internal-token"
+		h := NewHandlerWithOptions(application.NewMacroQuery(store), HandlerOptions{
+			OfficialAccountName: "测试复盘号",
+			InternalToken:       secret,
+		})
+		r := gin.New()
+		h.RegisterInternalRoutes(r.Group("/api/v1/internal"))
+
+		// Missing token -> 401
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/internal/macro/strategy-brief", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("missing token: expected 401, got %d", rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), secret) {
+			t.Fatalf("error response must never echo token")
+		}
+
+		// Wrong token -> 401
+		wrongReq := httptest.NewRequest(http.MethodGet, "/api/v1/internal/macro/strategy-brief", nil)
+		wrongReq.Header.Set("X-Macro-Internal-Token", "wrong-token")
+		wrongRec := httptest.NewRecorder()
+		r.ServeHTTP(wrongRec, wrongReq)
+		if wrongRec.Code != http.StatusUnauthorized {
+			t.Fatalf("wrong token: expected 401, got %d", wrongRec.Code)
+		}
+
+		// Valid X-Macro-Internal-Token -> 200
+		okReq := httptest.NewRequest(http.MethodGet, "/api/v1/internal/macro/strategy-brief", nil)
+		okReq.Header.Set("X-Macro-Internal-Token", secret)
+		okRec := httptest.NewRecorder()
+		r.ServeHTTP(okRec, okReq)
+		if okRec.Code != http.StatusOK {
+			t.Fatalf("valid header token: expected 200, got %d body=%s", okRec.Code, okRec.Body.String())
+		}
+
+		var env struct {
+			Code    int                   `json:"code"`
+			Message string                `json:"message"`
+			Data    StrategyBriefResponse `json:"data"`
+		}
+		if err := json.Unmarshal(okRec.Body.Bytes(), &env); err != nil {
+			t.Fatalf("unmarshal strategy brief: %v", err)
+		}
+		if env.Code != 0 || env.Data.Framework.Signal != "accumulate" || env.Data.Framework.ReferencePaceMultiplier != 1.2 {
+			t.Fatalf("unexpected strategy brief framework: %+v", env.Data.Framework)
+		}
+		if !strings.Contains(env.Data.OfficialAccountReply, "测试复盘号") || !strings.Contains(env.Data.CommunityBrief, "CFTC 黄金 COT") {
+			t.Fatalf("unexpected generated templates: reply=%q brief=%q", env.Data.OfficialAccountReply, env.Data.CommunityBrief)
+		}
+
+		// Valid Authorization: Bearer <token> -> 200
+		bearerReq := httptest.NewRequest(http.MethodGet, "/api/v1/internal/macro/strategy-brief", nil)
+		bearerReq.Header.Set("Authorization", "Bearer "+secret)
+		bearerRec := httptest.NewRecorder()
+		r.ServeHTTP(bearerRec, bearerReq)
+		if bearerRec.Code != http.StatusOK {
+			t.Fatalf("valid bearer token: expected 200, got %d body=%s", bearerRec.Code, bearerRec.Body.String())
+		}
+	})
 }

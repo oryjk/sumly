@@ -45,6 +45,7 @@ func TestEmbeddedOpenAPISpecIsValid(t *testing.T) {
 		"/api/v1/app/macro/indicators/{series_id}",
 		"/api/v1/app/macro/cot/gold",
 		"/api/v1/app/macro/sync/status",
+		"/api/v1/internal/macro/strategy-brief",
 	} {
 		if document.Paths.Find(path) == nil {
 			t.Fatalf("OpenAPI spec is missing path %s", path)

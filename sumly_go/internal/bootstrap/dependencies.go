@@ -173,7 +173,11 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 	macroReader := macropostgres.NewReader(pool)
 	macroWriter := macropostgres.NewWriter(pool)
 	macroQuery := macroapplication.NewMacroQuery(macroReader)
-	macroHandler := macrohttp.NewHandler(macroQuery)
+	macroHandler := macrohttp.NewHandlerWithOptions(macroQuery, macrohttp.HandlerOptions{
+		OfficialAccountName: config.MacroOfficialAccountName,
+		OfficialAccountNote: config.MacroOfficialAccountNote,
+		InternalToken:       config.MacroInternalToken,
+	})
 	if config.MacroSyncEnabled {
 		seedCSV := macroseedcsv.New()
 		macroSyncer := macroapplication.NewMacroSyncer(macroReader, macroWriter, macroapplication.SyncSources{

@@ -13,6 +13,7 @@ tags:
   - name: App Users
   - name: App Market
   - name: App Macro
+  - name: Internal Macro
 
 x-bearer-security: &bearerSecurity
   - bearerAuth: []
@@ -1023,8 +1024,8 @@ paths:
     get:
       operationId: getMacroTemperature
       tags: [App Macro]
-      summary: 获取黄金温度计（0-100°）与操作指南针
-      description: 只读接口，仅从数据库已持久化快照读取，绝不触发外部回源或写库。冷启动尚无观测时返回 200 降级态（degraded=true, as_of=""）。公开接口，无需登录。
+      summary: 获取黄金温度计（0-100°）与市场热度状态
+      description: 只读接口，仅从数据库已持久化快照读取，绝不触发外部回源或写库。冷启动尚无观测时返回 200 降级态（degraded=true, as_of=""）。公开接口，无需登录。全部文案仅客观刻画市场热度、拥挤度与历史分位，不构成投资建议。
       security: []
       responses:
         "200":
@@ -1194,12 +1195,39 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/internal/macro/strategy-brief:
+    get:
+      operationId: getInternalMacroStrategyBrief
+      tags: [Internal Macro]
+      summary: 获取个人观察框架与 IP 矩阵内容映射简报（内部只读接口）
+      description: 受保护的内部只读接口，仅从数据库已持久化快照与指标读取，绝不触发外部回源或写库。通过 X-Macro-Internal-Token 或 Authorization Bearer 常量时间比对 MACRO_INTERNAL_TOKEN；未配置 MACRO_INTERNAL_TOKEN 时返回 404，绝不对匿名公网开放。
+      security:
+        - macroInternalToken: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 个人观察框架与公众号/社群每日复盘简报
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MacroStrategyBriefResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    macroInternalToken:
+      type: apiKey
+      in: header
+      name: X-Macro-Internal-Token
 
   responses:
     Unauthorized:
@@ -1770,6 +1798,27 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/MacroTemperatureDimension"
+            guide_help:
+              $ref: "#/components/schemas/MacroGuideHelp"
+
+    MacroGuideHelp:
+      type: object
+      required: [title, methodology, levels, official_account_name, official_account_note]
+      properties:
+        title: {type: string}
+        methodology: {type: string}
+        levels:
+          type: array
+          items:
+            type: object
+            required: [range, level, label, description]
+            properties:
+              range: {type: string}
+              level: {type: string, enum: [freezing, cool, neutral, warm, hot]}
+              label: {type: string}
+              description: {type: string}
+        official_account_name: {type: string}
+        official_account_note: {type: string}
 
     MacroTemperatureHistoryResponse:
       type: object
@@ -1969,3 +2018,85 @@ components:
                   last_error: {type: string}
                   row_count: {type: integer}
                   latest_obs_date: {type: string, nullable: true}
+
+    MacroStrategyBriefResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, example: 0}
+        message: {type: string, example: ok}
+        data:
+          type: object
+          required:
+            - as_of
+            - model_version
+            - degraded
+            - score
+            - level
+            - level_label
+            - volatility_alert
+            - volatility_note
+            - macro_regime
+            - framework
+            - key_metrics
+            - official_account_reply
+            - community_brief
+          properties:
+            as_of: {type: string}
+            model_version: {type: string, example: v1}
+            degraded: {type: boolean}
+            score: {type: number}
+            level: {type: string, enum: [freezing, cool, neutral, warm, hot]}
+            level_label: {type: string}
+            change_1d: {type: number, nullable: true}
+            change_5d: {type: number, nullable: true}
+            volatility_alert: {type: boolean}
+            volatility_note: {type: string}
+            macro_regime:
+              type: object
+              required: [score, regime, label, summary]
+              properties:
+                score: {type: number}
+                regime: {type: string, enum: [tailwind, neutral, headwind]}
+                label: {type: string}
+                summary: {type: string}
+            framework:
+              type: object
+              required:
+                - signal
+                - level
+                - macro_regime
+                - title
+                - historical_perspective
+                - reference_pace_multiplier
+                - reference_pace_label
+                - risk_notice
+              properties:
+                signal: {type: string}
+                level: {type: string, enum: [freezing, cool, neutral, warm, hot]}
+                macro_regime: {type: string, enum: [tailwind, neutral, headwind]}
+                title: {type: string}
+                historical_perspective: {type: string}
+                reference_pace_multiplier: {type: number}
+                reference_pace_label: {type: string}
+                risk_notice: {type: string}
+            key_metrics:
+              type: object
+              required: [cot_date]
+              properties:
+                gold_price_usd: {type: number, nullable: true}
+                ma200_deviation_pct: {type: number, nullable: true}
+                domestic_premium_pct: {type: number, nullable: true}
+                total_debt_trillion_usd: {type: number, nullable: true}
+                debt_change_yoy_trillion: {type: number, nullable: true}
+                debt_to_gdp_pct: {type: number, nullable: true}
+                fiscal_stress_score: {type: number, nullable: true}
+                yield_10y_nominal_pct: {type: number, nullable: true}
+                yield_10y_real_pct: {type: number, nullable: true}
+                breakeven_10y_pct: {type: number, nullable: true}
+                cot_date: {type: string}
+                cot_mm_net: {type: number, nullable: true}
+                cot_open_interest: {type: number, nullable: true}
+                cot_mm_net_ratio_pct: {type: number, nullable: true}
+            official_account_reply: {type: string}
+            community_brief: {type: string}

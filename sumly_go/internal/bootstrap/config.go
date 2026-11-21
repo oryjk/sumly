@@ -37,8 +37,13 @@ type Config struct {
 	DevLoginEnabled                bool
 	// Macro 宏观与黄金温度模块配置：FRED_API_KEY 可选（留空时跳过 FRED 并告警，不阻断服务启动）；
 	// MACRO_SYNC_ENABLED 默认 true，设置为 false 时关闭后台同步 goroutine。
-	FREDAPIKey       string
-	MacroSyncEnabled bool
+	// MACRO_OFFICIAL_ACCOUNT_NAME / MACRO_OFFICIAL_ACCOUNT_NOTE 可选，用于温度计说明弹窗中的克制公众号信息；
+	// MACRO_INTERNAL_TOKEN 可选，仅用于内部只读策略映射接口鉴权（留空时关闭该内部接口，绝不记录到日志）。
+	FREDAPIKey               string
+	MacroSyncEnabled         bool
+	MacroOfficialAccountName string
+	MacroOfficialAccountNote string
+	MacroInternalToken       string
 }
 
 func LoadConfig() (Config, error) {
@@ -59,6 +64,9 @@ func LoadConfig() (Config, error) {
 		DevLoginEnabled:                os.Getenv("DEV_LOGIN_ENABLED") == "true",
 		FREDAPIKey:                     strings.TrimSpace(os.Getenv("FRED_API_KEY")),
 		MacroSyncEnabled:               !strings.EqualFold(strings.TrimSpace(os.Getenv("MACRO_SYNC_ENABLED")), "false"),
+		MacroOfficialAccountName:       strings.TrimSpace(os.Getenv("MACRO_OFFICIAL_ACCOUNT_NAME")),
+		MacroOfficialAccountNote:       strings.TrimSpace(os.Getenv("MACRO_OFFICIAL_ACCOUNT_NOTE")),
+		MacroInternalToken:             strings.TrimSpace(os.Getenv("MACRO_INTERNAL_TOKEN")),
 	}
 
 	for name, value := range map[string]string{

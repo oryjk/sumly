@@ -41,6 +41,7 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 	}
 	if dependencies.Macro != nil {
 		dependencies.Macro.RegisterPublicRoutes(app)
+		dependencies.Macro.RegisterInternalRoutes(v1.Group("/internal"))
 	}
 	if dependencies.Notifications != nil {
 		dependencies.Notifications.RegisterRoutes(app)

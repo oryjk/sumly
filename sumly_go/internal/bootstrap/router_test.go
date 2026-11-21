@@ -304,3 +304,56 @@ func (routerMacroQuery) GetGoldCot(context.Context, string) (macrodomain.CotDash
 func (routerMacroQuery) GetSyncStatus(context.Context) (macrodomain.SyncStatusOverview, error) {
 	return macrodomain.SyncStatusOverview{}, nil
 }
+func (routerMacroQuery) GetStrategyBrief(_ context.Context, officialAccountName string) (macrodomain.StrategyBrief, error) {
+	return macrodomain.BuildStrategyBrief(macrodomain.StrategyBriefInput{
+		Snapshot:            macrodomain.EmptyTemperatureSnapshot(),
+		OfficialAccountName: officialAccountName,
+	}), nil
+}
+
+func TestMacroInternalStrategyBriefRouteAuth(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Unconfigured token -> 404 even if caller sends a header
+	unconfigured := NewRouter(Dependencies{Macro: macrohttp.NewHandler(routerMacroQuery{})})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/internal/macro/strategy-brief", nil)
+	req.Header.Set("X-Macro-Internal-Token", "anything")
+	rec := httptest.NewRecorder()
+	unconfigured.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 when internal token is unconfigured, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Configured token -> rejects missing/wrong token with 401, accepts exact token with 200
+	configured := NewRouter(Dependencies{
+		Macro: macrohttp.NewHandlerWithOptions(routerMacroQuery{}, macrohttp.HandlerOptions{
+			OfficialAccountName: "测试宏观号",
+			InternalToken:       "macro-secret-123",
+		}),
+	})
+
+	for _, tc := range []struct {
+		name   string
+		header string
+		value  string
+		want   int
+	}{
+		{name: "missing auth", want: http.StatusUnauthorized},
+		{name: "wrong custom header", header: "X-Macro-Internal-Token", value: "wrong", want: http.StatusUnauthorized},
+		{name: "wrong bearer", header: "Authorization", value: "Bearer wrong", want: http.StatusUnauthorized},
+		{name: "valid custom header", header: "X-Macro-Internal-Token", value: "macro-secret-123", want: http.StatusOK},
+		{name: "valid bearer", header: "Authorization", value: "Bearer macro-secret-123", want: http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/api/v1/internal/macro/strategy-brief", nil)
+			if tc.header != "" {
+				r.Header.Set(tc.header, tc.value)
+			}
+			w := httptest.NewRecorder()
+			configured.ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("status=%d want=%d body=%s", w.Code, tc.want, w.Body.String())
+			}
+		})
+	}
+}

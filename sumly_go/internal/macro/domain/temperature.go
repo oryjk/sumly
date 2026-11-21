@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -25,7 +26,71 @@ const (
 	DimMacroPulse      = "macro_pulse"
 )
 
-const DefaultDisclaimer = "以上数据与黄金温度模型基于公开宏观及市场历史分位自动计算，仅供学习与参考，不构成任何投资建议。"
+const (
+	DefaultDisclaimer          = "数据与温度模型基于公开宏观及市场统计测算，仅反映历史分位与市场热度状态，不构成任何投资建议。"
+	DefaultOfficialAccountNote = "每日宏观数据复盘与模型方法论笔记同步更新于微信公众号"
+)
+
+type GuideHelpLevel struct {
+	Range       string
+	Level       string
+	Label       string
+	Description string
+}
+
+type GuideHelp struct {
+	Title               string
+	Methodology         string
+	Levels              []GuideHelpLevel
+	OfficialAccountName string
+	OfficialAccountNote string
+}
+
+func BuildGuideHelp(officialAccountName, officialAccountNote string) GuideHelp {
+	name := strings.TrimSpace(officialAccountName)
+	note := strings.TrimSpace(officialAccountNote)
+	if name != "" && note == "" {
+		note = DefaultOfficialAccountNote
+	}
+	return GuideHelp{
+		Title:       "黄金温度计说明",
+		Methodology: "黄金温度计综合趋势偏离、机构持仓拥挤度、国内溢价、资金流与跨品种强弱、实际利率与美元短期共振共 5 个维度，基于近 3 年滚动历史分位加权合成（0°~100°），仅客观刻画市场冷热与拥挤程度，不构成投资建议。",
+		Levels: []GuideHelpLevel{
+			{
+				Range:       "0° ~ 20°",
+				Level:       LevelFreezing,
+				Label:       "极冷区间",
+				Description: "情绪与交易热度处于近 3 年低位，市场关注度低迷",
+			},
+			{
+				Range:       "20° ~ 40°",
+				Level:       LevelCool,
+				Label:       "偏冷区间",
+				Description: "交易拥挤度较低，市场情绪尚未过热",
+			},
+			{
+				Range:       "40° ~ 60°",
+				Level:       LevelNeutral,
+				Label:       "中性区间",
+				Description: "多空力量相对均衡，市场热度处于常态",
+			},
+			{
+				Range:       "60° ~ 80°",
+				Level:       LevelWarm,
+				Label:       "偏热区间",
+				Description: "资金关注度升温，交投活跃度偏高",
+			},
+			{
+				Range:       "80° ~ 100°",
+				Level:       LevelHot,
+				Label:       "极热区间",
+				Description: "短期偏离与多头拥挤度处于高位，历史波动往往放大",
+			},
+		},
+		OfficialAccountName: name,
+		OfficialAccountNote: note,
+	}
+}
 
 type TemperatureDimension struct {
 	Key       string
@@ -119,15 +184,32 @@ var temperatureDimensions = []dimensionSpec{
 func LevelForScore(score float64) (string, string) {
 	switch {
 	case score < 20:
-		return LevelFreezing, "极冷低迷"
+		return LevelFreezing, LabelForLevel(LevelFreezing)
 	case score < 40:
-		return LevelCool, "偏冷蓄势"
+		return LevelCool, LabelForLevel(LevelCool)
 	case score < 60:
-		return LevelNeutral, "温和中性"
+		return LevelNeutral, LabelForLevel(LevelNeutral)
 	case score < 80:
-		return LevelWarm, "偏热活跃"
+		return LevelWarm, LabelForLevel(LevelWarm)
 	default:
-		return LevelHot, "极度火热"
+		return LevelHot, LabelForLevel(LevelHot)
+	}
+}
+
+func LabelForLevel(level string) string {
+	switch level {
+	case LevelFreezing:
+		return "极冷区间"
+	case LevelCool:
+		return "偏冷区间"
+	case LevelNeutral:
+		return "中性区间"
+	case LevelWarm:
+		return "偏热区间"
+	case LevelHot:
+		return "极热区间"
+	default:
+		return "中性区间"
 	}
 }
 
@@ -151,9 +233,9 @@ func EmptyTemperatureSnapshot() TemperatureSnapshot {
 		Score:   50,
 		Regime:  RegimeNeutral,
 		Label:   "宏观中性",
-		Summary: "长期宏观指标尚未同步完成，暂按中性底座处理。",
+		Summary: "长期宏观指标尚未同步完成，暂按中性区间统计。",
 	}
-	guide := buildActionGuide(regime, LevelNeutral, 50, nil, nil, false)
+	guide := BuildActionGuide(regime, LevelNeutral, 50, nil, nil, false)
 	return TemperatureSnapshot{
 		AsOf:            "",
 		ModelVersion:    ModelVersionV1,
@@ -161,13 +243,88 @@ func EmptyTemperatureSnapshot() TemperatureSnapshot {
 		MissingFactors:  missing,
 		Score:           50,
 		Level:           LevelNeutral,
-		LevelLabel:      "温和中性",
+		LevelLabel:      LabelForLevel(LevelNeutral),
 		VolatilityAlert: false,
-		VolatilityNote:  "波动率指标尚未同步，暂无法评估极端波动风险。",
+		VolatilityNote:  "波动率指标尚未同步，暂无法评估当前市场波动水平。",
 		MacroRegime:     regime,
 		ActionGuide:     guide,
 		Dimensions:      dims,
 	}
+}
+
+// SanitizePublicTemperatureSnapshot ensures even legacy persisted snapshots strictly
+// present objective, non-advisory public copy without mutating stored metrics.
+func SanitizePublicTemperatureSnapshot(snap TemperatureSnapshot) TemperatureSnapshot {
+	if snap.MissingFactors == nil {
+		snap.MissingFactors = []string{}
+	}
+	if snap.Dimensions == nil {
+		snap.Dimensions = []TemperatureDimension{}
+	} else {
+		dims := make([]TemperatureDimension, len(snap.Dimensions))
+		for i, d := range snap.Dimensions {
+			if d.Metrics == nil {
+				d.Metrics = map[string]float64{}
+			}
+			dims[i] = d
+		}
+		snap.Dimensions = dims
+	}
+
+	level := snap.Level
+	if level == "" {
+		level, _ = LevelForScore(snap.Score)
+		snap.Level = level
+	}
+	snap.LevelLabel = LabelForLevel(level)
+
+	if snap.AsOf == "" {
+		snap.MacroRegime = MacroRegime{
+			Score:   50,
+			Regime:  RegimeNeutral,
+			Label:   "宏观中性",
+			Summary: "长期宏观指标尚未同步完成，暂按中性区间统计。",
+		}
+	} else {
+		snap.MacroRegime = DescribeMacroRegime(snap.MacroRegime.Regime, snap.MacroRegime.Score)
+	}
+
+	snap.VolatilityNote = sanitizePublicVolatilityNote(snap.VolatilityNote, snap.VolatilityAlert, snap.AsOf == "")
+	snap.ActionGuide = BuildActionGuide(
+		snap.MacroRegime,
+		snap.Level,
+		snap.Score,
+		snap.ActionGuide.MA200DeviationPct,
+		snap.ActionGuide.DomesticPremiumPct,
+		snap.VolatilityAlert,
+	)
+	return snap
+}
+
+func sanitizePublicVolatilityNote(note string, alert, coldStart bool) string {
+	trimmed := strings.TrimSpace(note)
+	if coldStart && trimmed == "" {
+		return "波动率指标尚未同步，暂无法评估当前市场波动水平。"
+	}
+	if trimmed == "" || containsLegacyAdvisoryHint(trimmed) {
+		if alert {
+			return "黄金隐含波动率处于近 3 年高位，历史同期短期振幅往往放大。"
+		}
+		if coldStart {
+			return "波动率指标尚未同步，暂无法评估当前市场波动水平。"
+		}
+		return "黄金隐含波动率整体处于常态波动区间。"
+	}
+	return trimmed
+}
+
+func containsLegacyAdvisoryHint(s string) bool {
+	for _, token := range []string{"建议", "仓位", "分批", "定投", "追高", "止盈", "建仓", "加仓", "减仓", "加配", "减配", "适合", "划算", "黄金坑", "防守", "试探"} {
+		if strings.Contains(s, token) {
+			return true
+		}
+	}
+	return false
 }
 
 // ComputeTemperature computes the latest snapshot and daily historical temperature series.
@@ -416,18 +573,18 @@ func ComputeTemperature(inputs TemperatureInputs) (TemperatureSnapshot, []Temper
 		var snap *TemperatureSnapshot
 		if i == n-1 {
 			volAlert := false
-			volNote := "黄金隐含波动率处于常态区间，暂无极端波动预警。"
+			volNote := "黄金隐含波动率处于常态区间，暂无高波动提示。"
 			if !math.IsNaN(gvzPct[i]) {
 				if gvzPct[i] > 85.0 {
 					volAlert = true
-					volNote = fmt.Sprintf("黄金隐含波动率（GVZ=%.1f）处于近 3 年 %.0f%% 极端高位，短期剧烈震荡风险上升，建议控制单笔仓位、拉长分批节奏。", gvzVal[i], gvzPct[i])
+					volNote = fmt.Sprintf("黄金隐含波动率（GVZ=%.1f）处于近 3 年 %.0f%% 高位，历史同期短期振幅往往放大。", gvzVal[i], gvzPct[i])
 				} else {
-					volNote = fmt.Sprintf("黄金隐含波动率（GVZ=%.1f）处于近 3 年 %.0f%% 分位，波动在可控区间内。", gvzVal[i], gvzPct[i])
+					volNote = fmt.Sprintf("黄金隐含波动率（GVZ=%.1f）处于近 3 年 %.0f%% 分位，整体波动处于常态区间。", gvzVal[i], gvzPct[i])
 				}
 			} else if gvzOK[i] {
-				volNote = fmt.Sprintf("当前 GVZ=%.1f，历史样本积累中，暂未触发极端波动预警。", gvzVal[i])
+				volNote = fmt.Sprintf("当前黄金隐含波动率 GVZ=%.1f，历史样本积累中，暂未触发高波动提示。", gvzVal[i])
 			} else {
-				volNote = "暂缺 GVZ 波动率数据，请结合仓位控制短期波动风险。"
+				volNote = "暂缺黄金隐含波动率（GVZ）观测数据，暂无法统计波动分位。"
 			}
 
 			regime := computeMacroRegime(g.Date, debtGDP, fiscalStress, cbGoldNet, usdReserve, dfii10)
@@ -441,7 +598,7 @@ func ComputeTemperature(inputs TemperatureInputs) (TemperatureSnapshot, []Temper
 				v := RoundTo(shVal[i], 2)
 				shPtr = &v
 			}
-			guide := buildActionGuide(regime, level, totalScore, devPtr, shPtr, volAlert)
+			guide := BuildActionGuide(regime, level, totalScore, devPtr, shPtr, volAlert)
 
 			s := TemperatureSnapshot{
 				AsOf:            FormatDate(g.Date),
@@ -476,7 +633,7 @@ func ComputeTemperature(inputs TemperatureInputs) (TemperatureSnapshot, []Temper
 		empty := EmptyTemperatureSnapshot()
 		empty.AsOf = FormatDate(gold[n-1].Date)
 		empty.MacroRegime = computeMacroRegime(gold[n-1].Date, debtGDP, fiscalStress, cbGoldNet, usdReserve, dfii10)
-		empty.ActionGuide = buildActionGuide(empty.MacroRegime, empty.Level, empty.Score, nil, nil, false)
+		empty.ActionGuide = BuildActionGuide(empty.MacroRegime, empty.Level, empty.Score, nil, nil, false)
 		return empty, []TemperatureDailyPoint{}
 	}
 
@@ -633,7 +790,7 @@ func computeMacroRegime(
 			Score:   50,
 			Regime:  RegimeNeutral,
 			Label:   "宏观中性",
-			Summary: "长期宏观指标数据不足，暂按中性底座评估。",
+			Summary: "长期宏观指标数据不足，暂按中性区间统计。",
 		}
 	}
 
@@ -647,30 +804,41 @@ func computeMacroRegime(
 
 	switch {
 	case score >= 60:
+		return DescribeMacroRegime(RegimeTailwind, score)
+	case score >= 40:
+		return DescribeMacroRegime(RegimeNeutral, score)
+	default:
+		return DescribeMacroRegime(RegimeHeadwind, score)
+	}
+}
+
+func DescribeMacroRegime(regime string, score float64) MacroRegime {
+	switch regime {
+	case RegimeTailwind:
 		return MacroRegime{
 			Score:   score,
 			Regime:  RegimeTailwind,
-			Label:   "长期宏观顺风",
-			Summary: "美债扩张与财政压力偏高、央行购金或去美元化趋势提供长期支撑，黄金具备较强中长期配置底座。",
+			Label:   "长期宏观偏暖",
+			Summary: "美债规模、财政压力与央行购金等长期宏观指标整体偏强，反映中长期基本面背景偏暖。",
 		}
-	case score >= 40:
+	case RegimeHeadwind:
 		return MacroRegime{
 			Score:   score,
-			Regime:  RegimeNeutral,
-			Label:   "宏观中性",
-			Summary: "高实际利率压制与债务/央行购金支撑相互拉锯，黄金长逻辑中性偏震荡，更宜重节奏轻追涨。",
+			Regime:  RegimeHeadwind,
+			Label:   "长期宏观偏弱",
+			Summary: "实际利率水平相对偏高且财政与外储端驱动偏弱，长期宏观背景整体偏弱。",
 		}
 	default:
 		return MacroRegime{
 			Score:   score,
-			Regime:  RegimeHeadwind,
-			Label:   "长期宏观逆风",
-			Summary: "实际利率偏高且财政/去美元化驱动偏弱，黄金长期顺风不足，建议降低定投系数并严控追高。",
+			Regime:  RegimeNeutral,
+			Label:   "宏观中性",
+			Summary: "实际利率水平与美债规模、央行购金等长期宏观指标力量相对均衡，整体处于中性区间。",
 		}
 	}
 }
 
-func buildActionGuide(
+func BuildActionGuide(
 	regime MacroRegime,
 	level string,
 	score float64,
@@ -687,120 +855,174 @@ func buildActionGuide(
 	}
 
 	var rule guideRule
-	headwind := regime.Regime == RegimeHeadwind
+	regimeKind := regime.Regime
+	if regimeKind != RegimeTailwind && regimeKind != RegimeHeadwind {
+		regimeKind = RegimeNeutral
+	}
+	headwind := regimeKind == RegimeHeadwind
 
 	switch level {
 	case LevelFreezing:
 		if headwind {
 			rule = guideRule{
 				signal:     "accumulate",
-				title:      "冰点分批试探",
-				summary:    "市场情绪极冷但长期宏观偏逆风，可小幅提高定投系数分批低吸，不宜一次性重仓。",
+				title:      "极冷区间 · 宏观偏弱",
+				summary:    "五维市场热度处于近 3 年极低分位，同时实际利率与财政端等长期宏观指标偏弱，整体呈现“宏观偏弱、短线极冷”特征。",
 				multiplier: 1.2,
-				dcaLabel:   "适度加配 1.2x",
+				dcaLabel:   "近3年极低分位",
+			}
+		} else if regimeKind == RegimeTailwind {
+			rule = guideRule{
+				signal:     "strong_accumulate",
+				title:      "极冷区间 · 宏观偏暖",
+				summary:    "五维市场热度处于近 3 年极低分位，同时美债与央行购金等长期宏观指标偏强，整体呈现“宏观偏暖、短线极冷”特征。",
+				multiplier: 1.5,
+				dcaLabel:   "近3年极低分位",
 			}
 		} else {
 			rule = guideRule{
 				signal:     "strong_accumulate",
-				title:      "极冷区间 · 黄金击球区",
-				summary:    "短期情绪极度低迷而宏观底座稳健，历史上赔率较优，适合提高定投系数积极分批收集筹码。",
+				title:      "极冷区间 · 热度处于低位",
+				summary:    "五维市场热度处于近 3 年极低分位，市场交易活跃度低迷，长期宏观指标整体处于中性区间。",
 				multiplier: 1.5,
-				dcaLabel:   "加速定投 1.5x",
+				dcaLabel:   "近3年极低分位",
 			}
 		}
 	case LevelCool:
 		if headwind {
 			rule = guideRule{
 				signal:     "hold_dca",
-				title:      "偏冷蓄势 · 常规分批",
-				summary:    "黄金温度偏低具备一定安全边际，但宏观顺风偏弱，维持标准定投节奏即可。",
+				title:      "偏冷区间 · 宏观偏弱",
+				summary:    "五维市场热度处于近 3 年偏低分位，交易拥挤度较低，同时实际利率等长期宏观指标整体偏弱。",
 				multiplier: 1.0,
-				dcaLabel:   "标准定投 1.0x",
+				dcaLabel:   "拥挤度较低",
+			}
+		} else if regimeKind == RegimeTailwind {
+			rule = guideRule{
+				signal:     "accumulate",
+				title:      "偏冷区间 · 宏观偏暖",
+				summary:    "五维市场热度处于近 3 年偏低分位，同时美债与央行购金等长期宏观指标偏强，整体呈现“宏观偏暖、短线偏冷”特征。",
+				multiplier: 1.2,
+				dcaLabel:   "拥挤度较低",
 			}
 		} else {
 			rule = guideRule{
 				signal:     "accumulate",
-				title:      "偏冷蓄势 · 逢低加配",
-				summary:    "市场情绪尚未拥挤且长期宏观偏暖，适合略高于常规的节奏稳步定投或逢回调加仓。",
+				title:      "偏冷区间 · 拥挤度较低",
+				summary:    "五维市场热度处于近 3 年偏低分位，交易拥挤度较低，长期宏观指标整体处于中性区间。",
 				multiplier: 1.2,
-				dcaLabel:   "偏冷加配 1.2x",
+				dcaLabel:   "拥挤度较低",
 			}
 		}
 	case LevelNeutral:
 		if headwind {
 			rule = guideRule{
 				signal:     "cautious",
-				title:      "温度中性 · 逆风减配",
-				summary:    "市场冷热适中但宏观底座偏逆风，建议下调定投系数，耐心等待更有性价比的回踩。",
+				title:      "中性区间 · 宏观偏弱",
+				summary:    "五维市场热度处于近 3 年中位区间，多空力量相对均衡，但实际利率等长期宏观指标整体偏弱。",
 				multiplier: 0.5,
-				dcaLabel:   "逆风减半 0.5x",
+				dcaLabel:   "热度均衡",
+			}
+		} else if regimeKind == RegimeTailwind {
+			rule = guideRule{
+				signal:     "hold_dca",
+				title:      "中性区间 · 宏观偏暖",
+				summary:    "五维市场热度处于近 3 年中位区间，多空力量相对均衡，同时美债与央行购金等长期宏观指标偏强。",
+				multiplier: 1.0,
+				dcaLabel:   "热度均衡",
 			}
 		} else {
 			rule = guideRule{
 				signal:     "hold_dca",
-				title:      "温和中性 · 保持定投",
-				summary:    "当前市场既不恐慌也不狂热，按原计划标准节奏定投持有，避免频繁择时折腾。",
+				title:      "中性区间 · 多空相对均衡",
+				summary:    "五维市场热度处于近 3 年中位区间，多空力量相对均衡，长期宏观指标亦处于中性常态。",
 				multiplier: 1.0,
-				dcaLabel:   "标准定投 1.0x",
+				dcaLabel:   "热度均衡",
 			}
 		}
 	case LevelWarm:
 		if headwind {
 			rule = guideRule{
 				signal:     "pause_take_profit",
-				title:      "偏热叠加逆风 · 暂停追高",
-				summary:    "短期温度偏热且长期宏观支撑不足，建议暂停新增定投，盈利仓位可考虑分批落袋。",
+				title:      "偏热区间 · 宏观偏弱",
+				summary:    "五维市场热度处于近 3 年偏高分位，短期交投偏热，但长期宏观指标整体偏弱，短长周期出现背离特征。",
 				multiplier: 0.0,
-				dcaLabel:   "暂停定投 0.0x",
+				dcaLabel:   "关注度偏高",
+			}
+		} else if regimeKind == RegimeTailwind {
+			rule = guideRule{
+				signal:     "cautious",
+				title:      "偏热区间 · 宏观偏暖",
+				summary:    "五维市场热度处于近 3 年偏高分位，资金关注度与交投活跃度升温，长期宏观指标同时偏强。",
+				multiplier: 0.5,
+				dcaLabel:   "关注度偏高",
 			}
 		} else {
 			rule = guideRule{
 				signal:     "cautious",
-				title:      "偏热活跃 · 减半定投勿追高",
-				summary:    "金价与交易情绪已偏热，虽有长期宏观顺风，仍建议将定投减半，切忌情绪化大额追涨。",
+				title:      "偏热区间 · 关注度升温",
+				summary:    "五维市场热度处于近 3 年偏高分位，资金关注度与交投活跃度升温，长期宏观指标整体处于中性区间。",
 				multiplier: 0.5,
-				dcaLabel:   "偏热减半 0.5x",
+				dcaLabel:   "关注度偏高",
 			}
 		}
 	default: // LevelHot
-		rule = guideRule{
-			signal:     "pause_take_profit",
-			title:      "极度火热 · 暂停定投防回撤",
-			summary:    fmt.Sprintf("当前黄金温度高达 %.1f°，市场交易高度拥挤，短期回撤风险显著上升；建议暂停新增定投，偏重仓位可分批止盈再平衡。", score),
-			multiplier: 0.0,
-			dcaLabel:   "过热暂停 0.0x",
+		if headwind {
+			rule = guideRule{
+				signal:     "pause_take_profit",
+				title:      "极热区间 · 宏观偏弱",
+				summary:    fmt.Sprintf("当前黄金温度为 %.1f°，五维热度与多头拥挤度处于近 3 年高位区间，且长期宏观指标偏弱，历史同期短期振幅往往放大。", score),
+				multiplier: 0.0,
+				dcaLabel:   "拥挤度偏高",
+			}
+		} else if regimeKind == RegimeTailwind {
+			rule = guideRule{
+				signal:     "pause_take_profit",
+				title:      "极热区间 · 宏观偏暖",
+				summary:    fmt.Sprintf("当前黄金温度为 %.1f°，五维热度与多头拥挤度处于近 3 年高位区间，同时长期宏观指标偏强，历史同期短期波动往往放大。", score),
+				multiplier: 0.0,
+				dcaLabel:   "拥挤度偏高",
+			}
+		} else {
+			rule = guideRule{
+				signal:     "pause_take_profit",
+				title:      "极热区间 · 交易高度拥挤",
+				summary:    fmt.Sprintf("当前黄金温度为 %.1f°，五维热度与多头拥挤度处于近 3 年高位区间，长期宏观指标处于中性，历史同期短期波动往往放大。", score),
+				multiplier: 0.0,
+				dcaLabel:   "拥挤度偏高",
+			}
 		}
 	}
 
-	if volAlert && rule.multiplier > 0 {
-		rule.summary += " 当前波动率处于高位预警区，请拉长分批间隔并控制单笔金额。"
+	if volAlert {
+		rule.summary += " 当前隐含波动率处于近 3 年高位，市场短期振幅较常态明显扩大。"
 	}
 
-	ma200Note := "暂缺足够历史数据计算 200 日年线偏离度。"
+	ma200Note := "暂缺足够历史数据计算 200 日均线偏离度。"
 	if ma200DevPct != nil {
 		d := *ma200DevPct
 		switch {
 		case d < 0:
-			ma200Note = fmt.Sprintf("当前金价低于 200 日年线 %.1f%%，处于年线下方，长期安全垫较厚。", math.Abs(d))
+			ma200Note = fmt.Sprintf("低于 200 日均线 %.1f%%，处于年线下方。", math.Abs(d))
 		case d <= 10:
-			ma200Note = fmt.Sprintf("当前金价高于年线 %.1f%%，处于温和健康的多头区间。", d)
+			ma200Note = fmt.Sprintf("高于 200 日均线 %.1f%%，处于年线上方温和区间。", d)
 		case d <= 20:
-			ma200Note = fmt.Sprintf("当前金价高于年线 %.1f%%，偏离度偏高，追高性价比下降。", d)
+			ma200Note = fmt.Sprintf("高于 200 日均线 %.1f%%，较年线正向偏离幅度偏高。", d)
 		default:
-			ma200Note = fmt.Sprintf("当前金价高于年线 %.1f%%，显著远离年线，谨防均值回归式回踩。", d)
+			ma200Note = fmt.Sprintf("高于 200 日均线 %.1f%%，显著高于年线均值水平。", d)
 		}
 	}
 
-	premNote := "暂缺上海金溢价数据，购金时建议留意品牌工费与盘面价差。"
+	premNote := "暂缺上海金相对国际折算价的溢价统计数据。"
 	if domesticPremiumPct != nil {
 		p := *domesticPremiumPct
 		switch {
 		case p < 0:
-			premNote = fmt.Sprintf("国内金价较国际折算价折价 %.2f%%，当前国内买金性价比偏高。", math.Abs(p))
+			premNote = fmt.Sprintf("国内金价较国际折算价折价 %+.2f%%。", p)
 		case p <= 1.5:
-			premNote = fmt.Sprintf("国内溢价率 %+.2f%%，处于正常合理区间。", p)
+			premNote = fmt.Sprintf("国内金价较国际折算价溢价 %+.2f%%，处于常态价差区间。", p)
 		default:
-			premNote = fmt.Sprintf("国内溢价率 %+.2f%% 偏高，存在额外溢价成本，非刚需可分批等待价差收敛。", p)
+			premNote = fmt.Sprintf("国内金价较国际折算价溢价 %+.2f%%，处于偏高溢价区间。", p)
 		}
 	}
 
