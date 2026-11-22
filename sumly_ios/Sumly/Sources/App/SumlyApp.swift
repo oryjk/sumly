@@ -224,7 +224,8 @@ private struct GoldWorkspaceView: View {
                     AccountView(
                         session: session,
                         cloud: cloud,
-                        onOpenChanlun: openChanlun
+                        onOpenChanlun: openChanlun,
+                        onOpenOnboarding: openOnboarding
                     )
                     .opacity(selectedTab == 3 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 3)
