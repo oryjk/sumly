@@ -4,12 +4,15 @@ import SwiftData
 struct AccountView: View {
     @Bindable var session: AuthSession
     var cloud: HoldingsCloud? = nil
+    var membership: MembershipStore? = nil
+    var onOpenMembership: (() -> Void)? = nil
     var onOpenChanlun: (() -> Void)? = nil
     var onOpenOnboarding: (() -> Void)? = nil
 
     @AppStorage("holdings.hideAmounts") private var hideAmounts = false
     @State private var showSettings = false
     @State private var showLogin = false
+    @State private var showLocalPaywall = false
     @State private var reauthentication: AccountDeletionIntent?
     @State private var deletionConfirmation: AccountDeletionIntent?
     @State private var confirmLogout = false
@@ -56,6 +59,19 @@ struct AccountView: View {
         .sensoryFeedback(.selection, trigger: hideAmounts)
         .sheet(isPresented: $showLogin) {
             AuthenticationSheet(session: session, reauthentication: reauthentication)
+        }
+        .sheet(isPresented: $showLocalPaywall) {
+            if let membership {
+                MembershipPaywallSheet(
+                    membership: membership,
+                    onOpenChanlun: onOpenChanlun.map { action in
+                        {
+                            showLocalPaywall = false
+                            action()
+                        }
+                    }
+                )
+            }
         }
         .onChange(of: session.user?.id) { _, _ in
             deletionConfirmation = nil
@@ -237,12 +253,30 @@ struct AccountView: View {
     // MARK: - 3. 「偏好与工具」分组卡片
 
     private var preferencesGroup: some View {
+        let showMembership = membership != nil || onOpenMembership != nil
+        let isMemberActive = membership?.isActive ?? false
         let showChanlun = ChanlunWebConfiguration.current != nil && onOpenChanlun != nil
         let showOnboarding = onOpenOnboarding != nil
         return VStack(alignment: .leading, spacing: 8) {
             AccountSectionHeader(title: AccountProfileCopy.preferencesSectionTitle)
 
             VStack(spacing: 0) {
+                if showMembership {
+                    Button {
+                        if let onOpenMembership {
+                            onOpenMembership()
+                        } else if membership != nil {
+                            showLocalPaywall = true
+                        }
+                    } label: {
+                        membershipRowContent(isMemberActive: isMemberActive)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("account.membership")
+
+                    rowDivider
+                }
+
                 // 隐私遮罩开关
                 HStack(spacing: 12) {
                     AccountRowIconBadge(systemName: hideAmounts ? "eye.slash.fill" : "eye.fill")
@@ -266,13 +300,10 @@ struct AccountView: View {
                 if showChanlun, let onOpenChanlun {
                     rowDivider
                     Button(action: onOpenChanlun) {
-                        actionRowContent(
-                            icon: "chart.line.uptrend.xyaxis",
-                            title: AccountProfileCopy.chanlunTitle,
-                            subtitle: AccountProfileCopy.chanlunSubtitle
-                        )
+                        chanlunRowContent(isMemberActive: isMemberActive)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("account.chanlun")
                 }
 
                 if showOnboarding, let onOpenOnboarding {
@@ -333,6 +364,7 @@ struct AccountView: View {
                 .buttonStyle(.plain)
             }
             .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+            .clipShape(GoldTheme.holdingsCardShape)
             .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
         }
     }
@@ -510,6 +542,105 @@ struct AccountView: View {
         GoldTheme.cardStroke
             .frame(height: 1)
             .padding(.leading, 60)
+    }
+
+    private func membershipRowContent(isMemberActive: Bool) -> some View {
+        let subtitle = membership?.entitlement.statusSummary() ?? AccountProfileCopy.membershipSubtitle
+        let priceBadge = membership?.entryPriceBadgeText ?? "\(MembershipPlan.yearly.fallbackDisplayPrice)/年起"
+        return HStack(spacing: 12) {
+            AccountRowIconBadge(systemName: "crown.fill", style: .gold)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AccountProfileCopy.membershipTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(GoldTheme.goldSoft)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(GoldTheme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            Spacer(minLength: 8)
+            if isMemberActive {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10, weight: .bold))
+                    Text(MembershipCopy.activeBadgeTitle)
+                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(GoldTheme.down)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(GoldTheme.down.opacity(0.14), in: GoldTheme.capsuleShape)
+                .overlay(
+                    GoldTheme.capsuleShape.strokeBorder(GoldTheme.down.opacity(0.38), lineWidth: 0.8)
+                )
+                .fixedSize(horizontal: true, vertical: false)
+            } else {
+                Text(priceBadge)
+                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(GoldTheme.goldSoft)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(GoldTheme.gold.opacity(0.16), in: GoldTheme.capsuleShape)
+                    .overlay(
+                        GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.42), lineWidth: 0.8)
+                    )
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(GoldTheme.textFaint)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .background(
+            LinearGradient(
+                colors: [GoldTheme.gold.opacity(0.08), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+        .contentShape(Rectangle())
+    }
+
+    private func chanlunRowContent(isMemberActive: Bool) -> some View {
+        HStack(spacing: 12) {
+            AccountRowIconBadge(systemName: "chart.line.uptrend.xyaxis")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AccountProfileCopy.chanlunTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(GoldTheme.text)
+                Text(AccountProfileCopy.chanlunSubtitle)
+                    .font(.caption)
+                    .foregroundStyle(GoldTheme.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            if !isMemberActive {
+                HStack(spacing: 3) {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(GoldTheme.gold)
+                    Text(AccountProfileCopy.chanlunMemberBadge)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(GoldTheme.goldSoft)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
+                .background(GoldTheme.gold.opacity(0.12), in: GoldTheme.capsuleShape)
+                .overlay(
+                    GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.32), lineWidth: 0.8)
+                )
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(GoldTheme.textFaint)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .contentShape(Rectangle())
     }
 
     private func actionRowContent(

@@ -1,0 +1,164 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "zh_CN",
+        "policyText" : "",
+        "policyURL" : "https://oryjk.cn/sumly/privacy"
+      }
+    ]
+  },
+  "identifier" : "A6F8E2C1-4B3D-4E91-9A2F-8C7D6E5F4A3B",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6813884595",
+    "_developerTeamID" : "237PA3LEYJ",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 785491200.0,
+    "_locale" : "zh_CN",
+    "_storefront" : "CHN",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "22604950",
+      "localizations" : [
+        {
+          "description" : "解锁禅观多周期行情走势与复盘工具",
+          "displayName" : "记金会员",
+          "locale" : "zh_CN"
+        },
+        {
+          "description" : "Unlock Chanlun multi-timeframe chart and review tools",
+          "displayName" : "Sumly Membership",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "Sumly Membership",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "99.00",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6837923490",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "按年订阅记金会员，解锁禅观多周期行情走势与复盘工具。",
+              "displayName" : "记金年度会员",
+              "locale" : "zh_CN"
+            },
+            {
+              "description" : "Unlock Chanlun multi-timeframe chart and review tools, billed annually",
+              "displayName" : "Annual Membership",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.oryjk.sumly.membership.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Sumly Membership Yearly",
+          "subscriptionGroupID" : "22604950",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "39.00",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6837923614",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "按月订阅记金会员，解锁禅观多周期行情走势与复盘工具。",
+              "displayName" : "记金月度会员",
+              "locale" : "zh_CN"
+            },
+            {
+              "description" : "Unlock Chanlun multi-timeframe chart and review tools, billed monthly",
+              "displayName" : "Monthly Membership",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.oryjk.sumly.membership.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Sumly Membership Monthly",
+          "subscriptionGroupID" : "22604950",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

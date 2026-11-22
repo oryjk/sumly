@@ -22,6 +22,9 @@ enum AccountProfileCopy {
     static let companionDaysLabel = "攒金陪伴"
 
     static let preferencesSectionTitle = "偏好与工具"
+    static let membershipTitle = MembershipCopy.title
+    static let membershipSubtitle = MembershipCopy.accountInactiveSubtitle
+    static let chanlunMemberBadge = MembershipCopy.chanlunMemberBadge
     static let privacyMaskTitle = "隐私遮罩"
     static let privacyMaskSubtitle = "隐藏全应用金额与持仓克重"
     static let chanlunTitle = "禅观"
@@ -59,6 +62,9 @@ enum AccountProfileCopy {
         activeCountLabel,
         companionDaysLabel,
         preferencesSectionTitle,
+        membershipTitle,
+        membershipSubtitle,
+        chanlunMemberBadge,
         privacyMaskTitle,
         privacyMaskSubtitle,
         chanlunTitle,

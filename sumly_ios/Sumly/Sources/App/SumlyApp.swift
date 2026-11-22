@@ -28,18 +28,30 @@ struct SumlyApp: App {
 private struct GoldRootView: View {
     let guestContainer: ModelContainer
     @State private var session = AuthSession(service: NativeAuthService(baseURL: BackendGoldPriceService.defaultBaseURL), store: KeychainCredentialStore())
+    @State private var membership = MembershipStore()
     @State private var selectedTab = HoldingsDesignPreview.isEnabled ? 1 : 0
+    @State private var pendingChanlunAfterLogin = false
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
-        HoldingWorkspaceShell(session: session, guestContainer: guestContainer, selectedTab: $selectedTab)
+        HoldingWorkspaceShell(
+            session: session,
+            membership: membership,
+            guestContainer: guestContainer,
+            selectedTab: $selectedTab,
+            pendingChanlunAfterLogin: $pendingChanlunAfterLogin
+        )
             .id(session.user?.id ?? 0)
             .task {
-                await session.restore()
+                async let restoreSession: Void = session.restore()
+                async let startMembership: Void = membership.start()
+                _ = await (restoreSession, startMembership)
                 await session.checkAppleCredential(using: SystemAppleCredentialChecker())
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task {
-                    await session.restore()
+                    async let restoreSession: Void = session.restore()
+                    async let refreshMembership: Void = membership.refreshEntitlements()
+                    _ = await (restoreSession, refreshMembership)
                     await session.checkAppleCredential(using: SystemAppleCredentialChecker())
                 } }
             }
@@ -54,14 +66,22 @@ private struct GoldRootView: View {
 
 private struct HoldingWorkspaceShell: View {
     let session: AuthSession
+    let membership: MembershipStore
     let guestContainer: ModelContainer
     @Binding var selectedTab: Int
+    @Binding var pendingChanlunAfterLogin: Bool
     @State private var cloud: HoldingsCloud?
     @State private var storageError: String?
     var body: some View {
         Group {
             if let cloud {
-                GoldWorkspaceView(session: session, cloud: cloud, selectedTab: $selectedTab)
+                GoldWorkspaceView(
+                    session: session,
+                    membership: membership,
+                    cloud: cloud,
+                    selectedTab: $selectedTab,
+                    pendingChanlunAfterLogin: $pendingChanlunAfterLogin
+                )
                     .modelContainer(cloud.container)
                     .defaultAppStorage(cloud.defaults)
             } else if let storageError {
@@ -82,8 +102,10 @@ private struct HoldingWorkspaceShell: View {
 
 private struct GoldWorkspaceView: View {
     @Bindable var session: AuthSession
+    @Bindable var membership: MembershipStore
     let cloud: HoldingsCloud
     @Binding var selectedTab: Int
+    @Binding var pendingChanlunAfterLogin: Bool
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("market.basis") private var marketBasisRaw = GoldMarketBasis.domestic.rawValue
     @AppStorage("market.showHoldingOverlay") private var showHoldingOverlay = true
@@ -100,6 +122,8 @@ private struct GoldWorkspaceView: View {
     @State private var hasEvaluatedOnboardingLaunch = false
     @State private var showingChartOverlayHint = false
     @State private var chartOverlayHintTask: Task<Void, Never>?
+    @State private var showingMembershipPaywall = false
+    @State private var pendingChanlunAfterPaywall = false
     @State private var showingLoginForChanlun = false
     @State private var showingChanlun = false
 
@@ -115,12 +139,27 @@ private struct GoldWorkspaceView: View {
     }
 
     private func openChanlun() {
-        guard ChanlunWebConfiguration.current != nil else { return }
-        if session.user == nil {
+        switch MembershipGate.evaluateChanlunAccess(
+            hasChanlunConfig: ChanlunWebConfiguration.current != nil,
+            isMemberActive: membership.isActive,
+            isSignedIn: session.user != nil
+        ) {
+        case .unavailable:
+            break
+        case .openPaywall:
+            pendingChanlunAfterPaywall = true
+            showingMembershipPaywall = true
+        case .openLogin:
+            pendingChanlunAfterLogin = true
             showingLoginForChanlun = true
-        } else {
+        case .openChanlun:
             showingChanlun = true
         }
+    }
+
+    private func openMembership() {
+        pendingChanlunAfterPaywall = false
+        showingMembershipPaywall = true
     }
 
     private func openOnboarding() {
@@ -189,6 +228,7 @@ private struct GoldWorkspaceView: View {
                         marketBasis: marketBasisBinding,
                         quoteStore: quoteStore,
                         bottomTabBarInset: tabBarLayout.homeAdditionalBottomInset,
+                        isMembershipActive: membership.isActive,
                         onOpenHoldings: { selectedTab = 1 },
                         onOpenChanlun: openChanlun
                     )
@@ -224,6 +264,8 @@ private struct GoldWorkspaceView: View {
                     AccountView(
                         session: session,
                         cloud: cloud,
+                        membership: membership,
+                        onOpenMembership: openMembership,
                         onOpenChanlun: openChanlun,
                         onOpenOnboarding: openOnboarding
                     )
@@ -320,7 +362,31 @@ private struct GoldWorkspaceView: View {
             )
             .presentationBackground(GoldTheme.background)
         }
-        .sheet(isPresented: $showingLoginForChanlun) {
+        .sheet(isPresented: $showingMembershipPaywall, onDismiss: {
+            if pendingChanlunAfterPaywall {
+                pendingChanlunAfterPaywall = false
+                if membership.isActive {
+                    openChanlun()
+                }
+            }
+        }) {
+            MembershipPaywallSheet(
+                membership: membership,
+                autoDismissOnUnlock: pendingChanlunAfterPaywall,
+                onOpenChanlun: ChanlunWebConfiguration.current != nil ? {
+                    pendingChanlunAfterPaywall = true
+                    showingMembershipPaywall = false
+                } : nil
+            )
+        }
+        .sheet(isPresented: $showingLoginForChanlun, onDismiss: {
+            if session.user == nil {
+                pendingChanlunAfterLogin = false
+            } else if pendingChanlunAfterLogin && membership.isActive {
+                pendingChanlunAfterLogin = false
+                showingChanlun = true
+            }
+        }) {
             AuthenticationSheet(session: session)
         }
         .fullScreenCover(isPresented: $showingChanlun) {
@@ -333,6 +399,13 @@ private struct GoldWorkspaceView: View {
         }
         .task(id: cloud.id) {
             evaluateOnboardingLaunch()
+            if pendingChanlunAfterLogin,
+               session.user != nil,
+               membership.isActive,
+               ChanlunWebConfiguration.current != nil {
+                pendingChanlunAfterLogin = false
+                showingChanlun = true
+            }
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }

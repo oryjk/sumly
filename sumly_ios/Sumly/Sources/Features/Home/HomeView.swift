@@ -8,6 +8,7 @@ struct HomeView: View {
     private let quoteStore: LiveGoldQuoteStore?
     private let macroService: any MacroServicing
     private let bottomTabBarInset: CGFloat?
+    private let isMembershipActive: Bool
     private let onOpenHoldings: (() -> Void)?
     private let onOpenChanlun: (() -> Void)?
     @Query private var records: [HoldingRecord]
@@ -37,6 +38,7 @@ struct HomeView: View {
         quoteStore: LiveGoldQuoteStore? = nil,
         macroService: any MacroServicing = BackendMacroService(),
         bottomTabBarInset: CGFloat? = nil,
+        isMembershipActive: Bool = false,
         onOpenHoldings: (() -> Void)? = nil,
         onOpenChanlun: (() -> Void)? = nil
     ) {
@@ -45,6 +47,7 @@ struct HomeView: View {
         self.quoteStore = quoteStore
         self.macroService = macroService
         self.bottomTabBarInset = bottomTabBarInset
+        self.isMembershipActive = isMembershipActive
         self.onOpenHoldings = onOpenHoldings
         self.onOpenChanlun = onOpenChanlun
         _model = State(initialValue: MarketHomeViewModel(basis: marketBasis.wrappedValue))
@@ -200,19 +203,30 @@ struct HomeView: View {
                             HStack {
                                 Spacer()
                                 Button(action: onOpenChanlun) {
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: 3.5) {
                                         Image(systemName: "chart.line.uptrend.xyaxis")
                                             .font(.caption.weight(.semibold))
                                         Text("禅观")
                                             .font(.caption.weight(.semibold))
+                                        if !isMembershipActive {
+                                            Image(systemName: "crown.fill")
+                                                .font(.system(size: 8.5, weight: .bold))
+                                                .foregroundStyle(GoldTheme.gold)
+                                        }
                                     }
                                     .foregroundStyle(GoldTheme.goldSoft)
-                                    .padding(.horizontal, 10)
+                                    .padding(.horizontal, isMembershipActive ? 10 : 8.5)
                                     .frame(height: 34)
                                     .background(GoldTheme.card, in: GoldTheme.capsuleShape)
-                                    .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+                                    .overlay(
+                                        GoldTheme.capsuleShape.strokeBorder(
+                                            isMembershipActive ? GoldTheme.cardStroke : GoldTheme.gold.opacity(0.32),
+                                            lineWidth: 1
+                                        )
+                                    )
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel(isMembershipActive ? "禅观" : "禅观，记金会员专属")
                                 .accessibilityIdentifier("companion.chanlun")
                             }
                         }
