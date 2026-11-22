@@ -59,7 +59,7 @@ struct HomeView: View {
         guard !activeBookRecords.isEmpty else { return nil }
         return HoldingsInsights.marketOverlay(
             entries: activeBookRecords.map(\.insightEntry),
-            window: model.xDomain,
+            window: nil,
             referencePrice: model.price
         )
     }

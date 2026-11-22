@@ -280,8 +280,9 @@ enum HoldingsInsights {
         return result
     }
 
-    /// 为行情走势图生成叠加数据（组合保本线、成本均线、区间内历史买入打点）。
-    static func marketOverlay(entries: [Entry], window: ClosedRange<Date>, referencePrice: Double?, calendar: Calendar = .current) -> MarketHoldingOverlay? {
+    /// 为行情走势图生成叠加数据（组合保本线、成本均线、历史买入打点）。
+    /// - Parameter window: 可选日期窗口；传 `nil` 时保留全部在持买入打点，交由图表侧按当前视口过滤、末端挂靠与统计视口外笔数。
+    static func marketOverlay(entries: [Entry], window: ClosedRange<Date>? = nil, referencePrice: Double?, calendar: Calendar = .current) -> MarketHoldingOverlay? {
         let valid = entries.filter { $0.grams > 0 && $0.input.isValid }
         guard !valid.isEmpty else { return nil }
 
@@ -293,7 +294,7 @@ enum HoldingsInsights {
         var dayBuckets: [Date: (grams: Double, weightedCost: Double, items: [MarketHoldingOverlay.PurchaseItem])] = [:]
         for entry in valid {
             let day = ChartViewport.noon(entry.timestamp, calendar: calendar)
-            guard window.contains(day) else { continue }
+            if let window, !window.contains(day) { continue }
             var bucket = dayBuckets[day] ?? (0, 0, [])
             let effectiveUnitCost = entry.grams > 0 ? entry.totalCost / entry.grams : entry.unitPrice
             let resolvedLaborFee = entry.laborFee > 0 ? entry.laborFee : entry.input.laborFee

@@ -73,12 +73,16 @@ enum ChartPurchaseMarkerPresentation: Sendable {
     static func spreadMetric(
         unitCost: Double,
         marketAnchor: Double?,
-        isInterpolatedMarketAnchor: Bool = false
+        isInterpolatedMarketAnchor: Bool = false,
+        isPendingCloseAnchor: Bool = false
     ) -> SpreadMetric? {
         guard let anchor = marketAnchor, anchor.isFinite, anchor > 0, unitCost.isFinite, unitCost > 0 else {
             return nil
         }
-        let anchorLabel = isInterpolatedMarketAnchor ? "临近交易日" : "当日大盘"
+        let anchorLabel: String = {
+            if isPendingCloseAnchor { return "最近收盘" }
+            return isInterpolatedMarketAnchor ? "临近交易日" : "当日大盘"
+        }()
         let diff = unitCost - anchor
         let pct = (diff / anchor) * 100
         if abs(diff) < 0.005 {
@@ -86,7 +90,7 @@ enum ChartPurchaseMarkerPresentation: Sendable {
                 diff: 0,
                 percent: 0,
                 capsuleText: "与\(anchorLabel)持平 (¥0.00/g)",
-                compactText: "与大盘持平",
+                compactText: isPendingCloseAnchor ? "与最近收盘持平" : "与大盘持平",
                 isPremium: false,
                 isDiscount: false,
                 sentiment: .neutral
@@ -119,7 +123,36 @@ enum ChartPurchaseMarkerPresentation: Sendable {
         }
     }
 
-    static func explanationText(isInterpolatedMarketAnchor: Bool) -> String {
+    static func statusBadgeText(
+        isInterpolatedMarketAnchor: Bool,
+        isPendingCloseAnchor: Bool = false
+    ) -> String? {
+        if isPendingCloseAnchor {
+            return "休市/待收盘 · 参考最近收盘"
+        }
+        if isInterpolatedMarketAnchor {
+            return "休市 · 参考临近交易日"
+        }
+        return nil
+    }
+
+    static func referencePriceTitle(
+        isInterpolatedMarketAnchor: Bool,
+        isPendingCloseAnchor: Bool = false
+    ) -> String {
+        if isPendingCloseAnchor {
+            return "最近收盘参考价"
+        }
+        return isInterpolatedMarketAnchor ? "临近交易日参考" : "当日大盘参考价"
+    }
+
+    static func explanationText(
+        isInterpolatedMarketAnchor: Bool,
+        isPendingCloseAnchor: Bool = false
+    ) -> String {
+        if isPendingCloseAnchor {
+            return "买入日尚未产生收盘日线（休市或盘中），红点暂挂靠于最近交易日末端并参考该日收盘价；次交易日收盘后自动归位。"
+        }
         if isInterpolatedMarketAnchor {
             return "买入日为非交易日，大盘参考价按前后临近交易日收盘价插值估算；红点为计入工费与溢价后的实际买入综合单价，虚线长度即与参考价差额。"
         }
@@ -151,11 +184,17 @@ enum ChartPurchaseMarkerPresentation: Sendable {
         let spread = spreadMetric(
             unitCost: marker.averageUnitPrice,
             marketAnchor: referencePrice,
-            isInterpolatedMarketAnchor: isInterpolated
+            isInterpolatedMarketAnchor: isInterpolated,
+            isPendingCloseAnchor: match.resolved.isPendingCloseAnchor
         )
-        let dateBadge: String? = match.isSameDay
-            ? nil
-            : "\(shortDateText(marker.date, calendar: calendar)) 买入 · 休市参考"
+        let dateBadge: String? = {
+            if match.isSameDay { return nil }
+            let shortDate = shortDateText(marker.date, calendar: calendar)
+            if match.resolved.isPendingCloseAnchor {
+                return "\(shortDate) 买入 · 待收盘参考"
+            }
+            return "\(shortDate) 买入 · 休市参考"
+        }()
 
         if marker.count >= 2 {
             let headline = "买入 \(marker.count) 笔 · 共 \(gramsText(marker.totalGrams, hideAmounts: hideAmounts, compact: true))"
@@ -238,7 +277,8 @@ struct ChartPurchaseMarkerSheet: View {
         ChartPurchaseMarkerPresentation.spreadMetric(
             unitCost: marker.averageUnitPrice,
             marketAnchor: resolvedMarker.marketAnchorPrice,
-            isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor
+            isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor,
+            isPendingCloseAnchor: resolvedMarker.isPendingCloseAnchor
         )
     }
 
@@ -311,35 +351,42 @@ struct ChartPurchaseMarkerSheet: View {
     // MARK: - 顶部「买入点位 vs 当日行情」对比卡
 
     private var comparisonCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(GoldTheme.up)
-                        .frame(width: 8, height: 8)
-                    Text(ChartPurchaseMarkerPresentation.fullDateText(marker.date))
-                        .font(.subheadline.weight(.semibold))
+        let statusBadge = ChartPurchaseMarkerPresentation.statusBadgeText(
+            isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor,
+            isPendingCloseAnchor: resolvedMarker.isPendingCloseAnchor
+        )
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(GoldTheme.up)
+                            .frame(width: 8, height: 8)
+                        Text(ChartPurchaseMarkerPresentation.fullDateText(marker.date))
+                            .font(.subheadline.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(GoldTheme.text)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Text("\(marker.count) 笔 · \(ChartPurchaseMarkerPresentation.gramsText(marker.totalGrams, hideAmounts: hideAmounts))")
+                        .font(.caption.weight(.medium))
                         .monospacedDigit()
-                        .foregroundStyle(GoldTheme.text)
+                        .foregroundStyle(GoldTheme.textSecondary)
+                        .lineLimit(1)
                 }
 
-                if resolvedMarker.isInterpolatedMarketAnchor {
-                    Text("休市 · 参考临近交易日")
+                if let statusBadge {
+                    Text(statusBadge)
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(GoldTheme.goldSoft)
-                        .padding(.horizontal, 7)
+                        .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(GoldTheme.gold.opacity(0.14), in: GoldTheme.capsuleShape)
                         .lineLimit(1)
                 }
-
-                Spacer(minLength: 4)
-
-                Text("\(marker.count) 笔 · \(ChartPurchaseMarkerPresentation.gramsText(marker.totalGrams, hideAmounts: hideAmounts))")
-                    .font(.caption.weight(.medium))
-                    .monospacedDigit()
-                    .foregroundStyle(GoldTheme.textSecondary)
-                    .lineLimit(1)
             }
 
             HStack(alignment: .top, spacing: 12) {
@@ -374,7 +421,10 @@ struct ChartPurchaseMarkerSheet: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(resolvedMarker.isInterpolatedMarketAnchor ? "临近交易日参考" : "当日大盘参考价")
+                    Text(ChartPurchaseMarkerPresentation.referencePriceTitle(
+                        isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor,
+                        isPendingCloseAnchor: resolvedMarker.isPendingCloseAnchor
+                    ))
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
@@ -422,7 +472,10 @@ struct ChartPurchaseMarkerSheet: View {
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.goldSoft)
                     .padding(.top, 2)
-                Text(ChartPurchaseMarkerPresentation.explanationText(isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor))
+                Text(ChartPurchaseMarkerPresentation.explanationText(
+                    isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor,
+                    isPendingCloseAnchor: resolvedMarker.isPendingCloseAnchor
+                ))
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -470,7 +523,8 @@ struct ChartPurchaseMarkerSheet: View {
         let itemSpread = ChartPurchaseMarkerPresentation.spreadMetric(
             unitCost: item.effectiveUnitCost,
             marketAnchor: resolvedMarker.marketAnchorPrice,
-            isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor
+            isInterpolatedMarketAnchor: resolvedMarker.isInterpolatedMarketAnchor,
+            isPendingCloseAnchor: resolvedMarker.isPendingCloseAnchor
         )
         let laborTag = ChartPurchaseMarkerPresentation.laborFeeTagText(item.laborFee, hideAmounts: hideAmounts)
         let trimmedNote = item.note.trimmingCharacters(in: .whitespacesAndNewlines)

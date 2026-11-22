@@ -24,14 +24,32 @@ struct MarketHomeChartContent: View {
 
     var body: some View {
         let visibleData = model.visiblePoints
-        let priceDomain = model.priceScale.domain(visibleData.map(\.price))
+        let priceDomain: ClosedRange<Double> = {
+            guard showHoldingOverlay, let overlay = holdingOverlay, model.range != .realtime else {
+                return model.priceScale.domain(visibleData.map(\.price))
+            }
+            return ChartHoldingMarkerResolver.expandedPriceDomain(
+                curvePoints: visibleData,
+                markers: overlay.markers,
+                xDomain: model.xDomain,
+                scale: model.priceScale
+            )
+        }()
         let resolvedMarkers: [ChartHoldingMarkerResolver.ResolvedMarker] = {
             guard showHoldingOverlay, let overlay = holdingOverlay, model.range != .realtime else { return [] }
             return ChartHoldingMarkerResolver.resolve(
                 markers: overlay.markers,
                 curvePoints: visibleData,
                 scale: model.priceScale,
-                domain: priceDomain
+                domain: priceDomain,
+                xDomain: model.xDomain
+            )
+        }()
+        let outOfViewportPurchaseCount: Int = {
+            guard showHoldingOverlay, let overlay = holdingOverlay, model.range != .realtime else { return 0 }
+            return ChartHoldingMarkerResolver.outOfViewportPurchaseCount(
+                allMarkers: overlay.markers,
+                resolvedMarkers: resolvedMarkers
             )
         }()
         MarketDashboardLayout(availableHeight: availableHeight) {
@@ -61,6 +79,13 @@ struct MarketHomeChartContent: View {
                         .lineLimit(1)
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("红点代表历史买入成本")
+                    } else if showHoldingOverlay, model.range != .realtime, outOfViewportPurchaseCount > 0 {
+                        Text("· 视口外有 \(outOfViewportPurchaseCount) 笔买入")
+                            .font(.system(size: 11, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(GoldTheme.textSecondary)
+                            .lineLimit(1)
+                            .accessibilityLabel("当前视口外有 \(outOfViewportPurchaseCount) 笔历史买入记录")
                     }
                 }
                 .minimumScaleFactor(0.82)
@@ -417,7 +442,7 @@ struct MarketHomeChartContent: View {
                         let isActive = item.id == activeMarkerID
                         if let range = item.connectorRange, let anchor = item.scaledMarketAnchor {
                             RuleMark(
-                                x: .value("时间", item.marker.date),
+                                x: .value("时间", item.plotDate),
                                 yStart: .value("价格刻度", range.lowerBound),
                                 yEnd: .value("价格刻度", range.upperBound)
                             )
@@ -428,18 +453,11 @@ struct MarketHomeChartContent: View {
                             ))
 
                             PointMark(
-                                x: .value("时间", item.marker.date),
+                                x: .value("时间", item.plotDate),
                                 y: .value("价格刻度", anchor)
                             )
                             .foregroundStyle(GoldTheme.up.opacity(isActive ? 0.92 : 0.55))
                             .symbolSize(isActive ? 28 : 16)
-                        }
-                        PointMark(
-                            x: .value("时间", item.marker.date),
-                            y: .value("价格刻度", item.scaledCost)
-                        )
-                        .symbol {
-                            purchaseMarkerSymbol(count: item.marker.count, isActive: isActive)
                         }
                     }
                 }
@@ -475,25 +493,42 @@ struct MarketHomeChartContent: View {
                     if let plotFrame = proxy.plotFrame {
                         let frame = geometry[plotFrame]
                         let markerScreenPoints: [ChartHoldingMarkerResolver.MarkerScreenPoint] = resolvedMarkers.compactMap { item in
-                            guard let x = proxy.position(forX: item.marker.date),
+                            guard let x = proxy.position(forX: item.plotDate),
                                   let y = proxy.position(forY: item.scaledCost),
-                                  x >= 0, x <= frame.width,
-                                  y >= 0, y <= frame.height else {
+                                  x >= -0.5, x <= frame.width + 0.5,
+                                  y >= -0.5, y <= frame.height + 0.5 else {
                                 return nil
                             }
                             return ChartHoldingMarkerResolver.MarkerScreenPoint(
                                 resolved: item,
-                                point: CGPoint(x: x, y: y)
+                                point: CGPoint(
+                                    x: min(max(x, 0), frame.width),
+                                    y: min(max(y, 0), frame.height)
+                                )
                             )
                         }
 
                         if model.selectedPoint == nil {
                             if let high = statistics.high {
-                                extremumLabel(high, title: high.price == statistics.low?.price ? "最高 / 最低" : "最高", above: true, other: high.price == statistics.low?.price ? nil : statistics.low, proxy: proxy, frame: frame)
+                                extremumLabel(high, title: high.price == statistics.low?.price ? "最高 / 最低" : "最高", above: true, other: high.price == statistics.low?.price ? nil : statistics.low, markerPoints: markerScreenPoints, proxy: proxy, frame: frame)
                             }
                             if let low = statistics.low, low.price != statistics.high?.price {
-                                extremumLabel(low, title: "最低", above: false, other: statistics.high, proxy: proxy, frame: frame)
+                                extremumLabel(low, title: "最低", above: false, other: statistics.high, markerPoints: markerScreenPoints, proxy: proxy, frame: frame)
                             }
+                        }
+
+                        ForEach(markerScreenPoints, id: \.resolved.id) { screenPoint in
+                            let isActive = screenPoint.resolved.id == activeMarkerID
+                            purchaseMarkerSymbol(
+                                count: screenPoint.resolved.marker.count,
+                                isActive: isActive,
+                                isPendingClose: screenPoint.resolved.isPendingCloseAnchor
+                            )
+                            .position(
+                                x: frame.minX + screenPoint.point.x,
+                                y: frame.minY + screenPoint.point.y
+                            )
+                            .allowsHitTesting(false)
                         }
 
                         ForEach(markerScreenPoints, id: \.resolved.id) { screenPoint in
@@ -561,14 +596,23 @@ struct MarketHomeChartContent: View {
     }
 
     @ViewBuilder
-    private func purchaseMarkerSymbol(count: Int, isActive: Bool) -> some View {
+    private func purchaseMarkerSymbol(count: Int, isActive: Bool, isPendingClose: Bool = false) -> some View {
         let isMultiple = count >= 2
         let coreSize: CGFloat = isMultiple ? (isActive ? 11 : 9) : (isActive ? 10 : 7.5)
+        let pendingRingSize: CGFloat = isMultiple ? (coreSize + 9.5) : (coreSize + 7.5)
         ZStack {
             if isActive {
                 Circle()
                     .fill(GoldTheme.up.opacity(0.28))
                     .frame(width: coreSize + 10, height: coreSize + 10)
+            }
+            if isPendingClose {
+                Circle()
+                    .stroke(
+                        GoldTheme.goldSoft,
+                        style: StrokeStyle(lineWidth: 1.1, dash: [2.5, 2])
+                    )
+                    .frame(width: pendingRingSize, height: pendingRingSize)
             }
             if isMultiple {
                 Circle()
@@ -694,13 +738,49 @@ struct MarketHomeChartContent: View {
         .allowsHitTesting(false)
     }
     @ViewBuilder
-    private func extremumLabel(_ point: MarketChartPoint, title: String, above: Bool, other: MarketChartPoint?, proxy: ChartProxy, frame: CGRect) -> some View {
+    private func extremumLabel(
+        _ point: MarketChartPoint,
+        title: String,
+        above: Bool,
+        other: MarketChartPoint?,
+        markerPoints: [ChartHoldingMarkerResolver.MarkerScreenPoint],
+        proxy: ChartProxy,
+        frame: CGRect
+    ) -> some View {
         if let value = model.priceScale.value(point.price),
            let x = proxy.position(forX: point.date), let y = proxy.position(forY: value) {
             let width = min(126.0, frame.width)
-            let centerX = min(max(frame.minX + x, frame.minX + width / 2), frame.maxX - width / 2)
+            let labelHeight: CGFloat = 40
+            let baseCenterX = min(max(frame.minX + x, frame.minX + width / 2), frame.maxX - width / 2)
             let otherY = other.flatMap { model.priceScale.value($0.price) }.flatMap { proxy.position(forY: $0) }
             let centerY = frame.minY + ChartExtremaLabelLayout.y(point: y, other: otherY.map { Double($0) }, height: frame.height, above: above)
+            let centerX: CGFloat = {
+                let clearance: CGFloat = 15
+                let proposedRect = CGRect(
+                    x: baseCenterX - width / 2,
+                    y: centerY - labelHeight / 2,
+                    width: width,
+                    height: labelHeight
+                )
+                let overlapping = markerPoints.filter { mp in
+                    let markerCenter = CGPoint(x: frame.minX + mp.point.x, y: frame.minY + mp.point.y)
+                    return proposedRect.insetBy(dx: -clearance, dy: -clearance).contains(markerCenter)
+                }
+                guard !overlapping.isEmpty else { return baseCenterX }
+                if let minMarkerX = overlapping.map({ frame.minX + $0.point.x }).min() {
+                    let leftCandidate = minMarkerX - clearance - width / 2
+                    if leftCandidate >= frame.minX + width / 2 {
+                        return leftCandidate
+                    }
+                }
+                if let maxMarkerX = overlapping.map({ frame.minX + $0.point.x }).max() {
+                    let rightCandidate = maxMarkerX + clearance + width / 2
+                    if rightCandidate <= frame.maxX - width / 2 {
+                        return rightCandidate
+                    }
+                }
+                return baseCenterX
+            }()
             VStack(spacing: 3) {
                 Text(title + " ¥" + point.price.formatted(.number.precision(.fractionLength(2))))
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(GoldTheme.goldSoft)
@@ -708,7 +788,7 @@ struct MarketHomeChartContent: View {
                     .font(.system(size: 9)).foregroundStyle(GoldTheme.textSecondary)
             }
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75)
-                .frame(width: width, height: 40)
+                .frame(width: width, height: labelHeight)
                 .background(GoldTheme.card.opacity(0.95), in: GoldTheme.rangeShape)
                 .position(x: centerX, y: centerY)
                 .accessibilityElement(children: .ignore)
@@ -776,6 +856,8 @@ private struct MarketDashboardLayout: Layout {
 enum ChartHoldingMarkerResolver: Sendable {
     struct ResolvedMarker: Identifiable, Equatable, Sendable {
         let marker: MarketHoldingOverlay.PurchaseMarker
+        /// 实际在图表 X 轴上绘制与命中的日期；已收盘历史点等于 `marker.date`，休市/待收盘暂挂靠点等于最近交易日 `lastCurveDate`。
+        let plotDate: Date
         /// 真实买入综合均价在当前价格刻度下的纵坐标。
         let scaledCost: Double
         /// 匹配到的当日/区间大盘参考金价（人民币/克，未做刻度映射）。
@@ -784,19 +866,25 @@ enum ChartHoldingMarkerResolver: Sendable {
         let scaledMarketAnchor: Double?
         /// 当日是否为非交易日（周末/休市），大盘参考价由临近交易日插值或回退得出。
         let isInterpolatedMarketAnchor: Bool
+        /// 是否为买入日尚未产生收盘日线（周末休市/长假/盘中），临时挂靠在曲线最右端交易日上的红点。
+        let isPendingCloseAnchor: Bool
 
         init(
             marker: MarketHoldingOverlay.PurchaseMarker,
+            plotDate: Date? = nil,
             scaledCost: Double,
             marketAnchorPrice: Double?,
             scaledMarketAnchor: Double?,
-            isInterpolatedMarketAnchor: Bool = false
+            isInterpolatedMarketAnchor: Bool = false,
+            isPendingCloseAnchor: Bool = false
         ) {
             self.marker = marker
+            self.plotDate = plotDate ?? marker.date
             self.scaledCost = scaledCost
             self.marketAnchorPrice = marketAnchorPrice
             self.scaledMarketAnchor = scaledMarketAnchor
             self.isInterpolatedMarketAnchor = isInterpolatedMarketAnchor
+            self.isPendingCloseAnchor = isPendingCloseAnchor
         }
 
         var id: Date { marker.id }
@@ -813,9 +901,9 @@ enum ChartHoldingMarkerResolver: Sendable {
 
     struct MatchedInspectionMarker: Equatable, Sendable {
         let resolved: ResolvedMarker
-        /// 是否精确匹配同一自然日；false 表示买入日为休市/周末并吸附到了临近交易日。
+        /// 是否精确匹配同一自然日；false 表示买入日为休市/周末并吸附到了临近交易日，或待收盘暂挂靠在末端交易日。
         let isSameDay: Bool
-        /// 与当前滑动查价日期相差的自然日数（同日为 0，临近吸附为 1 或 2）。
+        /// 与当前滑动查价日期相差的自然日数（同日为 0，临近吸附或长假待收盘挂靠为实际日差）。
         let dayDistance: Int
     }
 
@@ -827,6 +915,12 @@ enum ChartHoldingMarkerResolver: Sendable {
 
     /// 44pt 隐形命中热区半径（直径 44pt）。
     static let defaultHitRadius: CGFloat = 22
+
+    private struct MarkerPlacement {
+        let plotDate: Date
+        let isPendingCloseAnchor: Bool
+        let trailingAnchorPrice: Double?
+    }
 
     /// 为指定买入日期匹配大盘金价：
     /// 1. 优先精确命中同一自然日的交易日收盘价；
@@ -844,44 +938,131 @@ enum ChartHoldingMarkerResolver: Sendable {
         return marketAnchorPriceSorted(for: date, in: valid, calendar: calendar)
     }
 
+    /// 开启「持仓」叠加时，在合理幅度（默认 ±25%）内平滑微扩 Y 轴范围，
+    /// 使贴近曲线边缘的买入红点（含符合条件的待收盘末端挂靠点）完整落入画布，同时避免极端离群价压扁大盘曲线。
+    static func expandedPriceDomain(
+        curvePoints: [MarketChartPoint],
+        markers: [MarketHoldingOverlay.PurchaseMarker],
+        xDomain: ClosedRange<Date>? = nil,
+        scale: ChartPriceScale,
+        maxPaddingRatio: Double = 0.25,
+        maxPendingCloseDays: Int = 7,
+        calendar: Calendar = .current
+    ) -> ClosedRange<Double> {
+        let validPoints = curvePoints
+            .filter { $0.price.isFinite && $0.price > 0 }
+            .sorted { $0.date < $1.date }
+        guard !validPoints.isEmpty else {
+            return scale.domain(curvePoints.map(\.price))
+        }
+
+        var prices = validPoints.map(\.price)
+        guard let curveMin = prices.min(), let curveMax = prices.max() else {
+            return scale.domain(prices)
+        }
+        let ratio = max(0, maxPaddingRatio)
+        let lowerLimit = curveMin * max(0, 1 - ratio)
+        let upperLimit = curveMax * (1 + ratio)
+        let lastCurvePoint = validPoints.last
+
+        for marker in markers {
+            guard placement(
+                for: marker,
+                lastCurvePoint: lastCurvePoint,
+                xDomain: xDomain,
+                maxPendingCloseDays: maxPendingCloseDays,
+                calendar: calendar
+            ) != nil else {
+                continue
+            }
+            let unitPrice = marker.averageUnitPrice
+            guard unitPrice.isFinite, unitPrice > 0,
+                  unitPrice >= lowerLimit, unitPrice <= upperLimit else {
+                continue
+            }
+            prices.append(unitPrice)
+        }
+
+        return scale.domain(prices)
+    }
+
     /// 将持仓买入标记安全映射至当前刻度与纵轴 domain：
-    /// - 真实买入均价若超出 domain 则跳过不绘制；
+    /// - 晚于曲线最右端 `1...maxPendingCloseDays` 个自然日且视口包含曲线最右端的买入点，临时挂靠于 `lastCurveDate` 并标记 `isPendingCloseAnchor = true`；
+    /// - 历史区间内落在 `xDomain` 之外的点跳过不绘制；
+    /// - 真实买入均价若超出纵轴 domain 则跳过不绘制；
     /// - 仅当大盘锚点坐标也位于 domain 内时，才提供垂直连接线与曲线锚点。
     static func resolve(
         markers: [MarketHoldingOverlay.PurchaseMarker],
         curvePoints: [MarketChartPoint],
         scale: ChartPriceScale,
         domain: ClosedRange<Double>,
+        xDomain: ClosedRange<Date>? = nil,
+        maxPendingCloseDays: Int = 7,
         calendar: Calendar = .current
     ) -> [ResolvedMarker] {
         let validPoints = curvePoints
             .filter { $0.price.isFinite && $0.price > 0 }
             .sorted { $0.date < $1.date }
+        let lastCurvePoint = validPoints.last
 
         return markers.compactMap { marker in
+            guard let place = placement(
+                for: marker,
+                lastCurvePoint: lastCurvePoint,
+                xDomain: xDomain,
+                maxPendingCloseDays: maxPendingCloseDays,
+                calendar: calendar
+            ) else {
+                return nil
+            }
             guard let scaledCost = scale.value(marker.averageUnitPrice),
                   domain.contains(scaledCost) else {
                 return nil
             }
-            let hasExactTradingDay = validPoints.contains { calendar.isDate($0.date, inSameDayAs: marker.date) }
-            let anchorPrice = marketAnchorPriceSorted(for: marker.date, in: validPoints, calendar: calendar)
+
+            let anchorPrice: Double?
+            let isInterpolated: Bool
+            if place.isPendingCloseAnchor {
+                anchorPrice = place.trailingAnchorPrice
+                isInterpolated = true
+            } else {
+                let hasExactTradingDay = validPoints.contains { calendar.isDate($0.date, inSameDayAs: marker.date) }
+                anchorPrice = marketAnchorPriceSorted(for: marker.date, in: validPoints, calendar: calendar)
+                isInterpolated = anchorPrice != nil && !hasExactTradingDay
+            }
+
             let scaledAnchor: Double? = anchorPrice.flatMap { price in
                 guard let scaled = scale.value(price), domain.contains(scaled) else { return nil }
                 return scaled
             }
             return ResolvedMarker(
                 marker: marker,
+                plotDate: place.plotDate,
                 scaledCost: scaledCost,
                 marketAnchorPrice: anchorPrice,
                 scaledMarketAnchor: scaledAnchor,
-                isInterpolatedMarketAnchor: anchorPrice != nil && !hasExactTradingDay
+                isInterpolatedMarketAnchor: isInterpolated,
+                isPendingCloseAnchor: place.isPendingCloseAnchor
             )
+        }
+    }
+
+    /// 统计 `allMarkers` 中未落入当前可视 `resolvedMarkers` 的买入笔数（按 `marker.count` 求和）。
+    static func outOfViewportPurchaseCount(
+        allMarkers: [MarketHoldingOverlay.PurchaseMarker],
+        resolvedMarkers: [ResolvedMarker]
+    ) -> Int {
+        guard !allMarkers.isEmpty else { return 0 }
+        let resolvedIDs = Set(resolvedMarkers.map(\.id))
+        return allMarkers.reduce(0) { partial, marker in
+            resolvedIDs.contains(marker.id) ? partial : partial + max(0, marker.count)
         }
     }
 
     /// 单指滑动查价自动匹配买入红点：
     /// 1. 优先精确命中与 `selectedDate` 同一自然日的买入红点；
-    /// 2. 若无同日红点，仅对本身在 `curvePoints` 中无同日交易数据的休市/周末红点，在临近 2 个自然日内匹配最靠近且无冲突的红点
+    /// 2. 若无同日红点，优先匹配挂靠在 `selectedDate`（通常为 `lastCurveDate`）上的待收盘暂挂靠红点（不受 2 天距离限制，兼容 5–7 天长假休市）；
+    /// 3. 否则仅对本身在 `curvePoints` 中无同日交易数据的历史休市/周末红点，在临近 2 个自然日内匹配最靠近且无冲突的红点
     ///    （每个休市红点仅唯一吸附到距离其最近的交易日，若等距则优先吸附至更早的节前收盘日）。
     static func matchForInspection(
         selectedDate: Date,
@@ -896,8 +1077,21 @@ enum ChartHoldingMarkerResolver: Sendable {
             return MatchedInspectionMarker(resolved: exact, isSameDay: true, dayDistance: 0)
         }
 
-        guard maxCalendarDayDistance > 0 else { return nil }
         let selectedDayStart = calendar.startOfDay(for: selectedDate)
+        let pendingCloseCandidates = resolvedMarkers.filter {
+            $0.isPendingCloseAnchor && calendar.isDate($0.plotDate, inSameDayAs: selectedDate)
+        }
+        if let pendingBest = pendingCloseCandidates.max(by: { $0.marker.date < $1.marker.date }) {
+            let markerDayStart = calendar.startOfDay(for: pendingBest.marker.date)
+            let dayDistance = abs(calendar.dateComponents([.day], from: selectedDayStart, to: markerDayStart).day ?? 0)
+            return MatchedInspectionMarker(
+                resolved: pendingBest,
+                isSameDay: false,
+                dayDistance: dayDistance
+            )
+        }
+
+        guard maxCalendarDayDistance > 0 else { return nil }
         let tradingDayStarts = Array(Set(
             curvePoints
                 .filter { $0.price.isFinite && $0.price > 0 }
@@ -906,6 +1100,7 @@ enum ChartHoldingMarkerResolver: Sendable {
 
         var bestCandidate: (resolved: ResolvedMarker, dayDistance: Int)?
         for item in resolvedMarkers {
+            if item.isPendingCloseAnchor { continue }
             let markerDayStart = calendar.startOfDay(for: item.marker.date)
             // 本身就在交易日上的红点只应由对应交易日触发，不跨日抢占相邻交易日。
             if tradingDayStarts.contains(markerDayStart) { continue }
@@ -938,6 +1133,41 @@ enum ChartHoldingMarkerResolver: Sendable {
             resolved: bestCandidate.resolved,
             isSameDay: false,
             dayDistance: bestCandidate.dayDistance
+        )
+    }
+
+    private static func placement(
+        for marker: MarketHoldingOverlay.PurchaseMarker,
+        lastCurvePoint: MarketChartPoint?,
+        xDomain: ClosedRange<Date>?,
+        maxPendingCloseDays: Int,
+        calendar: Calendar
+    ) -> MarkerPlacement? {
+        if let lastPoint = lastCurvePoint {
+            let lastCurveDayStart = calendar.startOfDay(for: lastPoint.date)
+            let markerDayStart = calendar.startOfDay(for: marker.date)
+            let daysAfterLastCurve = calendar.dateComponents([.day], from: lastCurveDayStart, to: markerDayStart).day ?? 0
+            if daysAfterLastCurve > 0 {
+                guard maxPendingCloseDays > 0,
+                      daysAfterLastCurve <= maxPendingCloseDays,
+                      xDomain == nil || xDomain!.contains(lastPoint.date) else {
+                    return nil
+                }
+                return MarkerPlacement(
+                    plotDate: lastPoint.date,
+                    isPendingCloseAnchor: true,
+                    trailingAnchorPrice: lastPoint.price
+                )
+            }
+        }
+
+        if let xDomain, !xDomain.contains(marker.date) {
+            return nil
+        }
+        return MarkerPlacement(
+            plotDate: marker.date,
+            isPendingCloseAnchor: false,
+            trailingAnchorPrice: nil
         )
     }
 
