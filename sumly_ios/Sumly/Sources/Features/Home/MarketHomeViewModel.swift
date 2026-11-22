@@ -103,6 +103,8 @@ final class MarketHomeViewModel {
     private var quoteService: any GoldQuoteServicing
     private var realtimeService: any GoldRealtimeServicing
     private let serviceFactory: (GoldMarketBasis) -> MarketHomeDataServices
+    private let nowProvider: @Sendable () -> Date
+    private let calendar: Calendar
     private var basisSwitchRequest: UUID?
     private(set) var isSwitchingBasis = false
 
@@ -139,7 +141,9 @@ final class MarketHomeViewModel {
          quoteService: (any GoldQuoteServicing)? = nil,
          realtimeService: (any GoldRealtimeServicing)? = nil,
          historyService: (any GoldHistoryServicing)? = nil,
-         serviceFactory: ((GoldMarketBasis) -> MarketHomeDataServices)? = nil) {
+         serviceFactory: ((GoldMarketBasis) -> MarketHomeDataServices)? = nil,
+         nowProvider: @escaping @Sendable () -> Date = { .now },
+         calendar: Calendar = .current) {
         let backend = MarketHomeDataServices.backend(for: basis)
         self.basis = basis
         self.historyService = historyService ?? backend.history
@@ -147,6 +151,8 @@ final class MarketHomeViewModel {
         self.quoteService = quoteService ?? backend.quote
         self.realtimeService = realtimeService ?? backend.realtime
         self.serviceFactory = serviceFactory ?? { MarketHomeDataServices.backend(for: $0) }
+        self.nowProvider = nowProvider
+        self.calendar = calendar
     }
 
     var price: Double? {
@@ -155,7 +161,7 @@ final class MarketHomeViewModel {
     }
 
     var points: [MarketChartPoint] {
-        if range == .realtime { return Self.realtimeWindow(realtime, now: .now) }
+        if range == .realtime { return Self.realtimeWindow(realtime, now: nowProvider()) }
         let factor: Double
         switch basis {
         case .domestic:
@@ -194,15 +200,22 @@ final class MarketHomeViewModel {
     var showsInitialLoading: Bool { loading && price == nil && points.isEmpty }
 
     var realtimeTiming: RealtimeChartTiming {
-        let now = Date.now
+        let now = nowProvider()
         let window = Self.realtimeWindow(realtime, now: now)
         let latest = window.last
         let span: TimeInterval = {
             guard let first = window.first?.date, let last = latest?.date else { return 0 }
             return max(0, last.timeIntervalSince(first))
         }()
-        return RealtimeChartTiming(latestSample: latest?.date, latestQuote: quote?.asOf,
-            intervalSeconds: latest?.intervalSeconds ?? 5, windowSpan: span, now: now)
+        return RealtimeChartTiming(
+            latestSample: latest?.date,
+            latestQuote: quote?.asOf,
+            basis: basis,
+            intervalSeconds: latest?.intervalSeconds ?? 5,
+            windowSpan: span,
+            now: now,
+            calendar: calendar
+        )
     }
 
     var liveStreamPollInterval: Duration {
@@ -218,10 +231,10 @@ final class MarketHomeViewModel {
         if range == .realtime ? realtimeFailed : (range == .history ? historyFailed : dailyFailed) { return "走势刷新失败 · 点击重试" }
         let timing = realtimeTiming
         if range == .realtime, timing.state == .paused, let date = quote?.asOf ?? timing.latestSample {
-            return "更新暂停 · 最近报价 \(timing.timestamp(date))"
+            return timing.pausedMessage(for: date)
         }
-        if let quote, Date.now.timeIntervalSince(quote.asOf) > 180 {
-            return "最近报价 \(quote.asOf.formatted(.dateTime.month().day().hour().minute()))"
+        if let quote, timing.now.timeIntervalSince(quote.asOf) > 180 {
+            return timing.pausedMessage(for: quote.asOf)
         }
         if range == .realtime {
             if realtime.isEmpty { return "暂无最新走势，请稍后再试" }
@@ -384,7 +397,7 @@ final class MarketHomeViewModel {
 
             guard fetchedQuote.cnyPerGram.isFinite, fetchedQuote.cnyPerGram > 0 else { return false }
             if range == .realtime {
-                guard !Self.realtimeWindow(fetchedRealtime, now: .now).isEmpty else { return false }
+                guard !Self.realtimeWindow(fetchedRealtime, now: nowProvider()).isEmpty else { return false }
             } else {
                 if newBasis == .international {
                     guard fetchedQuote.usdCNY.isFinite, fetchedQuote.usdCNY > 0 else { return false }
@@ -436,7 +449,8 @@ final class MarketHomeViewModel {
     func makeDisplaySnapshot() -> MarketHomeViewModel {
         let snapshot = MarketHomeViewModel(basis: basis, dailyService: dailyService,
             quoteService: quoteService, realtimeService: realtimeService,
-            historyService: historyService, serviceFactory: serviceFactory)
+            historyService: historyService, serviceFactory: serviceFactory,
+            nowProvider: nowProvider, calendar: calendar)
         snapshot.range = range
         snapshot.priceScale = priceScale
         snapshot.quote = quote
@@ -462,7 +476,7 @@ final class MarketHomeViewModel {
     var fullDomain: ClosedRange<Date> {
         let values = points
         if range == .realtime {
-            let end = values.last?.date ?? .now
+            let end = values.last?.date ?? nowProvider()
             let earliest = values.first?.date ?? end
             let start = min(earliest, end.addingTimeInterval(-Self.realtimeMinimumSpan))
             return start...end
@@ -632,7 +646,7 @@ final class MarketHomeViewModel {
             let fetched = try await realtimeService.fetchRealtime()
             guard generation == cacheGeneration, realtimeRequest == request, !Task.isCancelled else { return }
             // An empty/invalid refresh is not a replacement for a usable curve.
-            let now = Date.now
+            let now = nowProvider()
             let merged = Self.mergeRealtimeSession(existing: realtime, incoming: fetched, now: now)
             guard !merged.isEmpty else {
                 realtimeFailed = true

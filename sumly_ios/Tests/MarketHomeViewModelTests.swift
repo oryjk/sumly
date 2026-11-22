@@ -283,7 +283,7 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
     try await Task.sleep(for: .seconds(2.4))
     #expect(model.selectedDate == latestSelection)
     #expect(model.selectedPoint?.price == 675.25)
-    try await Task.sleep(for: .seconds(3))
+    try await waitForMarketCondition { model.selectedDate == nil }
     #expect(model.selectedDate == nil)
 }
 
@@ -948,4 +948,121 @@ private actor SessionAppendRealtimeFixture: GoldPriceServicing, GoldQuoteServici
     await model.refresh()
     #expect(model.realtimeTiming.state == .live)
     #expect(model.liveStreamPollInterval == MarketHomeViewModel.livePollInterval)
+}
+
+private struct StatusCopyFixture: GoldPriceServicing, GoldQuoteServicing, GoldRealtimeServicing, GoldHistoryServicing {
+    let basis: GoldMarketBasis
+    let quoteDate: Date
+    let sessionSpan: TimeInterval
+
+    func fetchDailyPrices() async throws -> [GoldDailyPrice] {
+        let yesterday = ChartViewport.noon(quoteDate.addingTimeInterval(-86400))
+        return [GoldDailyPrice(date: yesterday, open: 900, high: 910, low: 895, close: 905)]
+    }
+
+    func fetchHistory() async throws -> [GoldHistoryPoint] {
+        let yesterday = ChartViewport.noon(quoteDate.addingTimeInterval(-86400))
+        return [GoldHistoryPoint(date: yesterday, price: basis == .domestic ? 905 : 3000, granularity: .daily, source: "fixture")]
+    }
+
+    func fetchQuote() async throws -> GoldQuote {
+        GoldQuote(
+            symbol: basis == .domestic ? "AU9999" : "XAUUSD",
+            price: basis == .domestic ? 907.61 : 3100,
+            open: 900,
+            high: 910,
+            low: 898,
+            prevClose: 902,
+            usdCNY: basis == .domestic ? 0 : 7.0,
+            cnyPerGram: 907.61,
+            asOf: quoteDate
+        )
+    }
+
+    func fetchRealtime() async throws -> [MarketChartPoint] {
+        [
+            MarketChartPoint(date: quoteDate.addingTimeInterval(-sessionSpan), price: 905.0, intervalSeconds: 60),
+            MarketChartPoint(date: quoteDate, price: 907.61, intervalSeconds: 60)
+        ]
+    }
+}
+
+@MainActor @Test func domesticViewModelMessagesReflectSessionStatusAcrossRealtimeAndHistoricalRanges() async {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+    let parse = { (iso: String) in BackendGoldPriceService.parseRFC3339(iso)! }
+
+    let cases: [(now: String, quote: String, expectedMessage: String, expectedCaption: String)] = [
+        ("2026-11-21T02:35:00+08:00", "2026-11-21T02:30:00+08:00", "周末休市 · 收盘价 11/21 02:30", "周末休市 · 展示最近交易时段分时"),
+        ("2026-11-22T10:38:00+08:00", "2026-11-21T02:30:00+08:00", "周末休市 · 收盘价 11/21 02:30", "周末休市 · 展示最近交易时段分时"),
+        ("2026-11-23T08:50:00+08:00", "2026-11-21T02:30:00+08:00", "周末休市 · 收盘价 11/21 02:30", "周末休市 · 展示最近交易时段分时"),
+        ("2026-11-24T12:00:00+08:00", "2026-11-24T11:30:00+08:00", "午间休盘 · 最近报价 11/24 11:30", "午间休盘 · 展示最近交易时段分时"),
+        ("2026-11-24T17:00:00+08:00", "2026-11-24T15:30:00+08:00", "已收盘 · 收盘价 11/24 15:30", "已收盘 · 展示最近交易时段分时"),
+        ("2026-11-25T04:00:00+08:00", "2026-11-25T02:30:00+08:00", "已收盘 · 收盘价 11/25 02:30", "已收盘 · 展示最近交易时段分时"),
+        ("2026-10-01T10:30:00+08:00", "2026-09-30T15:30:00+08:00", "当前休市 · 最近报价 09/30 15:30", "当前休市 · 展示最近交易时段分时"),
+        ("2026-11-21T02:15:00+08:00", "2026-11-21T02:04:00+08:00", "暂无新成交 · 最近报价 11/21 02:04", "暂无新成交 · 本交易时段分时")
+    ]
+
+    for item in cases {
+        let now = parse(item.now)
+        let quote = parse(item.quote)
+        let fixture = StatusCopyFixture(basis: .domestic, quoteDate: quote, sessionSpan: 2 * 3600)
+        let model = MarketHomeViewModel(
+            basis: .domestic,
+            dailyService: fixture,
+            quoteService: fixture,
+            realtimeService: fixture,
+            historyService: fixture,
+            nowProvider: { now },
+            calendar: calendar
+        )
+        model.range = .realtime
+        await model.refresh()
+        #expect(model.message == item.expectedMessage)
+        #expect(model.realtimeTiming.caption == item.expectedCaption)
+        #expect(model.message?.contains("更新暂停") == false)
+
+        // Switching to non-realtime ranges keeps clear closed/break context under the headline price.
+        model.range = .month
+        #expect(model.message == item.expectedMessage)
+        #expect(model.message?.contains("更新暂停") == false)
+    }
+}
+
+@MainActor @Test func internationalViewModelMessagesReflectWeekendDailyBreakDSTHolidayAndStaleQuote() async {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+    let parse = { (iso: String) in BackendGoldPriceService.parseRFC3339(iso)! }
+
+    let cases: [(now: String, quote: String, expectedMessage: String, expectedCaption: String)] = [
+        ("2026-11-22T10:38:00+08:00", "2026-11-20T16:59:00-05:00", "周末休市 · 收盘价 11/21 05:59", "周末休市 · 展示最近交易时段分时"),
+        ("2026-07-16T05:30:00+08:00", "2026-07-16T04:59:00+08:00", "每日结算休盘 · 最近报价 07/16 04:59", "每日结算休盘 · 展示最近交易时段分时"),
+        ("2026-11-19T06:30:00+08:00", "2026-11-19T05:59:00+08:00", "每日结算休盘 · 最近报价 11/19 05:59", "每日结算休盘 · 展示最近交易时段分时"),
+        ("2026-11-19T05:30:00+08:00", "2026-11-19T05:20:00+08:00", "报价暂未刷新 · 最近报价 11/19 05:20", "报价暂未刷新 · 本交易时段分时"),
+        ("2026-12-25T10:00:00-05:00", "2026-12-24T13:30:00-05:00", "当前休市 · 最近报价 12/25 02:30", "当前休市 · 展示最近交易时段分时")
+    ]
+
+    for item in cases {
+        let now = parse(item.now)
+        let quote = parse(item.quote)
+        let fixture = StatusCopyFixture(basis: .international, quoteDate: quote, sessionSpan: 2 * 3600)
+        let model = MarketHomeViewModel(
+            basis: .international,
+            dailyService: fixture,
+            quoteService: fixture,
+            realtimeService: fixture,
+            historyService: fixture,
+            nowProvider: { now },
+            calendar: calendar
+        )
+        model.range = .realtime
+        await model.refresh()
+        #expect(model.message == item.expectedMessage)
+        #expect(model.realtimeTiming.caption == item.expectedCaption)
+        #expect(model.message?.contains("更新暂停") == false)
+
+        model.range = .quarter
+        #expect(model.message == item.expectedMessage)
+        #expect(model.message?.contains("更新暂停") == false)
+    }
 }

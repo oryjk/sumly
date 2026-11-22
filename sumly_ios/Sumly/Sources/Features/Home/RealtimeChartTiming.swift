@@ -1,5 +1,103 @@
 import Foundation
 
+/// 纯逻辑交易时段状态判断，按交易所真实时区区分休市、休盘、收盘与盘中暂无新成交。
+enum GoldMarketSessionStatus: Sendable, Equatable {
+    case weekendClosed
+    case middayBreak
+    case dailyBreak
+    case closed
+    case holidayClosed
+    case awaitingTrade
+
+    static let holidayThreshold: TimeInterval = 6 * 3600
+
+    private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
+    private static let newYorkTimeZone = TimeZone(identifier: "America/New_York")!
+
+    func shortTitle(for basis: GoldMarketBasis) -> String {
+        switch self {
+        case .weekendClosed: "周末休市"
+        case .middayBreak: "午间休盘"
+        case .dailyBreak: "每日结算休盘"
+        case .closed: "已收盘"
+        case .holidayClosed: "当前休市"
+        case .awaitingTrade: basis == .domestic ? "暂无新成交" : "报价暂未刷新"
+        }
+    }
+
+    static func resolve(
+        basis: GoldMarketBasis,
+        now: Date,
+        latestQuote: Date?
+    ) -> GoldMarketSessionStatus {
+        switch basis {
+        case .domestic:
+            return resolveDomestic(now: now, latestQuote: latestQuote)
+        case .international:
+            return resolveInternational(now: now, latestQuote: latestQuote)
+        }
+    }
+
+    /// 上金所 Au99.99（北京时间 Asia/Shanghai）：
+    /// - 周末休市：周六 02:30 起至周一 09:00 前（含周日全天）
+    /// - 午间休盘：周一至周五 11:30 起至 13:30 前
+    /// - 已收盘：周一至周五 15:30 起至 20:00 前，或周二至周五 02:30 起至 09:00 前
+    /// - 其余时段为常规交易时段（含周六 00:00–02:30 夜盘尾段）；若距最近有效报价 > 6 小时判为法定节假日休市
+    private static func resolveDomestic(now: Date, latestQuote: Date?) -> GoldMarketSessionStatus {
+        let calendar = exchangeCalendar(for: shanghaiTimeZone)
+        let weekday = calendar.component(.weekday, from: now) // 1 = Sun ... 7 = Sat
+        let minuteOfDay = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
+
+        if weekday == 1
+            || (weekday == 7 && minuteOfDay >= 150)
+            || (weekday == 2 && minuteOfDay < 540) {
+            return .weekendClosed
+        }
+        if (2...6).contains(weekday), minuteOfDay >= 690, minuteOfDay < 810 {
+            return .middayBreak
+        }
+        if (2...6).contains(weekday), minuteOfDay >= 930, minuteOfDay < 1200 {
+            return .closed
+        }
+        if (3...6).contains(weekday), minuteOfDay >= 150, minuteOfDay < 540 {
+            return .closed
+        }
+        if let latestQuote, now.timeIntervalSince(latestQuote) > holidayThreshold {
+            return .holidayClosed
+        }
+        return .awaitingTrade
+    }
+
+    /// 国际伦敦金（美东 America/New_York，自动兼容夏冬令时）：
+    /// - 周末休市：美东周五 17:00 起至周日 18:00 前
+    /// - 每日结算休盘：美东周一至周四 17:00 起至 18:00 前
+    /// - 其余时段为常规交易时段；若距最近有效报价 > 6 小时判为节假日休市
+    private static func resolveInternational(now: Date, latestQuote: Date?) -> GoldMarketSessionStatus {
+        let calendar = exchangeCalendar(for: newYorkTimeZone)
+        let weekday = calendar.component(.weekday, from: now) // 1 = Sun ... 7 = Sat
+        let minuteOfDay = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
+
+        if (weekday == 6 && minuteOfDay >= 1020)
+            || weekday == 7
+            || (weekday == 1 && minuteOfDay < 1080) {
+            return .weekendClosed
+        }
+        if (2...5).contains(weekday), minuteOfDay >= 1020, minuteOfDay < 1080 {
+            return .dailyBreak
+        }
+        if let latestQuote, now.timeIntervalSince(latestQuote) > holidayThreshold {
+            return .holidayClosed
+        }
+        return .awaitingTrade
+    }
+
+    private static func exchangeCalendar(for timeZone: TimeZone) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar
+    }
+}
+
 /// Anchors realtime / session intraday captions and time labels to real observations rather than wall-clock today.
 struct RealtimeChartTiming: Sendable {
     enum State: Sendable { case live, paused, empty }
@@ -8,6 +106,7 @@ struct RealtimeChartTiming: Sendable {
 
     let latestSample: Date?
     let latestQuote: Date?
+    var basis: GoldMarketBasis = .domestic
     var intervalSeconds: Int = 5
     var windowSpan: TimeInterval = 0
     var now: Date = .now
@@ -24,18 +123,43 @@ struct RealtimeChartTiming: Sendable {
 
     var isSessionWindow: Bool { windowSpan > Self.sessionCaptionThreshold }
 
+    var sessionStatus: GoldMarketSessionStatus {
+        GoldMarketSessionStatus.resolve(basis: basis, now: now, latestQuote: latestQuote ?? latestSample)
+    }
+
     var caption: String {
         switch state {
         case .live:
-            isSessionWindow ? "实时更新 · 本交易时段分时" : "最近 20 分钟"
+            return isSessionWindow ? "交易中 · 本交易时段分时" : "交易中 · 最近 20 分钟"
         case .paused:
-            isSessionWindow ? "休市停盘 · 最近交易时段分时" : "更新暂停 · 最近可用 20 分钟"
+            let status = sessionStatus
+            let title = status.shortTitle(for: basis)
+            switch status {
+            case .awaitingTrade:
+                return isSessionWindow ? "\(title) · 本交易时段分时" : "\(title) · 最近可用走势"
+            case .weekendClosed, .middayBreak, .dailyBreak, .closed, .holidayClosed:
+                return isSessionWindow ? "\(title) · 展示最近交易时段分时" : "\(title) · 展示收盘前走势"
+            }
         case .empty:
-            "暂无实时走势"
+            return "暂无实时走势"
+        }
+    }
+
+    func pausedMessage(for date: Date) -> String {
+        let shortTime = shortTimestamp(date)
+        let status = sessionStatus
+        let title = status.shortTitle(for: basis)
+        switch status {
+        case .weekendClosed, .closed:
+            return "\(title) · 收盘价 \(shortTime)"
+        case .middayBreak, .dailyBreak, .holidayClosed, .awaitingTrade:
+            return "\(title) · 最近报价 \(shortTime)"
         }
     }
 
     func timestamp(_ date: Date) -> String { day(date) + " " + time(date, seconds: true) }
+
+    func shortTimestamp(_ date: Date) -> String { shortDay(date) + " " + time(date, seconds: false) }
 
     func windowLabel(_ window: ClosedRange<Date>) -> String {
         let start = window.lowerBound
