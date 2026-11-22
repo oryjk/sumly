@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"gitee.com/oryjk/sumly/sumly_go/internal/appconfig/domain"
 	"gitee.com/oryjk/sumly/sumly_go/internal/shared/configenv"
 )
 
@@ -44,12 +45,16 @@ type Config struct {
 	MacroOfficialAccountName string
 	MacroOfficialAccountNote string
 	MacroInternalToken       string
-	// 远程应用配置与管理后台：ADMIN_API_TOKEN 留空时所有 /api/v1/admin/* 返回 503（绝不 fail-open、绝不记录日志）；
+	// 远程应用配置与管理后台：
+	// ADMIN_BOOTSTRAP_USERNAME（默认 "admin"）与 ADMIN_BOOTSTRAP_PASSWORD（可选）用于首次启动种入初始管理员账号，绝不覆盖已修改密码、绝不记录日志；
+	// ADMIN_API_TOKEN 可选，用作自动化脚本兜底令牌（绝不记录日志）；
 	// ADMIN_CORS_ORIGINS 留空时默认允许 http://localhost:5173,http://127.0.0.1:5173,https://oryjk.cn；
 	// ADMIN_STATIC_DIR 可选，非空且目录存在时挂载 /admin 静态管理后台 SPA。
-	AdminAPIToken    string
-	AdminCORSOrigins []string
-	AdminStaticDir   string
+	AdminBootstrapUsername string
+	AdminBootstrapPassword string
+	AdminAPIToken          string
+	AdminCORSOrigins       []string
+	AdminStaticDir         string
 }
 
 func LoadConfig() (Config, error) {
@@ -73,6 +78,8 @@ func LoadConfig() (Config, error) {
 		MacroOfficialAccountName:       strings.TrimSpace(os.Getenv("MACRO_OFFICIAL_ACCOUNT_NAME")),
 		MacroOfficialAccountNote:       strings.TrimSpace(os.Getenv("MACRO_OFFICIAL_ACCOUNT_NOTE")),
 		MacroInternalToken:             strings.TrimSpace(os.Getenv("MACRO_INTERNAL_TOKEN")),
+		AdminBootstrapUsername:         parseAdminBootstrapUsername(os.Getenv("ADMIN_BOOTSTRAP_USERNAME")),
+		AdminBootstrapPassword:         os.Getenv("ADMIN_BOOTSTRAP_PASSWORD"),
 		AdminAPIToken:                  strings.TrimSpace(os.Getenv("ADMIN_API_TOKEN")),
 		AdminCORSOrigins:               parseAdminCORSOrigins(os.Getenv("ADMIN_CORS_ORIGINS")),
 		AdminStaticDir:                 strings.TrimSpace(os.Getenv("ADMIN_STATIC_DIR")),
@@ -114,6 +121,14 @@ func envOrDefault(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func parseAdminBootstrapUsername(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return domain.DefaultBootstrapAdminUsername
+	}
+	return trimmed
 }
 
 func parseAdminCORSOrigins(raw string) []string {

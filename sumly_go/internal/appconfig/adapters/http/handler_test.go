@@ -11,9 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"gitee.com/oryjk/sumly/sumly_go/internal/appconfig/adapters/password"
 	"gitee.com/oryjk/sumly/sumly_go/internal/appconfig/application"
 	"gitee.com/oryjk/sumly/sumly_go/internal/appconfig/domain"
 	"gitee.com/oryjk/sumly/sumly_go/internal/appconfig/ports"
+	sharederror "gitee.com/oryjk/sumly/sumly_go/internal/shared/domain"
 	"github.com/gin-gonic/gin"
 )
 
@@ -388,6 +390,423 @@ func TestRegisterStaticRoutesSPAAndPathTraversalProtection(t *testing.T) {
 		}
 		if strings.Contains(rec.Body.String(), "TOP_SECRET_VALUE") {
 			t.Fatalf("attack %s leaked secret!", attack)
+		}
+	}
+}
+
+type stubAdminAuthRepo struct {
+	usersByID       map[int64]domain.AdminUser
+	usersByUsername map[string]int64
+	sessions        map[string]domain.AdminSession
+	nextUserID      int64
+}
+
+func newStubAdminAuthRepo() *stubAdminAuthRepo {
+	return &stubAdminAuthRepo{
+		usersByID:       map[int64]domain.AdminUser{},
+		usersByUsername: map[string]int64{},
+		sessions:        map[string]domain.AdminSession{},
+	}
+}
+
+func (r *stubAdminAuthRepo) EnsureAdminUser(_ context.Context, username, passwordHash string, mustChangePassword bool) (bool, error) {
+	if _, exists := r.usersByUsername[username]; exists {
+		return false, nil
+	}
+	r.nextUserID++
+	now := time.Now().UTC()
+	u := domain.AdminUser{
+		ID:                 r.nextUserID,
+		Username:           username,
+		PasswordHash:       passwordHash,
+		MustChangePassword: mustChangePassword,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	r.usersByID[u.ID] = u
+	r.usersByUsername[username] = u.ID
+	return true, nil
+}
+
+func (r *stubAdminAuthRepo) GetAdminUserByUsername(_ context.Context, username string) (domain.AdminUser, bool, error) {
+	id, ok := r.usersByUsername[username]
+	if !ok {
+		return domain.AdminUser{}, false, nil
+	}
+	return r.usersByID[id], true, nil
+}
+
+func (r *stubAdminAuthRepo) GetAdminUserByID(_ context.Context, id int64) (domain.AdminUser, bool, error) {
+	u, ok := r.usersByID[id]
+	return u, ok, nil
+}
+
+func (r *stubAdminAuthRepo) CreateSession(_ context.Context, session domain.AdminSession) error {
+	r.sessions[session.TokenHash] = session
+	return nil
+}
+
+func (r *stubAdminAuthRepo) GetValidSessionWithUser(_ context.Context, tokenHash string, now time.Time) (domain.AdminSession, domain.AdminUser, bool, error) {
+	s, ok := r.sessions[tokenHash]
+	if !ok || !s.ExpiresAt.After(now) {
+		return domain.AdminSession{}, domain.AdminUser{}, false, nil
+	}
+	u, ok := r.usersByID[s.AdminUserID]
+	if !ok {
+		return domain.AdminSession{}, domain.AdminUser{}, false, nil
+	}
+	return s, u, true, nil
+}
+
+func (r *stubAdminAuthRepo) DeleteSession(_ context.Context, tokenHash string) error {
+	delete(r.sessions, tokenHash)
+	return nil
+}
+
+func (r *stubAdminAuthRepo) UpdatePasswordAndRevokeOtherSessions(_ context.Context, userID int64, newPasswordHash, keepTokenHash string, changedAt time.Time) (domain.AdminUser, error) {
+	u, ok := r.usersByID[userID]
+	if !ok {
+		return domain.AdminUser{}, sharederror.ErrUnauthorized
+	}
+	ts := changedAt.UTC()
+	u.PasswordHash = newPasswordHash
+	u.MustChangePassword = false
+	u.PasswordChangedAt = &ts
+	u.UpdatedAt = ts
+	r.usersByID[userID] = u
+	for hash, sess := range r.sessions {
+		if sess.AdminUserID == userID && hash != keepTokenHash {
+			delete(r.sessions, hash)
+		}
+	}
+	return u, nil
+}
+
+func (r *stubAdminAuthRepo) DeleteExpiredSessions(_ context.Context, now time.Time) error {
+	for hash, sess := range r.sessions {
+		if !sess.ExpiresAt.After(now) {
+			delete(r.sessions, hash)
+		}
+	}
+	return nil
+}
+
+func TestAdminPasswordAuthFullLifecycleHTTP(t *testing.T) {
+	cfgRepo := newStubRepo()
+	authRepo := newStubAdminAuthRepo()
+	hasher := password.NewBcryptHasher()
+	authSvc := application.NewAdminAuthService(authRepo, hasher, "fallback-cli-token")
+
+	ctx := context.Background()
+	if err := authSvc.EnsureBootstrapAdmin(ctx, "admin", "InitialSecret#1"); err != nil {
+		t.Fatalf("EnsureBootstrapAdmin failed: %v", err)
+	}
+
+	router := newTestRouter(cfgRepo, HandlerOptions{
+		AdminAuth:  authSvc,
+		AdminToken: "fallback-cli-token",
+	})
+
+	// 1. Login with wrong password / unknown user returns 401
+	for _, body := range []string{
+		`{"username":"admin","password":"wrong-password"}`,
+		`{"username":"unknown","password":"InitialSecret#1"}`,
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/login", strings.NewReader(body)))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("bad login %s status=%d want 401 body=%s", body, rec.Code, rec.Body.String())
+		}
+	}
+
+	// 2. Successful login returns token + must_change_password=true + expires_at
+	loginRec := httptest.NewRecorder()
+	router.ServeHTTP(loginRec, httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/login", strings.NewReader(`{"username":"admin","password":"InitialSecret#1"}`)))
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status=%d body=%s", loginRec.Code, loginRec.Body.String())
+	}
+	var loginEnv struct {
+		Code int                `json:"code"`
+		Data AdminLoginResponse `json:"data"`
+	}
+	if err := json.Unmarshal(loginRec.Body.Bytes(), &loginEnv); err != nil {
+		t.Fatalf("unmarshal login response: %v", err)
+	}
+	if loginEnv.Code != 0 || len(loginEnv.Data.Token) != 64 || loginEnv.Data.Username != "admin" || !loginEnv.Data.MustChangePassword || loginEnv.Data.ExpiresAt == "" {
+		t.Fatalf("unexpected login response: %+v", loginEnv)
+	}
+	token1 := loginEnv.Data.Token
+
+	// Second login creates another active session
+	loginRec2 := httptest.NewRecorder()
+	router.ServeHTTP(loginRec2, httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/login", strings.NewReader(`{"username":"admin","password":"InitialSecret#1"}`)))
+	if loginRec2.Code != http.StatusOK {
+		t.Fatalf("second login status=%d body=%s", loginRec2.Code, loginRec2.Body.String())
+	}
+	var loginEnv2 struct {
+		Data AdminLoginResponse `json:"data"`
+	}
+	if err := json.Unmarshal(loginRec2.Body.Bytes(), &loginEnv2); err != nil {
+		t.Fatal(err)
+	}
+	token2 := loginEnv2.Data.Token
+
+	// 3. Verify returns valid=true, username=admin, must_change_password=true
+	verifyReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/verify", nil)
+	verifyReq.Header.Set("Authorization", "Bearer "+token1)
+	verifyRec := httptest.NewRecorder()
+	router.ServeHTTP(verifyRec, verifyReq)
+	if verifyRec.Code != http.StatusOK {
+		t.Fatalf("verify status=%d body=%s", verifyRec.Code, verifyRec.Body.String())
+	}
+	var verifyEnv struct {
+		Code int                `json:"code"`
+		Data VerifyAuthResponse `json:"data"`
+	}
+	if err := json.Unmarshal(verifyRec.Body.Bytes(), &verifyEnv); err != nil {
+		t.Fatal(err)
+	}
+	if !verifyEnv.Data.Valid || verifyEnv.Data.Username != "admin" || !verifyEnv.Data.MustChangePassword {
+		t.Fatalf("unexpected verify data: %+v", verifyEnv.Data)
+	}
+
+	// 4. First-login constraint: PUT /configs/:key is blocked with 403 + code 40301 until password is changed
+	putPayload := `{"value":{"chanlun_requires_membership":false,"membership_entry_visible":true,"free_access_notice":"测试"},"note":"首次改密前尝试"}`
+	blockedPut := httptest.NewRequest(http.MethodPut, "/api/v1/admin/configs/membership_paywall", strings.NewReader(putPayload))
+	blockedPut.Header.Set("Authorization", "Bearer "+token1)
+	blockedRec := httptest.NewRecorder()
+	router.ServeHTTP(blockedRec, blockedPut)
+	if blockedRec.Code != http.StatusForbidden {
+		t.Fatalf("PUT before password change status=%d want 403 body=%s", blockedRec.Code, blockedRec.Body.String())
+	}
+	var errEnv struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(blockedRec.Body.Bytes(), &errEnv); err != nil {
+		t.Fatal(err)
+	}
+	if errEnv.Code != 40301 || errEnv.Message != "请先修改初始密码后再变更配置" {
+		t.Fatalf("unexpected 403 body: %+v", errEnv)
+	}
+
+	// GET /configs remains readable while must_change_password=true
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/configs", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token1)
+	listRec := httptest.NewRecorder()
+	router.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("GET /configs status=%d want 200 body=%s", listRec.Code, listRec.Body.String())
+	}
+
+	// 5. Change password validation checks (401 wrong current, 422 short/too-long/same, 401 static token)
+	badChangeCases := []struct {
+		name  string
+		token string
+		body  string
+		want  int
+	}{
+		{name: "wrong current password", token: token1, body: `{"current_password":"Wrong","new_password":"NewStrongPass#2"}`, want: http.StatusUnauthorized},
+		{name: "new password too short", token: token1, body: `{"current_password":"InitialSecret#1","new_password":"1234567"}`, want: http.StatusUnprocessableEntity},
+		{name: "new password over 72 bytes", token: token1, body: `{"current_password":"InitialSecret#1","new_password":"` + strings.Repeat("a", 73) + `"}`, want: http.StatusUnprocessableEntity},
+		{name: "new password equals current", token: token1, body: `{"current_password":"InitialSecret#1","new_password":"InitialSecret#1"}`, want: http.StatusUnprocessableEntity},
+		{name: "static fallback token rejected for change-password", token: "fallback-cli-token", body: `{"current_password":"InitialSecret#1","new_password":"NewStrongPass#2"}`, want: http.StatusUnauthorized},
+	}
+	for _, tc := range badChangeCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/change-password", strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != tc.want {
+				t.Fatalf("status=%d want %d body=%s", rec.Code, tc.want, rec.Body.String())
+			}
+		})
+	}
+
+	// 6. Valid change password updates DB, clears must_change_password, revokes token2, keeps token1
+	changeReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/change-password", strings.NewReader(`{"current_password":"InitialSecret#1","new_password":"RotatedStrongPass#2026"}`))
+	changeReq.Header.Set("Authorization", "Bearer "+token1)
+	changeRec := httptest.NewRecorder()
+	router.ServeHTTP(changeRec, changeReq)
+	if changeRec.Code != http.StatusOK {
+		t.Fatalf("change-password status=%d body=%s", changeRec.Code, changeRec.Body.String())
+	}
+	var changeEnv struct {
+		Code int                    `json:"code"`
+		Data ChangePasswordResponse `json:"data"`
+	}
+	if err := json.Unmarshal(changeRec.Body.Bytes(), &changeEnv); err != nil {
+		t.Fatal(err)
+	}
+	if changeEnv.Code != 0 || changeEnv.Data.Username != "admin" || changeEnv.Data.MustChangePassword {
+		t.Fatalf("unexpected change-password response: %+v", changeEnv)
+	}
+
+	// token2 was revoked
+	revokedReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/verify", nil)
+	revokedReq.Header.Set("Authorization", "Bearer "+token2)
+	revokedRec := httptest.NewRecorder()
+	router.ServeHTTP(revokedRec, revokedReq)
+	if revokedRec.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked session status=%d want 401 body=%s", revokedRec.Code, revokedRec.Body.String())
+	}
+
+	// token1 still works and reports must_change_password=false
+	verifyAfterReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/verify", nil)
+	verifyAfterReq.Header.Set("Authorization", "Bearer "+token1)
+	verifyAfterRec := httptest.NewRecorder()
+	router.ServeHTTP(verifyAfterRec, verifyAfterReq)
+	if verifyAfterRec.Code != http.StatusOK {
+		t.Fatalf("verify after change status=%d body=%s", verifyAfterRec.Code, verifyAfterRec.Body.String())
+	}
+	var verifyAfterEnv struct {
+		Data VerifyAuthResponse `json:"data"`
+	}
+	if err := json.Unmarshal(verifyAfterRec.Body.Bytes(), &verifyAfterEnv); err != nil {
+		t.Fatal(err)
+	}
+	if !verifyAfterEnv.Data.Valid || verifyAfterEnv.Data.MustChangePassword {
+		t.Fatalf("expected must_change_password=false after change, got %+v", verifyAfterEnv.Data)
+	}
+
+	// Restart bootstrap does not overwrite updated password
+	if err := authSvc.EnsureBootstrapAdmin(ctx, "admin", "InitialSecret#1"); err != nil {
+		t.Fatalf("EnsureBootstrapAdmin on restart failed: %v", err)
+	}
+	oldLoginRec := httptest.NewRecorder()
+	router.ServeHTTP(oldLoginRec, httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/login", strings.NewReader(`{"username":"admin","password":"InitialSecret#1"}`)))
+	if oldLoginRec.Code != http.StatusUnauthorized {
+		t.Fatalf("old password must fail after change+restart, got %d", oldLoginRec.Code)
+	}
+	newLoginRec := httptest.NewRecorder()
+	router.ServeHTTP(newLoginRec, httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/login", strings.NewReader(`{"username":"admin","password":"RotatedStrongPass#2026"}`)))
+	if newLoginRec.Code != http.StatusOK {
+		t.Fatalf("new password login failed: status=%d body=%s", newLoginRec.Code, newLoginRec.Body.String())
+	}
+
+	// 7. PUT /configs/:key now succeeds and defaults operator to logged-in username "admin"
+	allowedPut := httptest.NewRequest(http.MethodPut, "/api/v1/admin/configs/membership_paywall", strings.NewReader(putPayload))
+	allowedPut.Header.Set("Authorization", "Bearer "+token1)
+	allowedRec := httptest.NewRecorder()
+	router.ServeHTTP(allowedRec, allowedPut)
+	if allowedRec.Code != http.StatusOK {
+		t.Fatalf("PUT after password change status=%d body=%s", allowedRec.Code, allowedRec.Body.String())
+	}
+	var putEnv struct {
+		Data ConfigEntryResponse `json:"data"`
+	}
+	if err := json.Unmarshal(allowedRec.Body.Bytes(), &putEnv); err != nil {
+		t.Fatal(err)
+	}
+	if putEnv.Data.UpdatedBy != "admin" {
+		t.Fatalf("expected default operator 'admin', got %q", putEnv.Data.UpdatedBy)
+	}
+
+	// 8. Logout invalidates token1
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+token1)
+	logoutRec := httptest.NewRecorder()
+	router.ServeHTTP(logoutRec, logoutReq)
+	if logoutRec.Code != http.StatusOK || !strings.Contains(logoutRec.Body.String(), `"logged_out":true`) {
+		t.Fatalf("logout status=%d body=%s", logoutRec.Code, logoutRec.Body.String())
+	}
+	afterLogoutReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/verify", nil)
+	afterLogoutReq.Header.Set("Authorization", "Bearer "+token1)
+	afterLogoutRec := httptest.NewRecorder()
+	router.ServeHTTP(afterLogoutRec, afterLogoutReq)
+	if afterLogoutRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 after logout, got %d body=%s", afterLogoutRec.Code, afterLogoutRec.Body.String())
+	}
+
+	// 9. Expired session returns 401
+	var newLoginEnv struct {
+		Data AdminLoginResponse `json:"data"`
+	}
+	if err := json.Unmarshal(newLoginRec.Body.Bytes(), &newLoginEnv); err != nil {
+		t.Fatal(err)
+	}
+	expiredHash := application.HashSessionToken(newLoginEnv.Data.Token)
+	sess := authRepo.sessions[expiredHash]
+	sess.ExpiresAt = time.Now().UTC().Add(-1 * time.Second)
+	authRepo.sessions[expiredHash] = sess
+
+	expiredReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/verify", nil)
+	expiredReq.Header.Set("Authorization", "Bearer "+newLoginEnv.Data.Token)
+	expiredRec := httptest.NewRecorder()
+	router.ServeHTTP(expiredRec, expiredReq)
+	if expiredRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for expired session, got %d body=%s", expiredRec.Code, expiredRec.Body.String())
+	}
+
+	// 10. Fallback ADMIN_API_TOKEN compatibility
+	fallbackVerifyReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/verify", nil)
+	fallbackVerifyReq.Header.Set("Authorization", "Bearer fallback-cli-token")
+	fallbackVerifyRec := httptest.NewRecorder()
+	router.ServeHTTP(fallbackVerifyRec, fallbackVerifyReq)
+	if fallbackVerifyRec.Code != http.StatusOK {
+		t.Fatalf("fallback token verify status=%d body=%s", fallbackVerifyRec.Code, fallbackVerifyRec.Body.String())
+	}
+	var fallbackEnv struct {
+		Data VerifyAuthResponse `json:"data"`
+	}
+	if err := json.Unmarshal(fallbackVerifyRec.Body.Bytes(), &fallbackEnv); err != nil {
+		t.Fatal(err)
+	}
+	if !fallbackEnv.Data.Valid || fallbackEnv.Data.Username != "token-admin" || fallbackEnv.Data.MustChangePassword {
+		t.Fatalf("unexpected fallback verify payload: %+v", fallbackEnv.Data)
+	}
+
+	// Fallback token can PUT config without operator and attributes to token-admin
+	fallbackPut := httptest.NewRequest(http.MethodPut, "/api/v1/admin/configs/membership_paywall", strings.NewReader(putPayload))
+	fallbackPut.Header.Set("X-Admin-Token", "fallback-cli-token")
+	fallbackPutRec := httptest.NewRecorder()
+	router.ServeHTTP(fallbackPutRec, fallbackPut)
+	if fallbackPutRec.Code != http.StatusOK {
+		t.Fatalf("fallback PUT status=%d body=%s", fallbackPutRec.Code, fallbackPutRec.Body.String())
+	}
+	var fallbackPutEnv struct {
+		Data ConfigEntryResponse `json:"data"`
+	}
+	if err := json.Unmarshal(fallbackPutRec.Body.Bytes(), &fallbackPutEnv); err != nil {
+		t.Fatal(err)
+	}
+	if fallbackPutEnv.Data.UpdatedBy != "token-admin" {
+		t.Fatalf("expected fallback operator 'token-admin', got %q", fallbackPutEnv.Data.UpdatedBy)
+	}
+}
+
+func TestAdminAuthWorksWithoutStaticAPITokenAndCORSOnAuthRoutes(t *testing.T) {
+	authRepo := newStubAdminAuthRepo()
+	authSvc := application.NewAdminAuthService(authRepo, password.NewBcryptHasher(), "")
+	if err := authSvc.EnsureBootstrapAdmin(context.Background(), "admin", "OnlyDBPass#2026"); err != nil {
+		t.Fatal(err)
+	}
+	router := newTestRouter(newStubRepo(), HandlerOptions{
+		AdminAuth: authSvc,
+	})
+
+	// Missing token returns 401 (NOT 503) because DB admin auth is enabled
+	unauthRec := httptest.NewRecorder()
+	router.ServeHTTP(unauthRec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/verify", nil))
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 when AdminAuth enabled without ADMIN_API_TOKEN, got %d body=%s", unauthRec.Code, unauthRec.Body.String())
+	}
+
+	// CORS preflight succeeds on all /api/v1/admin/auth/* paths
+	for _, p := range []string{
+		"/api/v1/admin/auth/login",
+		"/api/v1/admin/auth/logout",
+		"/api/v1/admin/auth/verify",
+		"/api/v1/admin/auth/change-password",
+	} {
+		req := httptest.NewRequest(http.MethodOptions, p, nil)
+		req.Header.Set("Origin", "https://oryjk.cn")
+		req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent || rec.Header().Get("Access-Control-Allow-Origin") != "https://oryjk.cn" {
+			t.Fatalf("OPTIONS %s status=%d allow-origin=%q", p, rec.Code, rec.Header().Get("Access-Control-Allow-Origin"))
 		}
 	}
 }

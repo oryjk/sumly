@@ -19,7 +19,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const maxUpdateRequestBodyBytes = 64 * 1024
+const (
+	maxUpdateRequestBodyBytes = 64 * 1024
+	maxAuthRequestBodyBytes   = 16 * 1024
+
+	codeMustChangePassword = 40301
+	adminIdentityCtxKey    = "sumly_admin_identity"
+)
 
 // DefaultAdminCORSOrigins 是管理后台默认允许的跨域来源。
 var DefaultAdminCORSOrigins = []string{
@@ -36,13 +42,23 @@ type UseCase interface {
 	ListAuditLogs(ctx context.Context, limit int) ([]domain.AuditLog, error)
 }
 
+// AdminAuthUseCase 定义 HTTP 层依赖的管理员账号登录、会话校验与改密能力。
+type AdminAuthUseCase interface {
+	Login(ctx context.Context, username, password string) (domain.AdminLoginResult, error)
+	Authenticate(ctx context.Context, rawToken string) (domain.AdminIdentity, error)
+	Logout(ctx context.Context, identity domain.AdminIdentity) error
+	ChangePassword(ctx context.Context, identity domain.AdminIdentity, currentPassword, newPassword string) (domain.ChangePasswordResult, error)
+}
+
 type HandlerOptions struct {
+	AdminAuth   AdminAuthUseCase
 	AdminToken  string
 	CORSOrigins []string
 }
 
 type Handler struct {
 	useCase     UseCase
+	adminAuth   AdminAuthUseCase
 	adminToken  string
 	corsOrigins map[string]struct{}
 }
@@ -61,6 +77,7 @@ func NewHandler(useCase UseCase, opts HandlerOptions) *Handler {
 	}
 	return &Handler{
 		useCase:     useCase,
+		adminAuth:   opts.AdminAuth,
 		adminToken:  strings.TrimSpace(opts.AdminToken),
 		corsOrigins: allowed,
 	}
@@ -76,11 +93,15 @@ func (h *Handler) RegisterAdminRoutes(group *gin.RouterGroup) {
 		c.AbortWithStatus(http.StatusNoContent)
 	})
 
+	group.POST("/auth/login", h.Login)
+
 	protected := group.Group("")
 	protected.Use(h.AdminAuthMiddleware())
+	protected.POST("/auth/logout", h.Logout)
 	protected.GET("/auth/verify", h.VerifyAuth)
+	protected.POST("/auth/change-password", h.ChangePassword)
 	protected.GET("/configs", h.ListConfigs)
-	protected.PUT("/configs/:key", h.UpdateConfig)
+	protected.PUT("/configs/:key", h.RequirePasswordChangedMiddleware(), h.UpdateConfig)
 	protected.GET("/configs/audit-logs", h.ListAuditLogs)
 }
 
@@ -108,8 +129,8 @@ func (h *Handler) CORSMiddleware() gin.HandlerFunc {
 
 func (h *Handler) AdminAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Fail-closed：未配置 ADMIN_API_TOKEN 时明确返回 503，绝不放行。
-		if h.adminToken == "" {
+		// Fail-closed：既未启用账号会话鉴权也未配置 ADMIN_API_TOKEN 时明确返回 503，绝不放行。
+		if h.adminAuth == nil && h.adminToken == "" {
 			c.AbortWithStatusJSON(http.StatusServiceUnavailable, sharedhttp.Response[any]{
 				Code:    http.StatusServiceUnavailable,
 				Message: "admin api is not configured",
@@ -117,11 +138,53 @@ func (h *Handler) AdminAuthMiddleware() gin.HandlerFunc {
 			})
 			return
 		}
+
 		candidate := extractAdminToken(c)
-		if candidate == "" || subtle.ConstantTimeCompare([]byte(candidate), []byte(h.adminToken)) != 1 {
+		if candidate == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, sharedhttp.Response[any]{
 				Code:    http.StatusUnauthorized,
 				Message: "unauthorized",
+				Data:    nil,
+			})
+			return
+		}
+
+		if h.adminAuth != nil {
+			identity, err := h.adminAuth.Authenticate(c.Request.Context(), candidate)
+			if err != nil {
+				sharedhttpapi.WriteError(c, err)
+				c.Abort()
+				return
+			}
+			c.Set(adminIdentityCtxKey, identity)
+			c.Next()
+			return
+		}
+
+		if subtle.ConstantTimeCompare([]byte(candidate), []byte(h.adminToken)) != 1 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, sharedhttp.Response[any]{
+				Code:    http.StatusUnauthorized,
+				Message: "unauthorized",
+				Data:    nil,
+			})
+			return
+		}
+		c.Set(adminIdentityCtxKey, domain.AdminIdentity{
+			Username:           domain.StaticTokenAdminUsername,
+			MustChangePassword: false,
+			IsStaticToken:      true,
+		})
+		c.Next()
+	}
+}
+
+func (h *Handler) RequirePasswordChangedMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		identity, ok := adminIdentityFromContext(c)
+		if ok && identity.MustChangePassword {
+			c.AbortWithStatusJSON(http.StatusForbidden, sharedhttp.Response[any]{
+				Code:    codeMustChangePassword,
+				Message: "请先修改初始密码后再变更配置",
 				Data:    nil,
 			})
 			return
@@ -135,8 +198,36 @@ type PublicConfigResponse struct {
 	UpdatedAt         string                         `json:"updated_at"`
 }
 
+type AdminLoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type AdminLoginResponse struct {
+	Token              string `json:"token"`
+	Username           string `json:"username"`
+	MustChangePassword bool   `json:"must_change_password"`
+	ExpiresAt          string `json:"expires_at"`
+}
+
+type AdminLogoutResponse struct {
+	LoggedOut bool `json:"logged_out"`
+}
+
 type VerifyAuthResponse struct {
-	Valid bool `json:"valid"`
+	Valid              bool   `json:"valid"`
+	Username           string `json:"username"`
+	MustChangePassword bool   `json:"must_change_password"`
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+type ChangePasswordResponse struct {
+	Username           string `json:"username"`
+	MustChangePassword bool   `json:"must_change_password"`
 }
 
 type ConfigEntryResponse struct {
@@ -177,8 +268,102 @@ func (h *Handler) GetPublicConfig(c *gin.Context) {
 	})
 }
 
+func (h *Handler) Login(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	if h.adminAuth == nil {
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, sharedhttp.Response[any]{
+			Code:    http.StatusServiceUnavailable,
+			Message: "admin auth is not configured",
+			Data:    nil,
+		})
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxAuthRequestBodyBytes+1))
+	if err != nil {
+		sharedhttpapi.WriteError(c, sharederror.New(sharederror.KindValidation, "failed to read request body"))
+		return
+	}
+	if len(body) > maxAuthRequestBodyBytes {
+		sharedhttpapi.WriteError(c, sharederror.New(sharederror.KindValidation, "request body too large"))
+		return
+	}
+	var req AdminLoginRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		sharedhttpapi.WriteError(c, sharederror.Wrap(sharederror.KindValidation, "invalid JSON request body", err))
+		return
+	}
+
+	result, err := h.adminAuth.Login(c.Request.Context(), req.Username, req.Password)
+	if err != nil {
+		sharedhttpapi.WriteError(c, err)
+		return
+	}
+	sharedhttpapi.WriteSuccess(c, AdminLoginResponse{
+		Token:              result.Token,
+		Username:           result.Username,
+		MustChangePassword: result.MustChangePassword,
+		ExpiresAt:          formatRFC3339(result.ExpiresAt),
+	})
+}
+
+func (h *Handler) Logout(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	identity, _ := adminIdentityFromContext(c)
+	if h.adminAuth != nil {
+		if err := h.adminAuth.Logout(c.Request.Context(), identity); err != nil {
+			sharedhttpapi.WriteError(c, err)
+			return
+		}
+	}
+	sharedhttpapi.WriteSuccess(c, AdminLogoutResponse{LoggedOut: true})
+}
+
 func (h *Handler) VerifyAuth(c *gin.Context) {
-	sharedhttpapi.WriteSuccess(c, VerifyAuthResponse{Valid: true})
+	c.Header("Cache-Control", "no-store")
+	identity, _ := adminIdentityFromContext(c)
+	sharedhttpapi.WriteSuccess(c, VerifyAuthResponse{
+		Valid:              true,
+		Username:           identity.Username,
+		MustChangePassword: identity.MustChangePassword,
+	})
+}
+
+func (h *Handler) ChangePassword(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	if h.adminAuth == nil {
+		sharedhttpapi.WriteError(c, sharederror.New(sharederror.KindUnauthorized, "session token is required to change password"))
+		return
+	}
+	identity, ok := adminIdentityFromContext(c)
+	if !ok {
+		sharedhttpapi.WriteError(c, sharederror.ErrUnauthorized)
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxAuthRequestBodyBytes+1))
+	if err != nil {
+		sharedhttpapi.WriteError(c, sharederror.New(sharederror.KindValidation, "failed to read request body"))
+		return
+	}
+	if len(body) > maxAuthRequestBodyBytes {
+		sharedhttpapi.WriteError(c, sharederror.New(sharederror.KindValidation, "request body too large"))
+		return
+	}
+	var req ChangePasswordRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		sharedhttpapi.WriteError(c, sharederror.Wrap(sharederror.KindValidation, "invalid JSON request body", err))
+		return
+	}
+
+	result, err := h.adminAuth.ChangePassword(c.Request.Context(), identity, req.CurrentPassword, req.NewPassword)
+	if err != nil {
+		sharedhttpapi.WriteError(c, err)
+		return
+	}
+	sharedhttpapi.WriteSuccess(c, ChangePasswordResponse{
+		Username:           result.Username,
+		MustChangePassword: result.MustChangePassword,
+	})
 }
 
 func (h *Handler) ListConfigs(c *gin.Context) {
@@ -211,11 +396,18 @@ func (h *Handler) UpdateConfig(c *gin.Context) {
 		return
 	}
 
+	operator := strings.TrimSpace(req.Operator)
+	if operator == "" {
+		if identity, ok := adminIdentityFromContext(c); ok {
+			operator = identity.Username
+		}
+	}
+
 	updated, err := h.useCase.UpdateConfig(c.Request.Context(), application.UpdateConfigCommand{
 		Key:         c.Param("key"),
 		ValueJSON:   req.Value,
 		Description: req.Description,
-		Operator:    req.Operator,
+		Operator:    operator,
 		Note:        req.Note,
 	})
 	if err != nil {
@@ -297,4 +489,13 @@ func extractAdminToken(c *gin.Context) string {
 		return strings.TrimSpace(auth[7:])
 	}
 	return ""
+}
+
+func adminIdentityFromContext(c *gin.Context) (domain.AdminIdentity, bool) {
+	raw, exists := c.Get(adminIdentityCtxKey)
+	if !exists {
+		return domain.AdminIdentity{}, false
+	}
+	identity, ok := raw.(domain.AdminIdentity)
+	return identity, ok
 }

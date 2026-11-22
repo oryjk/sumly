@@ -124,6 +124,8 @@ func TestLoadConfigAdminDefaultsAndOverrides(t *testing.T) {
 	t.Setenv("JWT_SECRET", "secret")
 	t.Setenv("WECHAT_APP_ID", "appid")
 	t.Setenv("WECHAT_APP_SECRET", "appsecret")
+	t.Setenv("ADMIN_BOOTSTRAP_USERNAME", "")
+	t.Setenv("ADMIN_BOOTSTRAP_PASSWORD", "")
 	t.Setenv("ADMIN_API_TOKEN", "")
 	t.Setenv("ADMIN_CORS_ORIGINS", "")
 	t.Setenv("ADMIN_STATIC_DIR", "")
@@ -131,6 +133,9 @@ func TestLoadConfigAdminDefaultsAndOverrides(t *testing.T) {
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("load config: %v", err)
+	}
+	if cfg.AdminBootstrapUsername != "admin" || cfg.AdminBootstrapPassword != "" {
+		t.Fatalf("expected default bootstrap admin username='admin' and empty password, got user=%q pass=%q", cfg.AdminBootstrapUsername, cfg.AdminBootstrapPassword)
 	}
 	if cfg.AdminAPIToken != "" || cfg.AdminStaticDir != "" {
 		t.Fatalf("expected empty optional admin defaults, got token=%q static=%q", cfg.AdminAPIToken, cfg.AdminStaticDir)
@@ -145,12 +150,17 @@ func TestLoadConfigAdminDefaultsAndOverrides(t *testing.T) {
 		}
 	}
 
+	t.Setenv("ADMIN_BOOTSTRAP_USERNAME", "  superadmin  ")
+	t.Setenv("ADMIN_BOOTSTRAP_PASSWORD", "BootstrapPass#2026")
 	t.Setenv("ADMIN_API_TOKEN", "  admin-secret-xyz  ")
 	t.Setenv("ADMIN_CORS_ORIGINS", " https://admin.oryjk.cn/ , http://localhost:3000 ")
 	t.Setenv("ADMIN_STATIC_DIR", "  /var/www/sumly-admin  ")
 	cfg, err = LoadConfig()
 	if err != nil {
 		t.Fatalf("load config overrides: %v", err)
+	}
+	if cfg.AdminBootstrapUsername != "superadmin" || cfg.AdminBootstrapPassword != "BootstrapPass#2026" {
+		t.Fatalf("unexpected admin bootstrap overrides: user=%q pass=%q", cfg.AdminBootstrapUsername, cfg.AdminBootstrapPassword)
 	}
 	if cfg.AdminAPIToken != "admin-secret-xyz" || cfg.AdminStaticDir != "/var/www/sumly-admin" {
 		t.Fatalf("unexpected admin overrides: token=%q static=%q", cfg.AdminAPIToken, cfg.AdminStaticDir)

@@ -424,7 +424,7 @@ func TestAppConfigPublicAdminCORSAndStaticRoutes(t *testing.T) {
 	okReq.Header.Set("Authorization", "Bearer admin-router-token")
 	okRec := httptest.NewRecorder()
 	router.ServeHTTP(okRec, okReq)
-	if okRec.Code != http.StatusOK || !strings.Contains(okRec.Body.String(), `"valid":true`) {
+	if okRec.Code != http.StatusOK || !strings.Contains(okRec.Body.String(), `"valid":true`) || !strings.Contains(okRec.Body.String(), `"username":"token-admin"`) || !strings.Contains(okRec.Body.String(), `"must_change_password":false`) {
 		t.Fatalf("auth verify status=%d body=%s", okRec.Code, okRec.Body.String())
 	}
 

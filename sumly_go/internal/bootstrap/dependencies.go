@@ -9,6 +9,7 @@ import (
 	"time"
 
 	appconfighttp "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/adapters/http"
+	appconfigpassword "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/adapters/password"
 	appconfigpostgres "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/adapters/postgres"
 	appconfigapplication "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/application"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/credentials"
@@ -234,9 +235,22 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		},
 	})
 
+	adminAuthService := appconfigapplication.NewAdminAuthService(
+		appconfigpostgres.NewAdminAuthRepository(pool),
+		appconfigpassword.NewBcryptHasher(),
+		config.AdminAPIToken,
+	)
+	if config.AdminBootstrapPassword != "" {
+		if err := adminAuthService.EnsureBootstrapAdmin(ctx, config.AdminBootstrapUsername, config.AdminBootstrapPassword); err != nil {
+			closeAll()
+			return Dependencies{}, nil, fmt.Errorf("ensure bootstrap admin: %w", err)
+		}
+	}
+
 	appConfigHandler := appconfighttp.NewHandler(
 		appconfigapplication.NewService(appconfigpostgres.NewRepository(pool)),
 		appconfighttp.HandlerOptions{
+			AdminAuth:   adminAuthService,
 			AdminToken:  config.AdminAPIToken,
 			CORSOrigins: config.AdminCORSOrigins,
 		},
