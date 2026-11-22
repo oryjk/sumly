@@ -237,7 +237,7 @@ struct MembershipPaywallContent: View {
                     )
                 }
 
-                Text("您的会员权益已生效，可随时进入禅观查看多周期行情走势与复盘")
+                Text(MembershipCopy.activeMemberSubtitle)
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .multilineTextAlignment(.center)

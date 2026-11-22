@@ -76,12 +76,12 @@
       "id" : "22604950",
       "localizations" : [
         {
-          "description" : "解锁禅观多周期行情走势与复盘工具",
+          "description" : "解锁高阶多周期走势与复盘工具",
           "displayName" : "记金会员",
           "locale" : "zh_CN"
         },
         {
-          "description" : "Unlock Chanlun multi-timeframe chart and review tools",
+          "description" : "Unlock advanced multi-timeframe chart and review tools",
           "displayName" : "Sumly Membership",
           "locale" : "en_US"
         }
@@ -102,12 +102,12 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "按年订阅记金会员，解锁禅观多周期行情走势与复盘工具。",
+              "description" : "按年订阅记金会员，解锁高阶多周期走势与复盘工具。",
               "displayName" : "记金年度会员",
               "locale" : "zh_CN"
             },
             {
-              "description" : "Unlock Chanlun multi-timeframe chart and review tools, billed annually",
+              "description" : "Unlock advanced multi-timeframe chart and review tools, billed annually",
               "displayName" : "Annual Membership",
               "locale" : "en_US"
             }
@@ -135,12 +135,12 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "按月订阅记金会员，解锁禅观多周期行情走势与复盘工具。",
+              "description" : "按月订阅记金会员，解锁高阶多周期走势与复盘工具。",
               "displayName" : "记金月度会员",
               "locale" : "zh_CN"
             },
             {
-              "description" : "Unlock Chanlun multi-timeframe chart and review tools, billed monthly",
+              "description" : "Unlock advanced multi-timeframe chart and review tools, billed monthly",
               "displayName" : "Monthly Membership",
               "locale" : "en_US"
             }

@@ -1,7 +1,9 @@
 import Foundation
+import ImageIO
 import SwiftUI
 import Testing
 import UIKit
+import UniformTypeIdentifiers
 @testable import Sumly
 
 // MARK: - 测试用轻量 Mock StoreKit 2 客户端（Actor 隔离，Swift 6 并发安全）
@@ -412,9 +414,9 @@ private final class MockAccountRenderStore: CredentialStoring {
     store.stopObservingUpdates()
 }
 
-// MARK: - 7. Apple 3.1.2 合规链接与零投资建议静态断言
+// MARK: - 7. Apple 3.1.2 合规链接、中性功能表述与零投资建议静态断言
 
-@Test func membershipCopyContainsZeroInvestmentAdviceAndValidReviewLinks() {
+@Test func membershipCopyContainsZeroInvestmentAdviceAndNeutralFeatureWording() {
     let forbiddenTerms: [String] = [
         "建议买入",
         "建议卖出",
@@ -442,6 +444,19 @@ private final class MockAccountRenderStore: CredentialStoring {
         for forbidden in forbiddenTerms {
             #expect(!text.contains(forbidden), "会员文案「\(text)」不应包含合规禁用词「\(forbidden)」")
         }
+    }
+
+    // 所有会员/订阅对外文案必须采用中性功能表述，不含「禅观」或「Chanlun」
+    let allMembershipPublicCopy = MembershipCopy.allPromotionalAndUICopy + [
+        MembershipCopy.complianceDisclaimer,
+        AccountProfileCopy.membershipTitle,
+        AccountProfileCopy.membershipSubtitle,
+        MembershipEntitlement.inactive.statusSummary(),
+        MembershipEntitlement.inactive.renewalStatusDescription
+    ]
+    for text in allMembershipPublicCopy {
+        #expect(!text.contains("禅观"), "会员对外文案「\(text)」不应包含「禅观」")
+        #expect(!text.lowercased().contains("chanlun"), "会员对外文案「\(text)」不应包含「Chanlun」")
     }
 
     // Apple 3.1.2 必填审核链接与自动续期说明校验
@@ -685,4 +700,84 @@ private final class MockAccountRenderStore: CredentialStoring {
         try FileManager.default.createDirectory(at: envURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: envURL, options: .atomic)
     }
+}
+
+// MARK: - 9. App Store Connect 订阅审核单屏无 Alpha RGB 截图导出（1290×2796）
+
+@MainActor
+@Test func renderAppStoreSubscriptionReviewScreenshot() throws {
+    let inactiveStore = MembershipStore(
+        client: MockMembershipStoreKitClient(),
+        initialEntitlement: .inactive,
+        initialProducts: [
+            .yearly: MembershipProductInfo(plan: .yearly),
+            .monthly: MembershipProductInfo(plan: .monthly)
+        ]
+    )
+
+    let logicalSize = CGSize(width: 430, height: 932)
+    let reviewScreen = ZStack {
+        GoldTheme.background
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 54)
+            MembershipPaywallContent(
+                membership: inactiveStore,
+                selectedPlan: .constant(.yearly)
+            )
+            Color.clear.frame(height: 34)
+        }
+    }
+    .frame(width: logicalSize.width, height: logicalSize.height)
+    .background(GoldTheme.background)
+    .preferredColorScheme(.dark)
+    .tint(GoldTheme.gold)
+
+    let controller = UIHostingController(rootView: reviewScreen)
+    controller.overrideUserInterfaceStyle = .dark
+    controller.view.bounds = CGRect(origin: .zero, size: logicalSize)
+    controller.view.backgroundColor = UIColor(GoldTheme.background)
+    controller.view.setNeedsLayout()
+    controller.view.layoutIfNeeded()
+
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 3.0
+    format.opaque = true
+    let rendered = UIGraphicsImageRenderer(size: logicalSize, format: format).image { _ in
+        controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+    }
+
+    let cgImage = try #require(rendered.cgImage)
+    #expect(cgImage.width == 1290)
+    #expect(cgImage.height == 2796)
+
+    // 显式重绘为不带 Alpha 通道的 RGB 位图（noneSkipLast），确保符合 App Store Connect 审核截图无透明通道要求
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
+    let rgbContext = try #require(
+        CGContext(
+            data: nil,
+            width: cgImage.width,
+            height: cgImage.height,
+            bitsPerComponent: 8,
+            bytesPerRow: cgImage.width * 4,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        )
+    )
+    rgbContext.draw(cgImage, in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
+    let opaqueCGImage = try #require(rgbContext.makeImage())
+    #expect(opaqueCGImage.alphaInfo == .noneSkipLast || opaqueCGImage.alphaInfo == .none)
+
+    let pngData = NSMutableData()
+    let destination = try #require(
+        CGImageDestinationCreateWithData(pngData as CFMutableData, UTType.png.identifier as CFString, 1, nil)
+    )
+    CGImageDestinationAddImage(destination, opaqueCGImage, nil)
+    #expect(CGImageDestinationFinalize(destination))
+    #expect(pngData.length > 50_000)
+
+    let tempURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("asc_sub_review_paywall.png")
+    try (pngData as Data).write(to: tempURL, options: .atomic)
+    print("ASC_SUB_REVIEW_ARTIFACT: \(tempURL.path)")
 }

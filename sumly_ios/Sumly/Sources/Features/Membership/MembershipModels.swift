@@ -347,17 +347,18 @@ struct MembershipBenefit: Identifiable, Equatable, Sendable {
 
 enum MembershipCopy {
     static let title = "记金会员"
-    static let subtitle = "解锁禅观多周期行情走势与复盘工具"
+    static let subtitle = "解锁高阶多周期走势与复盘工具"
+    static let activeMemberSubtitle = "您的会员权益已生效，可随时打开高阶多周期走势与复盘视图"
     static let activeBadgeTitle = "已开通"
     static let chanlunMemberBadge = "会员专属"
-    static let accountInactiveSubtitle = "解锁禅观多周期行情走势与复盘"
+    static let accountInactiveSubtitle = "解锁高阶多周期走势与复盘工具"
 
     static let benefits: [MembershipBenefit] = [
         MembershipBenefit(
-            id: "chanlun-access",
+            id: "advanced-chart-access",
             iconSystemName: "chart.line.uptrend.xyaxis",
-            title: "解锁禅观专业走势与复盘页面",
-            detail: "完整使用禅观页面查看行情走势结构与历史复盘记录"
+            title: "解锁高阶多周期走势与复盘视图",
+            detail: "完整使用高阶走势页面查看行情结构与历史复盘记录"
         ),
         MembershipBenefit(
             id: "multi-timeframe",
@@ -369,7 +370,7 @@ enum MembershipCopy {
             id: "future-upgrades",
             iconSystemName: "sparkles",
             title: "持续获享后续会员专属工具升级",
-            detail: "后续新增的禅观与个人数据整理工具将持续纳入会员权益"
+            detail: "后续新增的高阶行情与个人数据整理工具将持续纳入会员权益"
         )
     ]
 
@@ -377,13 +378,13 @@ enum MembershipCopy {
         "订阅将在当前周期结束前 24 小时自动续费，费用从您的 Apple ID 账户扣除；您可随时前往系统「设置 → Apple ID → 订阅」管理或取消订阅。"
 
     static let complianceDisclaimer =
-        "禅观与会员工具仅提供行情数据查看与个人复盘记录，不构成任何交易或投资建议。"
+        "会员工具仅提供行情数据查看与个人复盘记录，不构成任何交易或投资建议。"
 
     static let restoreButtonTitle = "恢复购买"
     static let privacyPolicyTitle = "隐私政策"
     static let termsOfUseTitle = "使用条款"
     static let manageSubscriptionsTitle = "管理订阅"
-    static let openChanlunTitle = "立即打开禅观"
+    static let openChanlunTitle = "打开高阶走势视图"
     static let retryLoadProductsTitle = "当前显示参考价 · 点击重新拉取 App Store 价格"
     static let purchasingStatusTitle = "正在连接 App Store…"
     static let restoringStatusTitle = "正在恢复购买…"
@@ -396,11 +397,12 @@ enum MembershipCopy {
     static let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     static let manageSubscriptionsFallbackURL = URL(string: "https://apps.apple.com/account/subscriptions")!
 
-    /// 面向用户的全部营销与界面文案（不含免责声明中的反向陈述），供零投资建议合规测试静态断言。
+    /// 面向用户的全部营销与界面文案（不含免责声明中的反向陈述），供零投资建议与中性化合规测试静态断言。
     static var allPromotionalAndUICopy: [String] {
         var items: [String] = [
             title,
             subtitle,
+            activeMemberSubtitle,
             activeBadgeTitle,
             chanlunMemberBadge,
             accountInactiveSubtitle,
