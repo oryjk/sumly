@@ -1,8 +1,8 @@
 # sumly
 
-小程序 / H5 / iOS 多端 + 后端 monorepo（`git@github.com:oryjk/-sumly.git`），应用中文名「记金」——
+小程序 / H5 / iOS / Android 多端 + 后端 monorepo（`git@github.com:oryjk/-sumly.git`），应用中文名「记金」——
 记录黄金等个人资产，按最新行情计算市值与每日涨跌。
-三个子项目共用同一套工程模式：按子项目分目录、每目录自带 `AGENTS.md` 架构与协作约定、
+各端按子项目分目录，每目录自带 `AGENTS.md` 架构与协作约定，采用
 后端六边形架构 + `{ code, message, data }` 响应 envelope、前端视觉只允许引用设计令牌。
 
 | 子项目 | 说明 |
@@ -10,6 +10,7 @@
 | [`sumly_go/`](sumly_go/) | Go 后端：Gin + PostgreSQL(pgx/goose/sqlc) + JWT，六边形架构 |
 | [`sumly_mini/`](sumly_mini/) | 用户端：uni-app + Vue 3 + TypeScript + Vite + @wot-ui/ui |
 | [`sumly_ios/`](sumly_ios/) | iOS 原生端：SwiftUI + Swift 6 + Swift Charts + XcodeGen（iOS 17+） |
+| [`sumly_android/`](sumly_android/) | Android 原生端：Kotlin + Jetpack Compose + Retrofit（Android 8.0+），对齐进度见[开发说明](sumly_android/README.md) |
 
 ## 当前完成
 

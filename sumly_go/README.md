@@ -137,11 +137,14 @@ against production as part of tests. Generate SQL bindings with `make generate`
 
 The exact native contract is in `docs/openapi.yaml`, under `/api/v1/app/auth`:
 capabilities; Apple challenge/login/server notifications; phone code/login; email code/register/login/
-reset-password; refresh/logout; me; DELETE account. Responses retain the
+reset-password; account-bound Apple reauthentication; Google challenge/login/link/reauthentication;
+email linking code and confirmation for Apple or Google accounts;
+refresh/logout; me; DELETE account. Responses retain the
 `{code,message,data}` envelope. Phone login automatically creates a verified account;
-email registration needs a code. No provider linking or holdings synchronization occurs.
+email registration needs a code. Linked Apple, Google and email credentials sign in to the same
+server user ID and therefore use the same cloud holdings and revision history.
 Native user identifiers come only from verified identities, never editable profiles.
-Apple email is not used for linking or as a verified email-password identity.
+Adding an email login to an Apple account requires verifying a code delivered to the entered mailbox.
 
 Configuration (blank provider fields disable that provider):
 
@@ -150,6 +153,8 @@ Configuration (blank provider fields disable that provider):
 | `NATIVE_AUTH_ENABLED` | Explicit `true`; default false reports all capabilities false. |
 | `JWT_SECRET` | At least 32 random bytes. HMAC domain separation derives OTP/refresh digests and the AES-GCM Apple token encryption key. Keep stable and secret: changing it also makes stored Apple credentials unreadable; migrate/re-encrypt them before rotation. |
 | `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY_FILE` | Enable Sign in with Apple for the iOS App ID in the Apple Developer portal. Client ID must equal the app's bundle ID audience. Create an associated Sign in with Apple key, mount its PKCS8 `.p8` securely and read-only, and provide its path. No portal changes are made by this implementation. |
+| `APPLE_EMAIL_LINK_ENABLED` | Explicit `true` allows existing Apple users to add a verified email login. Defaults off. Also requires Apple and SMTP configuration. The native capabilities response includes `apple_email_link: true` when ready. |
+| `GOOGLE_OAUTH_CLIENT_ID` | Public **Web application** OAuth client ID from the Google Cloud project. Register the Android application ID and signing certificate SHA-1 in an Android OAuth client from the same project. Apply migration `00012_google_identity.sql` before enabling. The native capabilities response advertises the public Web client ID when Google is enabled. |
 | Apple Server-to-Server Notification Endpoint | Register `https://oryjk.cn/sumly/api/v1/app/auth/apple/notifications` on the primary App ID after this backend is deployed over TLS 1.2+. The endpoint verifies Apple's signed JWS before processing account changes. |
 | `ALIYUN_ACCESS_KEY_ID`, `ALIYUN_ACCESS_KEY_SECRET`, `ALIYUN_SMS_SIGN_NAME`, `ALIYUN_SMS_TEMPLATE_CODE` | Alibaba Cloud mainland SMS account, least-privilege SendSms access, approved sign name and verification template containing `${code}`. Adapter signs HTTPS RPC SendSms (2017-05-25). Only mainland +86 mobile delivery is supported. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TLS_MODE` | Authenticated sender with authorized From mailbox. Mode explicitly `tls` (usually port 465) or `starttls` (usually 587). Certificate verification and TLS >=1.2 are mandatory; no plaintext fallback. Configure sender-domain SPF/DKIM/DMARC with the mail operator. |
@@ -173,14 +178,34 @@ Security and limits:
   server nonce on both supplied and code-exchanged ID tokens. Challenge nonce is already
   the exact value to send to Apple, **do not hash it on iOS**. Refresh credentials are
   AES-GCM encrypted. JWKS requests/cache refresh and all external responses are bounded.
+- Google verifies RS256 against Google's published JWKS and checks issuer, Web client ID
+  audience, expiry, issued-at, subject and server nonce. Pass the nonce verbatim to
+  Credential Manager. Challenges expire in five minutes, are single-use and are
+  scoped to either sign-in or the native session family that initiated account linking.
+  Google challenge and verification limits are 30/IP/hour and 2000 globally/hour per stage.
+- Apple and Google reauthentication use separate challenges scoped to the active user's
+  session family and provider. The proof must match the subject already present on the account before issuing
+  a new family for the same user. After storing the new credentials, the client can
+  revoke the prior family with the existing logout endpoint.
+- If an existing iOS account uses email, sign in with that email on Android and bind
+  Google within five minutes. A matching verified Google email causes a sign-in conflict
+  when the Google identity is new; only explicit binding grants access to the existing account.
+  If the account was created with Apple or Google, bind a new email and password from that
+  account after fresh provider verification using a code sent to the mailbox. Then sign in
+  with that email on either supported platform.
+  An existing credential owned by another account causes a conflict. Account linking preserves
+  the original user ID. Email binding uses an account-specific OTP purpose and follows the
+  existing email verification and password requirements.
 - Apple server notifications are accepted only at `POST /api/v1/app/auth/apple/notifications` with `{ "payload": "<JWS>" }`. The JWS is verified against Apple JWKS plus issuer/audience/issued-at; an `exp` claim is validated when Apple includes it. `consent-revoked` revokes active sessions and clears the stored Apple refresh credential; `account-deleted` deletes the Apple-backed Sumly server account; relay-email enable/disable events are acknowledged without account mutation because Sumly does not use Apple relay email as an identity. Destructive notifications are durably deduplicated and ordered against later Apple logins using signed `jti`/`iat`; only SHA-256 digests of notification IDs and Apple subjects are retained for this purpose, not the raw identifiers.
 - Access JWT lifetime is 900 seconds with live database session and user-state checks,
   including existing authenticated app routes. Opaque refresh tokens rotate once,
   are hashed at rest, and expire 30 days after primary login. Logout revokes the family
   even if its submitted token has already rotated. Reset revokes all native sessions.
 - Deletion requires `confirmation: "DELETE"` and primary login within 5 minutes.
-  Refresh does not renew that timestamp. Apple revocation occurs while holding the
-  deletion transaction's account lock; failure returns 503 without claiming deletion.
+  Refresh does not renew that timestamp. Deleting through a linked login also revokes
+  an active Apple grant. Revocation runs under the deletion transaction's account lock
+  and failure returns 503. If verified Apple consent revocation already cleared the
+  credential, the linked email credential can still authorize deletion.
   If remote revocation succeeds but database commit fails, retry deletion (revocation
   is idempotent). Local guest holdings are not account data and remain on the device.
 - Auth HTTP bodies are limited to 32 KiB, operations have deadlines, and errors never

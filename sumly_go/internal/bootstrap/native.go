@@ -20,13 +20,15 @@ import (
 )
 
 type NativeConfig struct {
-	Enabled         bool
-	Apple           providers.AppleConfig
-	SMS             providers.SMS
-	SMTP            providers.SMTP
-	TrustedProxies  []string
-	ChanlunEndpoint string
-	ChanlunSecret   string
+	Enabled               bool
+	Apple                 providers.AppleConfig
+	AppleEmailLinkEnabled bool
+	GoogleClientID        string
+	SMS                   providers.SMS
+	SMTP                  providers.SMTP
+	TrustedProxies        []string
+	ChanlunEndpoint       string
+	ChanlunSecret         string
 }
 
 func loadNativeConfig(environment AppEnvironment) (NativeConfig, error) {
@@ -46,6 +48,8 @@ func loadNativeConfig(environment AppEnvironment) (NativeConfig, error) {
 	c.ChanlunEndpoint = os.Getenv("CHANLUN_TICKET_URL")
 	c.ChanlunSecret = os.Getenv("CHANLUN_BRIDGE_SECRET")
 	c.Apple = providers.AppleConfig{ClientID: os.Getenv("APPLE_CLIENT_ID"), TeamID: os.Getenv("APPLE_TEAM_ID"), KeyID: os.Getenv("APPLE_KEY_ID")}
+	c.GoogleClientID = os.Getenv("GOOGLE_OAUTH_CLIENT_ID")
+	c.AppleEmailLinkEnabled = os.Getenv("APPLE_EMAIL_LINK_ENABLED") == "true"
 	privateKeyPath := os.Getenv("APPLE_PRIVATE_KEY_FILE")
 	if path := os.Getenv("APPLE_TEST_CLIENT_SECRET_FILE"); path != "" {
 		if environment != EnvironmentTest {
@@ -97,6 +101,7 @@ func buildNative(config Config, pool *pgxpool.Pool, tokens *jwt.Service) (*authh
 	}
 	store := postgres.NewNativeStore(pool)
 	apple := providers.NewApple(config.Native.Apple, nil, crypto)
+	google := providers.NewGoogle(config.Native.GoogleClientID, nil, crypto)
 	codes := application.Codes{Store: store, Crypto: crypto, Phone: config.Native.SMS, Email: config.Native.SMTP}
 	sessions := application.Sessions{Store: store, Crypto: crypto, Tokens: tokens, Apple: apple}
 	dummy, e := crypto.HashPassword(crypto.Random())
@@ -118,7 +123,11 @@ func buildNative(config Config, pool *pgxpool.Pool, tokens *jwt.Service) (*authh
 			LegacyAppID: config.WechatLegacyAppID,
 		}
 	}
-	accounts := application.Accounts{Store: store, Crypto: crypto, Codes: codes, Sessions: sessions, Apple: apple, Wechat: wechat, DummyHash: dummy}
+	accounts := application.Accounts{
+		Store: store, Crypto: crypto, Codes: codes, Sessions: sessions,
+		Apple: apple, AppleEmailLinkEnabled: config.Native.AppleEmailLinkEnabled,
+		Google: google, Links: store, Wechat: wechat, DummyHash: dummy,
+	}
 	handler := authhttp.NewNativeHandler(accounts, sessions, wechat)
 	if config.AppEnvironment != EnvironmentProduction && (config.Native.ChanlunEndpoint != "" || config.Native.ChanlunSecret != "") {
 		bridge, err := providers.NewChanlunBridge(config.Native.ChanlunEndpoint, config.Native.ChanlunSecret)

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">记金</string>
+    <string name="tab_market">行情</string>
+    <string name="tab_holdings">持有</string>
+    <string name="tab_calendar">日历</string>
+    <string name="tab_account">我的</string>
+    <string name="add_holding">添加黄金</string>
+</resources>

@@ -63,7 +63,9 @@ UPDATE auth_identities SET password_hash=$2 WHERE provider='email' AND subject=$
 INSERT INTO auth_sessions(id,user_id,provider,refresh_hash,authenticated_at,expires_at,family_id) VALUES($1,$2,$3,$4,$5,$6,$7);
 
 -- name: NativeSession :one
-SELECT s.*,u.nickname,COALESCE(u.avatar_url,'')::text AS avatar_url,u.status,i.subject
+SELECT s.*,u.nickname,COALESCE(u.avatar_url,'')::text AS avatar_url,u.status,i.subject,
+  COALESCE((SELECT e.subject FROM auth_identities e
+    WHERE s.provider IN ('apple','google') AND e.user_id=s.user_id AND e.provider='email'),'')::text AS linked_email
 FROM auth_sessions s JOIN users u ON u.id=s.user_id JOIN auth_identities i ON i.user_id=s.user_id AND i.provider=s.provider
 WHERE s.id=$1 AND s.expires_at>now() AND u.status='active';
 

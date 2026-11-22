@@ -11,22 +11,33 @@ import (
 )
 
 type Accounts struct {
-	Store     ports.NativeStore
-	Crypto    ports.Cryptography
-	Codes     Codes
-	Sessions  Sessions
-	Apple     ports.AppleGateway
-	Wechat    *WechatSessions
-	DummyHash string
+	Store                 ports.NativeStore
+	Crypto                ports.Cryptography
+	Codes                 Codes
+	Sessions              Sessions
+	Apple                 ports.AppleGateway
+	AppleEmailLinkEnabled bool
+	Google                ports.GoogleGateway
+	Links                 ports.IdentityLinks
+	Wechat                *WechatSessions
+	DummyHash             string
 }
 
 func (a Accounts) Capabilities() domain.Capabilities {
-	return domain.Capabilities{
+	capabilities := domain.Capabilities{
 		Apple:  a.Apple != nil && a.Apple.Enabled(),
 		Wechat: a.Wechat != nil && a.Wechat.Enabled(),
 		Phone:  a.Codes.Phone != nil && a.Codes.Phone.Enabled(),
 		Email:  a.Codes.Email != nil && a.Codes.Email.Enabled(),
 	}
+	if a.Links != nil && a.Store != nil && a.Crypto != nil && a.Sessions.Store != nil && a.Sessions.Crypto != nil && a.Sessions.Tokens != nil {
+		capabilities.AppleEmailLink = a.AppleEmailLinkEnabled && capabilities.Apple && capabilities.Email
+		if a.Google != nil {
+			capabilities.GoogleClientID = a.Google.ClientID()
+			capabilities.Google = capabilities.GoogleClientID != ""
+		}
+	}
+	return capabilities
 }
 func (a Accounts) throttle(ctx context.Context, subject, ip string) error {
 	return a.Store.TakeQuota(ctx, []domain.Quota{{Key: "login:ip:" + a.Crypto.Digest("ip", ip), Limit: 60, Window: time.Hour}, {Key: "login:subject:" + a.Crypto.Digest("subject", subject), Limit: 20, Window: time.Hour}})
@@ -151,28 +162,36 @@ func (a Accounts) AppleLogin(ctx context.Context, id, token, code, nickname, ip 
 	if len(id) > 128 || len(token) > 16384 || len(code) > 4096 || utf8.RuneCountInString(nickname) > 120 {
 		return domain.LoginResult{}, domain.ErrInvalid
 	}
-	if e := a.appleThrottle(ctx, "login", ip); e != nil {
-		return domain.LoginResult{}, e
-	}
-	nonce, e := a.Store.ConsumeChallenge(ctx, id)
-	if e != nil {
-		return domain.LoginResult{}, e
-	}
-	i, e := a.Apple.Verify(ctx, token, code, nonce)
-	if errors.Is(e, domain.ErrUnavailable) {
-		return domain.LoginResult{}, domain.ErrUnavailable
-	}
-	if e != nil {
-		return domain.LoginResult{}, domain.ErrCredentials
-	}
-	if i.Subject == "" || i.RefreshToken == "" {
-		return domain.LoginResult{}, domain.ErrCredentials
-	}
-	encrypted, e := a.Crypto.Seal(i.RefreshToken)
+	i, encrypted, e := a.verifyAppleProof(ctx, "login", id, token, code, ip)
 	if e != nil {
 		return domain.LoginResult{}, e
 	}
 	return a.login(ctx, ports.LoginMutation{Provider: "apple", Subject: i.Subject, Nickname: nickname, AppleRefresh: encrypted, ProviderIssuedAt: i.IssuedAt})
+}
+
+func (a Accounts) verifyAppleProof(ctx context.Context, operation, nonceKey, token, code, ip string) (ports.AppleIdentity, []byte, error) {
+	if e := a.appleThrottle(ctx, operation, ip); e != nil {
+		return ports.AppleIdentity{}, nil, e
+	}
+	nonce, e := a.Store.ConsumeChallenge(ctx, nonceKey)
+	if e != nil {
+		return ports.AppleIdentity{}, nil, e
+	}
+	i, e := a.Apple.Verify(ctx, token, code, nonce)
+	if errors.Is(e, domain.ErrUnavailable) {
+		return ports.AppleIdentity{}, nil, domain.ErrUnavailable
+	}
+	if e != nil {
+		return ports.AppleIdentity{}, nil, domain.ErrCredentials
+	}
+	if i.Subject == "" || i.RefreshToken == "" {
+		return ports.AppleIdentity{}, nil, domain.ErrCredentials
+	}
+	encrypted, e := a.Crypto.Seal(i.RefreshToken)
+	if e != nil {
+		return ports.AppleIdentity{}, nil, e
+	}
+	return i, encrypted, nil
 }
 
 func (a Accounts) appleThrottle(ctx context.Context, operation, ip string) error {

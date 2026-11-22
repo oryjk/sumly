@@ -37,12 +37,16 @@ func (c Codes) Send(ctx context.Context, provider, destination, purpose, ip stri
 	if e != nil {
 		return e
 	}
+	return c.send(ctx, sender, provider, destination, purpose, ip, provider+":"+purpose+":"+destination)
+}
+
+func (c Codes) send(ctx context.Context, sender ports.CodeSender, provider, destination, purpose, ip, key string) error {
 	if sender == nil || !sender.Enabled() {
 		return domain.ErrUnavailable
 	}
 	dest := c.Crypto.Digest("quota-destination", provider+":"+destination)
 	ip = c.Crypto.Digest("quota-ip", ip)
-	if e = c.Store.TakeQuota(ctx, []domain.Quota{{Key: "send:cool:" + dest, Limit: 1, Window: time.Minute}, {Key: "send:hour:" + dest, Limit: 5, Window: time.Hour}, {Key: "send:day:" + dest, Limit: 20, Window: 24 * time.Hour}, {Key: "send:ip:" + ip, Limit: 30, Window: time.Hour}, {Key: "send:global", Limit: 1000, Window: time.Hour}}); e != nil {
+	if e := c.Store.TakeQuota(ctx, []domain.Quota{{Key: "send:cool:" + dest, Limit: 1, Window: time.Minute}, {Key: "send:hour:" + dest, Limit: 5, Window: time.Hour}, {Key: "send:day:" + dest, Limit: 20, Window: 24 * time.Hour}, {Key: "send:ip:" + ip, Limit: 30, Window: time.Hour}, {Key: "send:global", Limit: 1000, Window: time.Hour}}); e != nil {
 		return e
 	}
 	n, e := rand.Int(rand.Reader, big.NewInt(1000000))
@@ -50,12 +54,11 @@ func (c Codes) Send(ctx context.Context, provider, destination, purpose, ip stri
 		return e
 	}
 	code := fmt.Sprintf("%06d", n.Int64())
-	key := provider + ":" + purpose + ":" + destination
 	hash := c.Crypto.Digest("otp", key+":"+code)
 	if e = c.Store.PutCode(ctx, key, hash, time.Now().Add(5*time.Minute)); e != nil {
 		return e
 	}
-	// Both email purposes always send the same neutral message, regardless of account existence.
+	// Email verification always sends the same neutral message, regardless of account existence.
 	if e = sender.Send(ctx, destination, code, purpose); e != nil {
 		return domain.ErrUnavailable
 	}

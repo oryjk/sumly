@@ -170,7 +170,7 @@ struct AuthenticationSheet: View {
         if !model.authenticated { await model.prepareApple() }
     }
 }
-private extension View {
+extension View {
     func authField() -> some View {
         padding(14).background(GoldTheme.card, in: GoldTheme.rangeShape)
             .overlay(GoldTheme.rangeShape.strokeBorder(GoldTheme.cardStroke))

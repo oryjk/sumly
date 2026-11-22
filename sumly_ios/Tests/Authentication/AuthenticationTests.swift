@@ -4,6 +4,143 @@ import Testing
 
 private let loginJSON = Data(#"{"token":"access","refresh_token":"refresh","expires_in":900,"user":{"id":42,"nickname":"记金用户","avatar_url":"","email":null,"phone_number":"+8613800138000","status":"active","provider":"phone"}}"#.utf8)
 
+@Test func appleEmailLinkRequiresNewCapabilityAndSendsOnlyExpectedProof() throws {
+    let old = try AuthCoding.decode(AuthCapabilities.self, from: Data(#"{"apple":true,"phone":false,"email":true}"#.utf8))
+    let enabled = try AuthCoding.decode(AuthCapabilities.self, from: Data(#"{"apple":true,"phone":false,"email":true,"apple_email_link":true}"#.utf8))
+    #expect(!old.canLinkAppleEmail)
+    #expect(enabled.canLinkAppleEmail)
+    let url = URL(string: "https://example.test/sumly/api/v1")!
+    let challenge = try NativeAuthService.makeRequest(.appleEmailChallenge("apple-access"), baseURL: url)
+    #expect(challenge.url?.path == "/sumly/api/v1/app/auth/apple/reauthenticate/challenge")
+    #expect(challenge.value(forHTTPHeaderField: "Authorization") == "Bearer apple-access")
+    let proof = AuthRequest.verifyAppleForEmail(challengeID: "c", token: "id-token", code: "grant", bearer: "apple-access")
+    #expect(proof.fields == ["challenge_id": "c", "identity_token": "id-token", "authorization_code": "grant"])
+    #expect(proof.path == "apple/reauthenticate")
+    let link = AuthRequest.linkAppleEmail("test@example.test", password: "fixture-only-password", code: "123456", bearer: "fresh-access")
+    #expect(link.path == "email/link")
+    #expect(link.bearer == "fresh-access")
+    #expect(link.fields["email"] == "test@example.test")
+}
+
+private actor AppleEmailLinkFake: AuthServicing {
+    private var requests: [AuthRequest] = []
+    private var verifiedID: Int64 = 42
+    private var suspendReauth = false
+    private var reauthWaiter: CheckedContinuation<Void, Never>?
+    private var linkedEmail: String?
+    private var loseLinkReply = false
+
+    func configure(verifiedID: Int64 = 42, suspendReauth: Bool = false, loseLinkReply: Bool = false) {
+        self.verifiedID = verifiedID
+        self.suspendReauth = suspendReauth
+        self.loseLinkReply = loseLinkReply
+    }
+
+    func call(_ path: String) -> AuthRequest? { requests.last { $0.path == path } }
+    func isReauthWaiting() -> Bool { reauthWaiter != nil }
+    func finishReauth() { reauthWaiter?.resume(); reauthWaiter = nil }
+
+    func execute(_ request: AuthRequest) async throws -> Data {
+        requests.append(request)
+        switch request.path {
+        case "apple/login":
+            return try JSONEncoder().encode(result(id: 42, token: "initial"))
+        case "apple/reauthenticate/challenge":
+            return Data(#"{"challenge_id":"c","nonce":"nonce","expires_in":300}"#.utf8)
+        case "apple/reauthenticate":
+            if suspendReauth { await withCheckedContinuation { reauthWaiter = $0 } }
+            return try JSONEncoder().encode(result(id: verifiedID, token: "fresh"))
+        case "email/link/code":
+            return Data(#"{"retry_after":60,"expires_in":300}"#.utf8)
+        case "email/link":
+            linkedEmail = request.fields["email"]
+            if loseLinkReply { throw AuthError.network }
+            return Data("{}".utf8)
+        case "me":
+            return try JSONEncoder().encode(result(id: 42, token: "fresh").user)
+        case "email/login":
+            return try JSONEncoder().encode(LoginResult(token: "other", refreshToken: "other-refresh", expiresIn: 900, user: .init(
+                id: 100, nickname: "", avatarURL: "", email: "other@example.test", phoneNumber: nil, status: "active", provider: .email
+            )))
+        default:
+            return Data("{}".utf8)
+        }
+    }
+
+    private func result(id: Int64, token: String) -> LoginResult {
+        LoginResult(token: token, refreshToken: token + "-refresh", expiresIn: 900, user: .init(
+            id: id, nickname: "记金用户", avatarURL: "", email: linkedEmail, phoneNumber: nil, status: "active", provider: .apple
+        ))
+    }
+}
+
+@MainActor @Test func appleEmailBindingSurvivesLostReplyWithinSameAccount() async throws {
+    let fake = AppleEmailLinkFake()
+    await fake.configure(loseLinkReply: true)
+    let store = MemoryCredentials()
+    let session = AuthSession(service: fake, store: store)
+    try await session.login(.appleLogin(challengeID: "login", token: "old", code: "code", nickname: nil), appleUserID: "apple-sub")
+    let scope = try #require(session.appleEmailLinkScope)
+    let form = AppleEmailLinkModel(session: session, scope: scope)
+    await form.prepareApple()
+    let attempt = try #require(form.beginApple())
+    await form.completeApple(state: attempt.state, token: "proof", authorizationCode: "grant", appleUserID: "apple-sub")
+    #expect(form.verified)
+    #expect(session.sessionGeneration == scope.generation + 1)
+    #expect(await fake.call("apple/reauthenticate")?.bearer == "initial")
+    form.email = " Fixture@EXAMPLE.test "
+    await form.sendCode()
+    #expect(await fake.call("email/link/code")?.bearer == "fresh")
+    form.password = "fixture-only-password"
+    form.confirmation = form.password
+    form.code = "123456"
+    await form.submit()
+    #expect(form.completed)
+    #expect(form.password.isEmpty && form.code.isEmpty)
+    #expect(session.user?.id == 42 && session.user?.provider == .apple)
+    #expect(session.user?.email == "fixture@example.test")
+    #expect(store.value?.result.user.email == "fixture@example.test")
+    #expect(await fake.call("email/link")?.fields["email"] == "fixture@example.test")
+}
+
+@MainActor @Test func appleEmailReauthRejectsAnotherLocalOrServerIdentity() async throws {
+    let fake = AppleEmailLinkFake()
+    let session = AuthSession(service: fake, store: MemoryCredentials())
+    try await session.login(.appleLogin(challengeID: "login", token: "old", code: "code", nickname: nil), appleUserID: "apple-sub")
+    let scope = try #require(session.appleEmailLinkScope)
+    let attempt = try await session.prepareAppleEmailLink(scope)
+    await #expect(throws: AuthError.appleEmailAccountMismatch) {
+        try await session.verifyAppleEmailLink(scope, attempt: attempt, state: attempt.state, identityToken: "proof", code: "grant", appleUserID: "wrong")
+    }
+    #expect(await fake.call("apple/reauthenticate") == nil)
+
+    await fake.configure(verifiedID: 999)
+    await #expect(throws: AuthError.appleEmailAccountMismatch) {
+        try await session.verifyAppleEmailLink(scope, attempt: attempt, state: attempt.state, identityToken: "proof", code: "grant", appleUserID: "apple-sub")
+    }
+    #expect(session.appleEmailLinkScope == scope)
+    #expect(session.stored?.result.token == "initial")
+}
+
+@MainActor @Test func oldAppleBindingCannotContinueAcrossAccountSwitch() async throws {
+    let fake = AppleEmailLinkFake()
+    await fake.configure(suspendReauth: true)
+    let session = AuthSession(service: fake, store: MemoryCredentials())
+    try await session.login(.appleLogin(challengeID: "login", token: "old", code: "code", nickname: nil), appleUserID: "apple-sub")
+    let scope = try #require(session.appleEmailLinkScope)
+    let attempt = try await session.prepareAppleEmailLink(scope)
+    let reauth = Task {
+        try await session.verifyAppleEmailLink(scope, attempt: attempt, state: attempt.state, identityToken: "proof", code: "grant", appleUserID: "apple-sub")
+    }
+    while !(await fake.isReauthWaiting()) { await Task.yield() }
+    try await session.login(.emailLogin(email: "other@example.test", password: "fixture-only-password"))
+    await fake.finishReauth()
+    await #expect(throws: AuthError.stale) { try await reauth.value }
+    await #expect(throws: AuthError.stale) { try await session.sendAppleEmailCode("fixture@example.test", scope: scope) }
+    #expect(await fake.call("email/link/code") == nil)
+    #expect(session.user?.id == 100 && session.user?.provider == .email)
+}
+
 @Test func nativeUserContractAndPasswordBoundaries() throws {
     let result = try AuthCoding.decode(LoginResult.self, from: loginJSON)
     #expect(result.user.provider == .phone)

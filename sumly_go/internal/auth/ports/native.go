@@ -34,6 +34,22 @@ type LoginMutation struct {
 	AppleRefresh                                                                           []byte
 	Session                                                                                domain.Session
 	Register                                                                               bool
+	GoogleVerifiedEmail                                                                    string
+}
+
+type GoogleIdentity struct{ Subject, Nickname, VerifiedEmail string }
+
+type GoogleGateway interface {
+	ClientID() string
+	Verify(context.Context, string, string) (GoogleIdentity, error)
+}
+
+// IdentityLinks validates the active session atomically when linking or rechecking a credential.
+type IdentityLinks interface {
+	LinkGoogle(ctx context.Context, sessionID, subject string) error
+	LinkEmail(ctx context.Context, sessionID, email, otpHash, passwordHash string) error
+	ReauthenticateGoogle(ctx context.Context, sessionID, subject string, next domain.Session) (domain.User, error)
+	ReauthenticateApple(ctx context.Context, sessionID, subject string, issuedAt time.Time, encryptedRefresh []byte, next domain.Session) (domain.User, error)
 }
 type Cryptography interface {
 	Random() string

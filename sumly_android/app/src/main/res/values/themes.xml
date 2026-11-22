@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="gold_background">#1B1B1D</color>
+    <color name="launcher_background">#131316</color>
+
+    <style name="Theme.Sumly" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/gold_background</item>
+        <item name="android:statusBarColor">@color/gold_background</item>
+        <item name="android:navigationBarColor">@color/gold_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

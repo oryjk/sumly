@@ -7,6 +7,8 @@ struct AccountSettingsView: View {
     @State private var confirmConflict = false
     @State private var clearingCache = false
     @State private var cacheNotice: String?
+    @State private var allowedEmailLink: AppleEmailLinkScope?
+    @State private var selectedEmailLink: AppleEmailLinkScope?
 
     var body: some View {
         ScrollView {
@@ -31,6 +33,22 @@ struct AccountSettingsView: View {
                         }
                     }
                 }.goldCard(padding: 20)
+                if let scope = session.appleEmailLinkScope, allowedEmailLink == scope {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("跨设备登录", systemImage: "envelope")
+                            .font(.headline).foregroundStyle(GoldTheme.goldSoft)
+                        if session.user?.email != nil {
+                            Text("已绑定邮箱 \(session.user?.maskedIdentifier ?? "")")
+                                .foregroundStyle(GoldTheme.textSecondary)
+                        } else {
+                            Button("绑定邮箱登录") { selectedEmailLink = scope }
+                                .foregroundStyle(GoldTheme.gold)
+                                .accessibilityIdentifier("settings.appleEmailLink")
+                            Text("在 Android 使用绑定的邮箱，即可打开此账户的持仓和账本。")
+                                .font(.footnote).foregroundStyle(GoldTheme.textSecondary)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading).goldCard(padding: 20)
+                }
                 VStack(alignment: .leading, spacing: 12) {
                     Button {
                         Task {
@@ -71,6 +89,10 @@ struct AccountSettingsView: View {
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .task(id: session.appleEmailLinkScope) { await loadEmailLink() }
+        .sheet(item: $selectedEmailLink, onDismiss: { Task { await loadEmailLink() } }) { scope in
+            AppleEmailLinkSheet(session: session, scope: scope)
+        }
         .confirmationDialog("将游客记录导入当前账户？", isPresented: $confirmImport, titleVisibility: .visible) {
             Button("导入并同步") { Task { await cloud?.importGuestRecords() } }
         } message: { Text("导入到 \(session.user?.maskedIdentifier ?? "")。记录使用原有 ID，重复导入跳过相同记录。游客原记录会保留。") }
@@ -78,5 +100,15 @@ struct AccountSettingsView: View {
             Button("冲突记录保留本机版本") { Task { await cloud?.sync(choice: .local) } }
             Button("冲突记录使用云端版本", role: .destructive) { Task { await cloud?.sync(choice: .remote) } }
         } message: { Text("同一购入记录及其部分处置记录作为整体选择，其他记录自动合并。选择某一版本将放弃这些冲突记录在另一端的更改（包括删除）。") }
+    }
+
+    private func loadEmailLink() async {
+        allowedEmailLink = nil
+        guard let scope = session.appleEmailLinkScope,
+              let capabilities = try? await session.service.fetch(AuthCapabilities.self, .capabilities),
+              capabilities.canLinkAppleEmail, scope == session.appleEmailLinkScope,
+              (try? await session.loadAppleEmailProfile(scope)) != nil,
+              !Task.isCancelled, scope == session.appleEmailLinkScope else { return }
+        allowedEmailLink = scope
     }
 }

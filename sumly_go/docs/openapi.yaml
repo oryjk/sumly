@@ -193,7 +193,7 @@ paths:
     get:
       tags: ["App Auth"]
       operationId: "nativeCapabilities"
-      summary: "Provider availability; missing credentials and global disable return false."
+      summary: "Provider availability and optional credential-linking capabilities."
       security: []
       responses:
         <<: *nativeErrors
@@ -260,6 +260,169 @@ paths:
                   maxLength: 120
               required: ["challenge_id", "identity_token", "authorization_code"]
               additionalProperties: false
+
+  /api/v1/app/auth/apple/reauthenticate/challenge:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeAppleReauthenticationChallenge"
+      summary: "Issue a single-use Apple nonce for the active Apple session family."
+      description: "Available when apple_email_link is enabled. Requires an active Apple session. The client passes the returned nonce verbatim to Sign in with Apple."
+      security: [{"bearerAuth": []}]
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              additionalProperties: false
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NativeChallengeResponse"
+
+  /api/v1/app/auth/apple/reauthenticate:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeAppleReauthenticate"
+      summary: "Confirm the Apple identity already on the active Sumly account."
+      description: "A different Apple identity returns 409 without creating an account. Invalid, expired or reused proof returns 422. Success issues a fresh session family for the same user. The client can revoke the previous family after saving the new session."
+      security: [{"bearerAuth": []}]
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                challenge_id: {type: "string", minLength: 43, maxLength: 43}
+                identity_token: {type: "string", minLength: 1, maxLength: 16384}
+                authorization_code: {type: "string", minLength: 1, maxLength: 4096}
+              required: ["challenge_id", "identity_token", "authorization_code"]
+              additionalProperties: false
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NativeLoginResultResponse"
+
+  /api/v1/app/auth/google/challenge:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeGoogleChallenge"
+      summary: "Issue a single-use five-minute Google nonce."
+      description: "Omit Authorization for sign-in. Supply the Bearer token of a native email session authenticated within the last five minutes for account linking."
+      security: [{}, {"bearerAuth": []}]
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              additionalProperties: false
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NativeChallengeResponse"
+
+  /api/v1/app/auth/google/login:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeGoogleLogin"
+      summary: "Sign in with a verified Google ID token and sign-in challenge."
+      description: "A new Google identity whose verified email matches an existing email login returns 409. Sign in with email and explicitly link the Google credential to retain the existing user ID."
+      security: []
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/NativeGoogleToken"
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NativeLoginResultResponse"
+
+  /api/v1/app/auth/google/link:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeGoogleLink"
+      summary: "Bind Google to the current native email account using a session-bound challenge."
+      description: "Requires email authentication within the last five minutes. Both credentials sign in as the same user ID. An invalid or expired proof returns 422. A Google credential already owned by another account returns 409."
+      security: [{"bearerAuth": []}]
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/NativeGoogleToken"
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NativeEmptyResponse"
+
+  /api/v1/app/auth/google/reauthenticate/challenge:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeGoogleReauthenticationChallenge"
+      summary: "Issue a single-use five-minute Google nonce for reauthentication."
+      description: "Requires an active native Google session. The challenge belongs to that user's session family."
+      security: [{"bearerAuth": []}]
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              additionalProperties: false
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NativeChallengeResponse"
+
+  /api/v1/app/auth/google/reauthenticate:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeGoogleReauthenticate"
+      summary: "Verify the Google identity on the active native session."
+      description: "A different Google account returns 409 without creating an account. Invalid, expired or reused proof returns 422. On success a new session family is issued for the existing user. After saving it the client can revoke the previous session family through logout."
+      security: [{"bearerAuth": []}]
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/NativeGoogleToken"
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NativeLoginResultResponse"
 
   /api/v1/app/auth/wechat/session:
     post:
@@ -530,6 +693,64 @@ paths:
               required: ["email", "code", "new_password"]
               additionalProperties: false
 
+  /api/v1/app/auth/email/link/code:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeLinkedEmailCode"
+      summary: "Send an account-bound email verification code to attach an email login."
+      description: "Requires Google or Apple authentication within the last five minutes and the corresponding link capability. Uses the same delivery limits as the registration and password-reset routes."
+      security: [{"bearerAuth": []}]
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                email: {type: "string", format: "email", maxLength: 254}
+              required: ["email"]
+              additionalProperties: false
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NativeCodeSentResponse"
+
+  /api/v1/app/auth/email/link:
+    post:
+      tags: ["App Auth"]
+      operationId: "nativeLinkEmail"
+      summary: "Verify a new email and attach an email-password login to the active account."
+      description: "Requires Google or Apple authentication within the last five minutes and a link code sent for this user. Invalid or expired code returns 422. A credential collision returns 409 and leaves both accounts intact."
+      security: [{"bearerAuth": []}]
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                email: {type: "string", format: "email", maxLength: 254}
+                code: {type: "string", pattern: "^[0-9]{6}$"}
+                password:
+                  type: "string"
+                  minLength: 12
+                  maxLength: 128
+                  description: "12–128 Unicode code points, at most 512 UTF-8 bytes."
+              required: ["email", "code", "password"]
+              additionalProperties: false
+      responses:
+        <<: *nativeErrors
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/NativeEmptyResponse"
+
   /api/v1/app/auth/refresh:
     post:
       tags: ["App Auth"]
@@ -625,7 +846,7 @@ paths:
     delete:
       tags: ["App Auth"]
       operationId: "nativeAccount"
-      summary: "Requires primary login in last 5 minutes. Revokes Apple token and transactionally deletes server account. Local device holdings remain untouched."
+      summary: "Requires primary login in last 5 minutes. Revokes any active linked Apple token and transactionally deletes the server account. Local device holdings remain untouched."
       security: [{"bearerAuth": []}]
       responses:
         <<: *nativeErrors
@@ -1370,6 +1591,7 @@ components:
           format: "email"
           maxLength: 254
           nullable: true
+          description: "Verified email login address. Returned with a Google or Apple session after an email credential is explicitly linked."
         phone_number:
           type: "string"
           nullable: true
@@ -1378,7 +1600,7 @@ components:
           enum: ["active", "frozen"]
         provider:
           type: "string"
-          enum: ["apple", "phone", "email"]
+          enum: ["apple", "phone", "email", "google", "wechat"]
       required: ["id", "nickname", "avatar_url", "email", "phone_number", "status", "provider"]
     NativeLoginResult:
       type: "object"
@@ -1405,7 +1627,23 @@ components:
           type: "boolean"
         email:
           type: "boolean"
+        google:
+          type: "boolean"
+          description: "Included when Google sign-in is enabled."
+        google_client_id:
+          type: "string"
+          description: "Public Web application OAuth client ID for Credential Manager."
+        apple_email_link:
+          type: "boolean"
+          description: "Included only when Apple email linking is explicitly enabled and Sign in with Apple and SMTP are available."
       required: ["apple", "phone", "email"]
+    NativeGoogleToken:
+      type: "object"
+      properties:
+        challenge_id: {type: "string", minLength: 43, maxLength: 43}
+        identity_token: {type: "string", minLength: 1, maxLength: 16384}
+      required: ["challenge_id", "identity_token"]
+      additionalProperties: false
     NativeChallenge:
       type: "object"
       properties:
@@ -1413,7 +1651,7 @@ components:
           type: "string"
         nonce:
           type: "string"
-          description: "Exact nonce for Apple request; do not hash again."
+          description: "Exact nonce for the identity-provider request. Pass it verbatim."
         expires_in:
           type: "integer"
           enum: [300]

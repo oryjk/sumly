@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_gold_quote">记金行情</string>
+    <string name="widget_gold_quote_unit">元/克</string>
+    <string name="widget_gold_quote_unavailable_price">—</string>
+    <string name="widget_gold_quote_unavailable">暂无金价</string>
+    <string name="widget_gold_quote_change_unavailable">暂无涨跌数据</string>
+    <string name="widget_gold_quote_updated">报价 %1$s</string>
+    <string name="widget_gold_quote_cached">缓存 %1$s</string>
+    <string name="widget_gold_quote_delayed">延迟 %1$s</string>
+    <string name="widget_gold_quote_open">轻点打开记金</string>
+</resources>

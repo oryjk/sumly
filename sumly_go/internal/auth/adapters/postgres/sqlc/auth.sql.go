@@ -509,7 +509,9 @@ func (q *Queries) NativeRevokeUser(ctx context.Context, userID int64) error {
 }
 
 const nativeSession = `-- name: NativeSession :one
-SELECT s.id, s.user_id, s.provider, s.family_id, s.refresh_hash, s.authenticated_at, s.expires_at,u.nickname,COALESCE(u.avatar_url,'')::text AS avatar_url,u.status,i.subject
+SELECT s.id, s.user_id, s.provider, s.family_id, s.refresh_hash, s.authenticated_at, s.expires_at,u.nickname,COALESCE(u.avatar_url,'')::text AS avatar_url,u.status,i.subject,
+  COALESCE((SELECT e.subject FROM auth_identities e
+    WHERE s.provider IN ('apple','google') AND e.user_id=s.user_id AND e.provider='email'),'')::text AS linked_email
 FROM auth_sessions s JOIN users u ON u.id=s.user_id JOIN auth_identities i ON i.user_id=s.user_id AND i.provider=s.provider
 WHERE s.id=$1 AND s.expires_at>now() AND u.status='active'
 `
@@ -526,6 +528,7 @@ type NativeSessionRow struct {
 	AvatarUrl       string             `json:"avatar_url"`
 	Status          string             `json:"status"`
 	Subject         string             `json:"subject"`
+	LinkedEmail     string             `json:"linked_email"`
 }
 
 func (q *Queries) NativeSession(ctx context.Context, id string) (NativeSessionRow, error) {
@@ -543,6 +546,7 @@ func (q *Queries) NativeSession(ctx context.Context, id string) (NativeSessionRo
 		&i.AvatarUrl,
 		&i.Status,
 		&i.Subject,
+		&i.LinkedEmail,
 	)
 	return i, err
 }

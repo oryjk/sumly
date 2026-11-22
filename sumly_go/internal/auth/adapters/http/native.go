@@ -55,7 +55,7 @@ func nativeError(c *gin.Context, e error) {
 	status := 503
 	message := "authentication temporarily unavailable"
 	switch {
-	case errors.Is(e, domain.ErrInvalid):
+	case errors.Is(e, domain.ErrInvalid), errors.Is(e, domain.ErrLinkProof):
 		status = 422
 		message = e.Error()
 	case errors.Is(e, domain.ErrCredentials):
@@ -64,7 +64,7 @@ func nativeError(c *gin.Context, e error) {
 	case errors.Is(e, domain.ErrReauthenticate):
 		status = 403
 		message = e.Error()
-	case errors.Is(e, domain.ErrConflict):
+	case errors.Is(e, domain.ErrConflict), errors.Is(e, domain.ErrAccountMismatch), errors.Is(e, domain.ErrAppleAccountMismatch):
 		status = 409
 		message = e.Error()
 	case errors.Is(e, domain.ErrLimited):
@@ -80,6 +80,8 @@ func (h *NativeHandler) RegisterRoutes(g *gin.RouterGroup) {
 	}
 	g.GET("/auth/capabilities", func(c *gin.Context) { c.JSON(200, sharedhttp.Success(h.accounts.Capabilities())) })
 	g.POST("/auth/apple/notifications", h.appleNotification)
+	h.registerGoogleRoutes(g)
+	h.registerAppleReauthenticationRoutes(g)
 	for _, path := range []string{"apple/challenge", "apple/login", "phone/code", "phone/login", "email/code", "email/register", "email/login", "email/reset-password", "refresh", "logout"} {
 		g.POST("/auth/"+path, h.endpoint(path))
 	}

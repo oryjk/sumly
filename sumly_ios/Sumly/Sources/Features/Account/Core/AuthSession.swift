@@ -75,13 +75,21 @@ import Observation
     }
 
     func authorized<T: Decodable & Sendable>(_ type: T.Type, request: (String) -> AuthRequest) async throws -> T {
+        try await withAuthorization { token in
+            try await service.fetch(type, request(token))
+        }
+    }
+
+    private func withAuthorization<T: Sendable>(expected: AppleEmailLinkScope? = nil, execute: (String) async throws -> T) async throws -> T {
+        if let expected { try requireAppleEmailScope(expected) }
         guard let current = stored else { throw AuthError.unauthorized }
         let stamp = generation
         let refreshedForExpiry = current.expiresAt <= Date()
         if refreshedForExpiry { try await refresh() }
         guard stamp == generation, let token = stored?.result.token else { throw AuthError.stale }
+        if let expected { try requireAppleEmailScope(expected) }
         do {
-            let result = try await service.fetch(type, request(token))
+            let result = try await execute(token)
             guard stamp == generation else { throw AuthError.stale }
             return result
         } catch AuthError.unauthorized {
@@ -90,8 +98,9 @@ import Observation
             // Another authorized request may already have rotated this access token.
             if stored?.result.token == token { try await refresh() }
             guard stamp == generation, let retryToken = stored?.result.token else { throw AuthError.stale }
+            if let expected { try requireAppleEmailScope(expected) }
             do {
-                let result = try await service.fetch(type, request(retryToken))
+                let result = try await execute(retryToken)
                 guard stamp == generation else { throw AuthError.stale }
                 return result
             } catch AuthError.unauthorized {
@@ -99,6 +108,102 @@ import Observation
                 throw AuthError.unauthorized
             }
         }
+    }
+
+    var appleEmailLinkScope: AppleEmailLinkScope? {
+        guard let user, user.provider == .apple else { return nil }
+        return AppleEmailLinkScope(userID: user.id, generation: generation)
+    }
+
+    private func requireAppleEmailScope(_ scope: AppleEmailLinkScope) throws {
+        try Task.checkCancellation()
+        guard scope == appleEmailLinkScope else { throw AuthError.stale }
+    }
+
+    func prepareAppleEmailLink(_ scope: AppleEmailLinkScope) async throws -> AppleAttempt {
+        let challenge = try await withAuthorization(expected: scope) { token in
+            try await service.fetch(AppleChallenge.self, .appleEmailChallenge(token))
+        }
+        try requireAppleEmailScope(scope)
+        return try AppleAttempt(challenge: challenge)
+    }
+
+    func verifyAppleEmailLink(
+        _ scope: AppleEmailLinkScope, attempt: AppleAttempt, state: String?,
+        identityToken: String, code: String, appleUserID: String
+    ) async throws -> AppleEmailLinkScope {
+        try requireAppleEmailScope(scope)
+        guard attempt.accepts(state: state), !identityToken.isEmpty, !code.isEmpty, !appleUserID.isEmpty else { throw AuthError.stale }
+        if let storedID = stored?.appleUserID, storedID != appleUserID { throw AuthError.appleEmailAccountMismatch }
+        let attemptGeneration = loginAttemptGeneration
+        var provisional: LoginResult?
+        do {
+            let result = try await withAuthorization(expected: scope) { bearer in
+                let result = try await service.fetch(LoginResult.self, .verifyAppleForEmail(
+                    challengeID: attempt.challengeID, token: identityToken, code: code, bearer: bearer
+                ))
+                provisional = result
+                return result
+            }
+            try requireAppleEmailScope(scope)
+            guard attemptGeneration == loginAttemptGeneration else { throw AuthError.stale }
+            guard result.user.id == scope.userID, result.user.provider == .apple else { throw AuthError.appleEmailAccountMismatch }
+            guard !result.token.isEmpty, !result.refreshToken.isEmpty, result.expiresIn > 0 else { throw AuthError.malformed }
+            let now = Date()
+            let next = StoredSession(
+                result: result, expiresAt: now.addingTimeInterval(Double(result.expiresIn)), primaryLoginAt: now, appleUserID: appleUserID
+            )
+            try store.save(next)
+            let previousToken = stored?.result.refreshToken
+            loginAttemptGeneration += 1
+            generation += 1
+            refreshTask?.cancel()
+            refreshTask = nil
+            stored = next
+            if let previousToken, previousToken != result.refreshToken { retireEmailLinkSession(previousToken) }
+            return AppleEmailLinkScope(userID: scope.userID, generation: generation)
+        } catch {
+            if let token = provisional?.refreshToken, !token.isEmpty, token != stored?.result.refreshToken {
+                retireEmailLinkSession(token)
+            }
+            throw error
+        }
+    }
+
+    private func retireEmailLinkSession(_ token: String) {
+        let service = service
+        Task { _ = try? await service.execute(.logout(token)) }
+    }
+
+    func sendAppleEmailCode(_ email: String, scope: AppleEmailLinkScope) async throws -> CodeDelivery {
+        let delivery = try await withAuthorization(expected: scope) { bearer in
+            try await service.fetch(CodeDelivery.self, .appleEmailCode(email, bearer: bearer))
+        }
+        try requireAppleEmailScope(scope)
+        return delivery
+    }
+
+    func linkAppleEmail(_ email: String, password: String, code: String, scope: AppleEmailLinkScope) async throws {
+        _ = try await withAuthorization(expected: scope) { bearer in
+            try await service.execute(.linkAppleEmail(email, password: password, code: code, bearer: bearer))
+        }
+        try requireAppleEmailScope(scope)
+    }
+
+    func loadAppleEmailProfile(_ scope: AppleEmailLinkScope) async throws -> NativeUser {
+        let profile = try await withAuthorization(expected: scope) { bearer in
+            try await service.fetch(NativeUser.self, .me(bearer))
+        }
+        try requireAppleEmailScope(scope)
+        guard var next = stored, profile.id == scope.userID, profile.provider == .apple else { throw AuthError.stale }
+        if next.result.user != profile {
+            let result = next.result
+            next.result = LoginResult(token: result.token, refreshToken: result.refreshToken, expiresIn: result.expiresIn, user: profile)
+            // Profile metadata also comes from the service on the next load if Keychain is unavailable.
+            try? store.save(next)
+            stored = next
+        }
+        return profile
     }
     func refresh() async throws {
         if let refreshTask { return try await refreshTask.value }

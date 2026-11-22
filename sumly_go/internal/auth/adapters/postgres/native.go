@@ -33,7 +33,8 @@ func (s *NativeStore) transaction(ctx context.Context, f func(*q.Queries) error)
 	}
 	defer tx.Rollback(ctx)
 	e = f(q.New(tx))
-	if e != nil && !errors.Is(e, domain.ErrCredentials) && !errors.Is(e, domain.ErrConflict) {
+	// Rejected proofs still commit their OTP attempt count.
+	if e != nil && !errors.Is(e, domain.ErrCredentials) && !errors.Is(e, domain.ErrConflict) && !errors.Is(e, domain.ErrLinkProof) {
 		return e
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -122,18 +123,25 @@ func (s *NativeStore) Login(ctx context.Context, m ports.LoginMutation) (u domai
 			return e
 		}
 		if m.Provider == "apple" {
-			latest, e := db.NativeLatestAppleAccountEvent(ctx, appleNotificationDigest(m.Subject))
-			if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+			if e := checkAppleCredentialAfterAccountEvent(ctx, db, m.Subject, m.ProviderIssuedAt); e != nil {
 				return e
-			}
-			if e == nil && (m.ProviderIssuedAt.IsZero() || !m.ProviderIssuedAt.After(latest.Time)) {
-				return domain.ErrCredentials
 			}
 		}
 		i, e := identity(ctx, db, m.Provider, m.Subject)
 		exists := e == nil
 		if e != nil && !errors.Is(e, domain.ErrCredentials) {
 			return e
+		}
+		if !exists && m.Provider == "google" && m.GoogleVerifiedEmail != "" {
+			// Serialize with email registration and linking. A matching address never grants login.
+			if e = db.NativeLock(ctx, "email:"+m.GoogleVerifiedEmail); e != nil {
+				return e
+			}
+			if _, e = identity(ctx, db, "email", m.GoogleVerifiedEmail); e == nil {
+				return domain.ErrConflict
+			} else if !errors.Is(e, domain.ErrCredentials) {
+				return e
+			}
 		}
 		if exists {
 			if e = userLock(ctx, db, i.User.ID); e != nil {
@@ -169,6 +177,15 @@ func (s *NativeStore) Login(ctx context.Context, m ports.LoginMutation) (u domai
 			u = user(r.ID, m.Provider, m.Subject, r.Nickname, "", r.Status)
 		} else {
 			u = i.User
+			if m.Provider == "google" || m.Provider == "apple" {
+				email, err := db.NativeSubjectByUser(ctx, q.NativeSubjectByUserParams{UserID: u.ID, Provider: "email"})
+				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+					return err
+				}
+				if email != "" {
+					u.Email = &email
+				}
+			}
 			if len(m.AppleRefresh) > 0 {
 				if e = db.NativeUpdateApple(ctx, q.NativeUpdateAppleParams{Provider: m.Provider, Subject: m.Subject, AppleRefresh: m.AppleRefresh}); e != nil {
 					return e
@@ -225,7 +242,11 @@ func session(ctx context.Context, db *q.Queries, id string) (domain.Session, dom
 	if errors.Is(e, pgx.ErrNoRows) {
 		e = domain.ErrCredentials
 	}
-	return domain.Session{ID: r.ID, FamilyID: r.FamilyID, UserID: r.UserID, Provider: r.Provider, RefreshHash: r.RefreshHash, AuthenticatedAt: r.AuthenticatedAt.Time, ExpiresAt: r.ExpiresAt.Time}, user(r.UserID, r.Provider, r.Subject, r.Nickname, r.AvatarUrl, r.Status), e
+	u := user(r.UserID, r.Provider, r.Subject, r.Nickname, r.AvatarUrl, r.Status)
+	if r.LinkedEmail != "" {
+		u.Email = &r.LinkedEmail
+	}
+	return domain.Session{ID: r.ID, FamilyID: r.FamilyID, UserID: r.UserID, Provider: r.Provider, RefreshHash: r.RefreshHash, AuthenticatedAt: r.AuthenticatedAt.Time, ExpiresAt: r.ExpiresAt.Time}, u, e
 }
 func (s *NativeStore) Session(ctx context.Context, id string) (domain.Session, domain.User, error) {
 	return session(ctx, q.New(s.pool), id)
@@ -287,20 +308,24 @@ func (s *NativeStore) Delete(ctx context.Context, id string, revoke func(context
 		if time.Since(ss.AuthenticatedAt) > 5*time.Minute {
 			return domain.ErrReauthenticate
 		}
-		if u.Provider == "apple" {
-			sub, e := db.NativeSubjectByUser(ctx, q.NativeSubjectByUserParams{UserID: ss.UserID, Provider: "apple"})
+		appleSubject, e := db.NativeSubjectByUser(ctx, q.NativeSubjectByUserParams{UserID: ss.UserID, Provider: "apple"})
+		if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+			return e
+		}
+		if e == nil {
+			i, e := identity(ctx, db, "apple", appleSubject)
 			if e != nil {
 				return e
 			}
-			i, e := identity(ctx, db, "apple", sub)
-			if e != nil {
-				return e
-			}
-			if revoke == nil {
-				return domain.ErrUnavailable
-			}
-			if e = revoke(ctx, i.AppleRefresh); e != nil {
-				return e
+			// Consent revocation clears the token. Linked email can still be used to delete
+			// the Sumly account after that event, without attempting a second Apple revocation.
+			if u.Provider == "apple" || len(i.AppleRefresh) > 0 {
+				if revoke == nil {
+					return domain.ErrUnavailable
+				}
+				if e = revoke(ctx, i.AppleRefresh); e != nil {
+					return e
+				}
 			}
 		}
 		var subject string
@@ -310,7 +335,7 @@ func (s *NativeStore) Delete(ctx context.Context, id string, revoke func(context
 		if u.PhoneNumber != nil {
 			subject = *u.PhoneNumber
 		}
-		for _, key := range []string{"email:register:" + subject, "email:reset_password:" + subject, "phone:login:" + subject} {
+		for _, key := range []string{"email:register:" + subject, "email:reset_password:" + subject, "phone:login:" + subject, domain.LinkedEmailCodeKey(ss.UserID, subject)} {
 			if e = db.NativeDeleteCode(ctx, key); e != nil {
 				return e
 			}

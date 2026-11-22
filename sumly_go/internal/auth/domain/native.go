@@ -4,18 +4,22 @@ import (
 	"errors"
 	"net/mail"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 )
 
 var (
-	ErrInvalid        = errors.New("invalid request")
-	ErrCredentials    = errors.New("invalid credentials")
-	ErrUnavailable    = errors.New("authentication provider unavailable")
-	ErrLimited        = errors.New("too many attempts; retry later")
-	ErrConflict       = errors.New("registration unavailable")
-	ErrReauthenticate = errors.New("reauthentication required")
+	ErrInvalid              = errors.New("invalid request")
+	ErrCredentials          = errors.New("invalid credentials")
+	ErrUnavailable          = errors.New("authentication provider unavailable")
+	ErrLimited              = errors.New("too many attempts; retry later")
+	ErrConflict             = errors.New("registration unavailable")
+	ErrAccountMismatch      = errors.New("Google identity does not belong to the authenticated account")
+	ErrAppleAccountMismatch = errors.New("Apple identity does not belong to the authenticated account")
+	ErrReauthenticate       = errors.New("reauthentication required")
+	ErrLinkProof            = errors.New("invalid or expired verification proof")
 )
 var mobile = regexp.MustCompile(`^1[3-9][0-9]{9}$`)
 
@@ -65,6 +69,32 @@ type Session struct {
 	RefreshHash                string
 	AuthenticatedAt, ExpiresAt time.Time
 }
+
+func (s Session) RequireProvider(provider string) error {
+	if s.UserID <= 0 || s.FamilyID == "" {
+		return ErrCredentials
+	}
+	if s.Provider != provider {
+		return ErrReauthenticate
+	}
+	return nil
+}
+
+func (s Session) RequireRecentAuthentication(provider string) error {
+	if err := s.RequireProvider(provider); err != nil {
+		return err
+	}
+	if time.Since(s.AuthenticatedAt) > 5*time.Minute {
+		return ErrReauthenticate
+	}
+	return nil
+}
+
+// LinkedEmailCodeKey separates account-bound verification from registration and reset codes.
+func LinkedEmailCodeKey(userID int64, email string) string {
+	return "email:link:" + strconv.FormatInt(userID, 10) + ":" + email
+}
+
 type LoginResult struct {
 	Token        string `json:"token"`
 	RefreshToken string `json:"refresh_token"`
@@ -72,10 +102,13 @@ type LoginResult struct {
 	User         User   `json:"user"`
 }
 type Capabilities struct {
-	Apple  bool `json:"apple"`
-	Wechat bool `json:"wechat"`
-	Phone  bool `json:"phone"`
-	Email  bool `json:"email"`
+	Apple          bool   `json:"apple"`
+	Wechat         bool   `json:"wechat"`
+	Phone          bool   `json:"phone"`
+	Email          bool   `json:"email"`
+	Google         bool   `json:"google,omitempty"`
+	GoogleClientID string `json:"google_client_id,omitempty"`
+	AppleEmailLink bool   `json:"apple_email_link,omitempty"`
 }
 type Challenge struct {
 	ID        string `json:"challenge_id"`

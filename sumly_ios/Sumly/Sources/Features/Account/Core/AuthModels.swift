@@ -37,7 +37,10 @@ struct StoredSession: Codable, Sendable {
 }
 struct AuthCapabilities: Decodable, Sendable {
     let apple: Bool; let phone: Bool; let email: Bool
-    static let disabled = Self(apple: false, phone: false, email: false)
+    let appleEmailLink: Bool?
+    enum CodingKeys: String, CodingKey { case apple, phone, email; case appleEmailLink = "apple_email_link" }
+    static let disabled = Self(apple: false, phone: false, email: false, appleEmailLink: nil)
+    var canLinkAppleEmail: Bool { apple && email && appleEmailLink == true }
 }
 struct AppleChallenge: Decodable, Sendable {
     let challengeID: String; let nonce: String; let expiresIn: Int
@@ -72,11 +75,13 @@ enum AuthValidation {
 }
 enum AuthError: Error, LocalizedError, Equatable {
     case unauthorized, reauthenticate, accountMismatch, unavailable, network, malformed, stale, insecureURL, keychain(Int32)
+    case appleEmailAccountMismatch
     case server(Int, String)
     var errorDescription: String? {
         switch self {
         case .unauthorized: "登录已失效，请重新登录。"
         case .accountMismatch: "登录的账户与待注销账户不一致，未切换账户。请使用原账户重新验证。"
+        case .appleEmailAccountMismatch: "请选择当前记金账户使用的 Apple 账户。"
         case .reauthenticate: "注销账户前请重新登录，并在 5 分钟内再次确认注销。"
         case .unavailable: "此登录方式暂未开放，请稍后再试。"
         case .network: "网络连接失败，请稍后重试。已保存的登录状态会保留。"
@@ -96,6 +101,14 @@ struct AuthRequest: Sendable {
     var bearer: String? = nil
     static var capabilities: Self { .init(path: "capabilities", method: "GET") }
     static var challenge: Self { .init(path: "apple/challenge") }
+    static func appleEmailChallenge(_ bearer: String) -> Self {
+        .init(path: "apple/reauthenticate/challenge", bearer: bearer)
+    }
+    static func verifyAppleForEmail(challengeID: String, token: String, code: String, bearer: String) -> Self {
+        .init(path: "apple/reauthenticate", fields: [
+            "challenge_id": challengeID, "identity_token": token, "authorization_code": code,
+        ], bearer: bearer)
+    }
     static func appleLogin(challengeID: String, token: String, code: String, nickname: String?) -> Self {
         var fields = ["challenge_id": challengeID, "identity_token": token, "authorization_code": code]
         if let nickname, !nickname.isEmpty { fields["nickname"] = nickname }
@@ -106,11 +119,23 @@ struct AuthRequest: Sendable {
     static func emailCode(_ email: String, purpose: String) -> Self { .init(path: "email/code", fields: ["email": email, "purpose": purpose]) }
     static func emailLogin(email: String, password: String) -> Self { .init(path: "email/login", fields: ["email": email, "password": password]) }
     static func emailRegister(email: String, password: String, code: String) -> Self { .init(path: "email/register", fields: ["email": email, "password": password, "code": code]) }
+    static func appleEmailCode(_ email: String, bearer: String) -> Self {
+        .init(path: "email/link/code", fields: ["email": email], bearer: bearer)
+    }
+    static func linkAppleEmail(_ email: String, password: String, code: String, bearer: String) -> Self {
+        .init(path: "email/link", fields: ["email": email, "password": password, "code": code], bearer: bearer)
+    }
     static func reset(email: String, password: String, code: String) -> Self { .init(path: "email/reset-password", fields: ["email": email, "new_password": password, "code": code]) }
     static func refresh(_ token: String) -> Self { .init(path: "refresh", fields: ["refresh_token": token]) }
     static func logout(_ token: String) -> Self { .init(path: "logout", fields: ["refresh_token": token]) }
     static func me(_ token: String) -> Self { .init(path: "me", method: "GET", bearer: token) }
     static func delete(_ token: String) -> Self { .init(path: "account", method: "DELETE", fields: ["confirmation": "DELETE"], bearer: token) }
+}
+
+struct AppleEmailLinkScope: Identifiable, Equatable, Sendable {
+    let userID: Int64
+    let generation: Int
+    var id: Int { generation }
 }
 
 
