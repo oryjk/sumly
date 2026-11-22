@@ -322,17 +322,36 @@ enum MembershipGateDecision: Equatable, Sendable {
 enum MembershipGate {
     /// 评估点击「禅观」时的下一步跳转：
     /// 1. 禅观配置缺失 -> unavailable；
-    /// 2. 未开通会员 -> 直接弹出 Paywall（允许游客无需注册先完成 StoreKit 2 订阅或恢复，符合 5.1.1(v)）；
-    /// 3. 已开通会员但未登录 -> 按既有逻辑弹出登录页；
-    /// 4. 已开通会员且已登录 -> 直接打开禅观页面。
+    /// 2. 远程开关要求会员订阅且未开通会员 -> 直接弹出 Paywall（允许游客无需注册先完成 StoreKit 2 订阅或恢复，符合 5.1.1(v)）；
+    /// 3. 已放行（后台关闭付费门槛或已开通会员）但未登录 -> 按既有逻辑弹出登录页；
+    /// 4. 已放行且已登录 -> 直接打开禅观页面。
     static func evaluateChanlunAccess(
         hasChanlunConfig: Bool,
         isMemberActive: Bool,
-        isSignedIn: Bool
+        isSignedIn: Bool,
+        requiresMembership: Bool = true
     ) -> MembershipGateDecision {
         guard hasChanlunConfig else { return .unavailable }
-        guard isMemberActive else { return .openPaywall }
+        if requiresMembership && !isMemberActive {
+            return .openPaywall
+        }
         return isSignedIn ? .openChanlun : .openLogin
+    }
+
+    /// 首页胶囊皇冠标与「我的」页「会员专属」徽标仅在需要会员且当前未开通时显示。
+    static func shouldShowChanlunLockBadge(
+        requiresMembership: Bool,
+        isMemberActive: Bool
+    ) -> Bool {
+        requiresMembership && !isMemberActive
+    }
+
+    /// 「我的」页「记金会员」入口：后台开启入口或用户已是有效会员时显示（确保老会员始终可查看有效期与管理订阅）。
+    static func shouldShowMembershipEntry(
+        entryVisible: Bool,
+        isMemberActive: Bool
+    ) -> Bool {
+        entryVisible || isMemberActive
     }
 }
 

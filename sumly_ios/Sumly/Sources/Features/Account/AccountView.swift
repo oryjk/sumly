@@ -5,6 +5,7 @@ struct AccountView: View {
     @Bindable var session: AuthSession
     var cloud: HoldingsCloud? = nil
     var membership: MembershipStore? = nil
+    var remoteConfig: RemoteAppConfigStore? = nil
     var onOpenMembership: (() -> Void)? = nil
     var onOpenChanlun: (() -> Void)? = nil
     var onOpenOnboarding: (() -> Void)? = nil
@@ -253,8 +254,15 @@ struct AccountView: View {
     // MARK: - 3. 「偏好与工具」分组卡片
 
     private var preferencesGroup: some View {
-        let showMembership = membership != nil || onOpenMembership != nil
         let isMemberActive = membership?.isActive ?? false
+        let chanlunRequiresMembership = remoteConfig?.chanlunRequiresMembership ?? true
+        let membershipEntryVisible = remoteConfig?.membershipEntryVisible ?? true
+        let freeAccessNotice = remoteConfig?.freeAccessNotice ?? ""
+        let hasMembershipFeature = membership != nil || onOpenMembership != nil
+        let showMembership = hasMembershipFeature && MembershipGate.shouldShowMembershipEntry(
+            entryVisible: membershipEntryVisible,
+            isMemberActive: isMemberActive
+        )
         let showChanlun = ChanlunWebConfiguration.current != nil && onOpenChanlun != nil
         let showOnboarding = onOpenOnboarding != nil
         return VStack(alignment: .leading, spacing: 8) {
@@ -300,7 +308,11 @@ struct AccountView: View {
                 if showChanlun, let onOpenChanlun {
                     rowDivider
                     Button(action: onOpenChanlun) {
-                        chanlunRowContent(isMemberActive: isMemberActive)
+                        chanlunRowContent(
+                            requiresMembership: chanlunRequiresMembership,
+                            isMemberActive: isMemberActive,
+                            freeAccessNotice: freeAccessNotice
+                        )
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("account.chanlun")
@@ -604,8 +616,17 @@ struct AccountView: View {
         .contentShape(Rectangle())
     }
 
-    private func chanlunRowContent(isMemberActive: Bool) -> some View {
-        HStack(spacing: 12) {
+    private func chanlunRowContent(
+        requiresMembership: Bool,
+        isMemberActive: Bool,
+        freeAccessNotice: String
+    ) -> some View {
+        let showsLockBadge = MembershipGate.shouldShowChanlunLockBadge(
+            requiresMembership: requiresMembership,
+            isMemberActive: isMemberActive
+        )
+        let noticeBadge = freeAccessNotice.trimmingCharacters(in: .whitespacesAndNewlines)
+        return HStack(spacing: 12) {
             AccountRowIconBadge(systemName: "chart.line.uptrend.xyaxis")
             VStack(alignment: .leading, spacing: 2) {
                 Text(AccountProfileCopy.chanlunTitle)
@@ -617,7 +638,7 @@ struct AccountView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            if !isMemberActive {
+            if showsLockBadge {
                 HStack(spacing: 3) {
                     Image(systemName: "crown.fill")
                         .font(.system(size: 9, weight: .bold))
@@ -633,6 +654,19 @@ struct AccountView: View {
                     GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.32), lineWidth: 0.8)
                 )
                 .fixedSize(horizontal: true, vertical: false)
+            } else if !requiresMembership && !noticeBadge.isEmpty {
+                Text(noticeBadge)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(GoldTheme.goldSoft)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3.5)
+                    .background(GoldTheme.gold.opacity(0.12), in: GoldTheme.capsuleShape)
+                    .overlay(
+                        GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.32), lineWidth: 0.8)
+                    )
+                    .frame(maxWidth: 120, alignment: .trailing)
             }
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))

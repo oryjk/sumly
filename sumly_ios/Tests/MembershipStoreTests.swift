@@ -325,6 +325,58 @@ private final class MockAccountRenderStore: CredentialStoring {
     #expect(store.errorMessage?.contains("网络") == true)
 }
 
+// MARK: - 5.5 StoreKit 空商品目录 vs 真实网络/StoreKit 异常区分与前台 refresh 补拉
+
+@MainActor
+@Test func storeKitEmptyCatalogIsDistinguishedFromNetworkErrors() async {
+    let client = MockMembershipStoreKitClient()
+    let store = MembershipStore(client: client)
+
+    // 1) Product.products(for:) 正常返回空数组 []：不得误报「请检查网络」
+    await client.setProductsResult(.success([]))
+    await store.loadProducts()
+    #expect(store.productsLoadFailed)
+    #expect(store.productsLoadFailureReason == .emptyCatalog)
+    #expect(store.productsLoadNotice == "App Store 暂未返回订阅商品，请稍后重试。")
+    #expect(store.productsLoadNotice?.contains("网络") == false)
+
+    // 购买时因商品目录为空抛出 productUnavailable：同样明确提示，不误报网络
+    await client.setPurchaseHandler { _ in
+        throw MembershipStoreError.productUnavailable
+    }
+    let unavailablePurchase = await store.purchase(plan: .yearly)
+    #expect(!unavailablePurchase)
+    #expect(store.errorMessage == "App Store 暂未返回订阅商品，请稍后重试。")
+    #expect(store.errorMessage?.contains("网络") == false)
+
+    // 2) 真实网络异常：明确标记为 networkOrStoreError 并提示网络问题
+    await client.setProductsResult(.failure(NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)))
+    await store.loadProducts()
+    #expect(store.productsLoadFailed)
+    if case .networkOrStoreError(let message) = store.productsLoadFailureReason {
+        #expect(message.contains("网络"))
+    } else {
+        Issue.record("预期为 .networkOrStoreError，实际为 \(String(describing: store.productsLoadFailureReason))")
+    }
+    #expect(store.productsLoadNotice?.contains("网络") == true)
+
+    // 3) 前台 refresh() 在商品为空时自动补拉；成功后清除失败原因；之后再次 refresh 不重复拉取商品
+    let callsBeforeRecovery = await client.loadProductsCallCount
+    await client.setProductsResult(.success([
+        MembershipProductInfo(plan: .yearly),
+        MembershipProductInfo(plan: .monthly)
+    ]))
+    await store.refresh()
+    #expect(!store.productsLoadFailed)
+    #expect(store.productsLoadFailureReason == nil)
+    #expect(store.productsLoadNotice == nil)
+    #expect(store.products.count == 2)
+    #expect(await client.loadProductsCallCount == callsBeforeRecovery + 1)
+
+    await store.refresh()
+    #expect(await client.loadProductsCallCount == callsBeforeRecovery + 1)
+}
+
 // MARK: - 6. 过期、撤销交易自动降级与多订阅优先级裁决
 
 @MainActor

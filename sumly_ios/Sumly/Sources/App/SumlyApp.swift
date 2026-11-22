@@ -29,6 +29,7 @@ private struct GoldRootView: View {
     let guestContainer: ModelContainer
     @State private var session = AuthSession(service: NativeAuthService(baseURL: BackendGoldPriceService.defaultBaseURL), store: KeychainCredentialStore())
     @State private var membership = MembershipStore()
+    @State private var remoteConfig = RemoteAppConfigStore()
     @State private var selectedTab = HoldingsDesignPreview.isEnabled ? 1 : 0
     @State private var pendingChanlunAfterLogin = false
     @Environment(\.scenePhase) private var scenePhase
@@ -36,6 +37,7 @@ private struct GoldRootView: View {
         HoldingWorkspaceShell(
             session: session,
             membership: membership,
+            remoteConfig: remoteConfig,
             guestContainer: guestContainer,
             selectedTab: $selectedTab,
             pendingChanlunAfterLogin: $pendingChanlunAfterLogin
@@ -44,14 +46,16 @@ private struct GoldRootView: View {
             .task {
                 async let restoreSession: Void = session.restore()
                 async let startMembership: Void = membership.start()
-                _ = await (restoreSession, startMembership)
+                async let refreshRemoteConfig: Bool = remoteConfig.refresh()
+                _ = await (restoreSession, startMembership, refreshRemoteConfig)
                 await session.checkAppleCredential(using: SystemAppleCredentialChecker())
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task {
                     async let restoreSession: Void = session.restore()
-                    async let refreshMembership: Void = membership.refreshEntitlements()
-                    _ = await (restoreSession, refreshMembership)
+                    async let refreshMembership: Void = membership.refresh()
+                    async let refreshRemoteConfig: Bool = remoteConfig.refresh()
+                    _ = await (restoreSession, refreshMembership, refreshRemoteConfig)
                     await session.checkAppleCredential(using: SystemAppleCredentialChecker())
                 } }
             }
@@ -67,6 +71,7 @@ private struct GoldRootView: View {
 private struct HoldingWorkspaceShell: View {
     let session: AuthSession
     let membership: MembershipStore
+    let remoteConfig: RemoteAppConfigStore
     let guestContainer: ModelContainer
     @Binding var selectedTab: Int
     @Binding var pendingChanlunAfterLogin: Bool
@@ -78,6 +83,7 @@ private struct HoldingWorkspaceShell: View {
                 GoldWorkspaceView(
                     session: session,
                     membership: membership,
+                    remoteConfig: remoteConfig,
                     cloud: cloud,
                     selectedTab: $selectedTab,
                     pendingChanlunAfterLogin: $pendingChanlunAfterLogin
@@ -103,6 +109,7 @@ private struct HoldingWorkspaceShell: View {
 private struct GoldWorkspaceView: View {
     @Bindable var session: AuthSession
     @Bindable var membership: MembershipStore
+    @Bindable var remoteConfig: RemoteAppConfigStore
     let cloud: HoldingsCloud
     @Binding var selectedTab: Int
     @Binding var pendingChanlunAfterLogin: Bool
@@ -138,11 +145,16 @@ private struct GoldWorkspaceView: View {
         )
     }
 
+    private var canAccessChanlun: Bool {
+        !remoteConfig.chanlunRequiresMembership || membership.isActive
+    }
+
     private func openChanlun() {
         switch MembershipGate.evaluateChanlunAccess(
             hasChanlunConfig: ChanlunWebConfiguration.current != nil,
             isMemberActive: membership.isActive,
-            isSignedIn: session.user != nil
+            isSignedIn: session.user != nil,
+            requiresMembership: remoteConfig.chanlunRequiresMembership
         ) {
         case .unavailable:
             break
@@ -229,6 +241,7 @@ private struct GoldWorkspaceView: View {
                         quoteStore: quoteStore,
                         bottomTabBarInset: tabBarLayout.homeAdditionalBottomInset,
                         isMembershipActive: membership.isActive,
+                        chanlunRequiresMembership: remoteConfig.chanlunRequiresMembership,
                         onOpenHoldings: { selectedTab = 1 },
                         onOpenChanlun: openChanlun
                     )
@@ -265,6 +278,7 @@ private struct GoldWorkspaceView: View {
                         session: session,
                         cloud: cloud,
                         membership: membership,
+                        remoteConfig: remoteConfig,
                         onOpenMembership: openMembership,
                         onOpenChanlun: openChanlun,
                         onOpenOnboarding: openOnboarding
@@ -365,7 +379,7 @@ private struct GoldWorkspaceView: View {
         .sheet(isPresented: $showingMembershipPaywall, onDismiss: {
             if pendingChanlunAfterPaywall {
                 pendingChanlunAfterPaywall = false
-                if membership.isActive {
+                if canAccessChanlun {
                     openChanlun()
                 }
             }
@@ -382,7 +396,7 @@ private struct GoldWorkspaceView: View {
         .sheet(isPresented: $showingLoginForChanlun, onDismiss: {
             if session.user == nil {
                 pendingChanlunAfterLogin = false
-            } else if pendingChanlunAfterLogin && membership.isActive {
+            } else if pendingChanlunAfterLogin && canAccessChanlun {
                 pendingChanlunAfterLogin = false
                 showingChanlun = true
             }
@@ -401,7 +415,7 @@ private struct GoldWorkspaceView: View {
             evaluateOnboardingLaunch()
             if pendingChanlunAfterLogin,
                session.user != nil,
-               membership.isActive,
+               canAccessChanlun,
                ChanlunWebConfiguration.current != nil {
                 pendingChanlunAfterLogin = false
                 showingChanlun = true

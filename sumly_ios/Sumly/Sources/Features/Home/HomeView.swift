@@ -9,6 +9,7 @@ struct HomeView: View {
     private let macroService: any MacroServicing
     private let bottomTabBarInset: CGFloat?
     private let isMembershipActive: Bool
+    private let chanlunRequiresMembership: Bool
     private let onOpenHoldings: (() -> Void)?
     private let onOpenChanlun: (() -> Void)?
     @Query private var records: [HoldingRecord]
@@ -39,6 +40,7 @@ struct HomeView: View {
         macroService: any MacroServicing = BackendMacroService(),
         bottomTabBarInset: CGFloat? = nil,
         isMembershipActive: Bool = false,
+        chanlunRequiresMembership: Bool = true,
         onOpenHoldings: (() -> Void)? = nil,
         onOpenChanlun: (() -> Void)? = nil
     ) {
@@ -48,10 +50,18 @@ struct HomeView: View {
         self.macroService = macroService
         self.bottomTabBarInset = bottomTabBarInset
         self.isMembershipActive = isMembershipActive
+        self.chanlunRequiresMembership = chanlunRequiresMembership
         self.onOpenHoldings = onOpenHoldings
         self.onOpenChanlun = onOpenChanlun
         _model = State(initialValue: MarketHomeViewModel(basis: marketBasis.wrappedValue))
         _macroModel = State(initialValue: MacroDashboardViewModel(service: macroService))
+    }
+
+    private var showsChanlunLockBadge: Bool {
+        MembershipGate.shouldShowChanlunLockBadge(
+            requiresMembership: chanlunRequiresMembership,
+            isMemberActive: isMembershipActive
+        )
     }
 
     private var activeBookRecords: [HoldingRecord] {
@@ -208,25 +218,25 @@ struct HomeView: View {
                                             .font(.caption.weight(.semibold))
                                         Text("禅观")
                                             .font(.caption.weight(.semibold))
-                                        if !isMembershipActive {
+                                        if showsChanlunLockBadge {
                                             Image(systemName: "crown.fill")
                                                 .font(.system(size: 8.5, weight: .bold))
                                                 .foregroundStyle(GoldTheme.gold)
                                         }
                                     }
                                     .foregroundStyle(GoldTheme.goldSoft)
-                                    .padding(.horizontal, isMembershipActive ? 10 : 8.5)
+                                    .padding(.horizontal, showsChanlunLockBadge ? 8.5 : 10)
                                     .frame(height: 34)
                                     .background(GoldTheme.card, in: GoldTheme.capsuleShape)
                                     .overlay(
                                         GoldTheme.capsuleShape.strokeBorder(
-                                            isMembershipActive ? GoldTheme.cardStroke : GoldTheme.gold.opacity(0.32),
+                                            showsChanlunLockBadge ? GoldTheme.gold.opacity(0.32) : GoldTheme.cardStroke,
                                             lineWidth: 1
                                         )
                                     )
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel(isMembershipActive ? "禅观" : "禅观，记金会员专属")
+                                .accessibilityLabel(showsChanlunLockBadge ? "禅观，记金会员专属" : "禅观")
                                 .accessibilityIdentifier("companion.chanlun")
                             }
                         }

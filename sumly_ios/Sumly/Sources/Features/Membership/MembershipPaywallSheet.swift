@@ -480,23 +480,32 @@ struct MembershipPaywallContent: View {
             }
 
             if membership.productsLoadFailed && membership.products.isEmpty && !membership.isLoadingProducts {
-                Button(action: onRetryLoadProducts) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.caption2.weight(.bold))
-                        Text(MembershipCopy.retryLoadProductsTitle)
-                            .font(.caption2.weight(.medium))
+                VStack(spacing: 6) {
+                    if let notice = membership.productsLoadNotice {
+                        Text(notice)
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .foregroundStyle(GoldTheme.goldSoft)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(GoldTheme.gold.opacity(0.08), in: GoldTheme.subCardShape)
-                    .overlay(
-                        GoldTheme.subCardShape.strokeBorder(GoldTheme.gold.opacity(0.24), lineWidth: 0.8)
-                    )
+                    Button(action: onRetryLoadProducts) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.caption2.weight(.bold))
+                            Text(MembershipCopy.retryLoadProductsTitle)
+                                .font(.caption2.weight(.medium))
+                        }
+                        .foregroundStyle(GoldTheme.goldSoft)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(GoldTheme.gold.opacity(0.08), in: GoldTheme.subCardShape)
+                        .overlay(
+                            GoldTheme.subCardShape.strokeBorder(GoldTheme.gold.opacity(0.24), lineWidth: 0.8)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("membership.retryProducts")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("membership.retryProducts")
             }
         }
     }

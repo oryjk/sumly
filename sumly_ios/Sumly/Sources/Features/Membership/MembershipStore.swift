@@ -1,7 +1,15 @@
 import Foundation
+import OSLog
 import StoreKit
 
-// MARK: - 1. 订阅错误定义
+private let membershipLogger = Logger(subsystem: "com.oryjk.sumly", category: "Membership")
+
+// MARK: - 1. 订阅错误与诊断状态定义
+
+enum MembershipProductsLoadFailureReason: Equatable, Sendable {
+    case emptyCatalog
+    case networkOrStoreError(String)
+}
 
 enum MembershipStoreError: LocalizedError, Equatable, Sendable {
     case productUnavailable
@@ -11,11 +19,11 @@ enum MembershipStoreError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .productUnavailable:
-            "暂未从 App Store 获取到订阅商品，请检查网络连接后重试。"
+            "App Store 暂未返回订阅商品，请稍后重试。"
         case .verificationFailed(let detail):
             detail.isEmpty ? "无法验证本次购买凭证，请稍后重试或点击恢复购买。" : detail
         case .networkFailure(let detail):
-            detail.isEmpty ? "连接 App Store 失败，请检查网络后重试。" : detail
+            detail.isEmpty ? "连接 App Store 失败，请检查网络连接后重试。" : detail
         }
     }
 }
@@ -50,11 +58,36 @@ final class LiveStoreKitMembershipClient: MembershipStoreKitClient, Sendable {
     private let cache = StoreKitProductCache()
 
     func loadProducts(for productIDs: [String]) async throws -> [MembershipProductInfo] {
-        let storeProducts = try await Product.products(for: productIDs)
-        await cache.store(storeProducts)
-        return storeProducts
-            .compactMap(Self.makeProductInfo(from:))
-            .sorted { $0.plan.tierRank > $1.plan.tierRank }
+        let storefrontCountry = await Storefront.current?.countryCode ?? "unknown"
+        let canMakePayments = AppStore.canMakePayments
+        let requestedList = productIDs.joined(separator: ",")
+        membershipLogger.info(
+            "StoreKit loadProducts requested: ids=\(requestedList, privacy: .public), storefront=\(storefrontCountry, privacy: .public), canMakePayments=\(canMakePayments, privacy: .public)"
+        )
+
+        do {
+            let storeProducts = try await Product.products(for: productIDs)
+            await cache.store(storeProducts)
+            if storeProducts.isEmpty {
+                membershipLogger.warning(
+                    "StoreKit loadProducts returned empty catalog: requestedIDs=\(requestedList, privacy: .public), count=0, storefront=\(storefrontCountry, privacy: .public), canMakePayments=\(canMakePayments, privacy: .public)"
+                )
+            } else {
+                let returnedList = storeProducts.map(\.id).joined(separator: ",")
+                membershipLogger.info(
+                    "StoreKit loadProducts succeeded: count=\(storeProducts.count, privacy: .public), returnedIDs=\(returnedList, privacy: .public), storefront=\(storefrontCountry, privacy: .public), canMakePayments=\(canMakePayments, privacy: .public)"
+                )
+            }
+            return storeProducts
+                .compactMap(Self.makeProductInfo(from:))
+                .sorted { $0.plan.tierRank > $1.plan.tierRank }
+        } catch {
+            let nsError = error as NSError
+            membershipLogger.error(
+                "StoreKit loadProducts failed: requestedIDs=\(requestedList, privacy: .public), storefront=\(storefrontCountry, privacy: .public), canMakePayments=\(canMakePayments, privacy: .public), domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public), detail=\(String(describing: error), privacy: .public)"
+            )
+            throw error
+        }
     }
 
     func currentEntitlements() async -> [MembershipTransactionRecord] {
@@ -73,9 +106,26 @@ final class LiveStoreKitMembershipClient: MembershipStoreKitClient, Sendable {
         if let cached = await cache.product(for: productID) {
             product = cached
         } else {
-            let fetched = try await Product.products(for: [productID])
+            let storefrontCountry = await Storefront.current?.countryCode ?? "unknown"
+            let canMakePayments = AppStore.canMakePayments
+            membershipLogger.info(
+                "StoreKit purchase cache miss, fetching product: id=\(productID, privacy: .public), storefront=\(storefrontCountry, privacy: .public), canMakePayments=\(canMakePayments, privacy: .public)"
+            )
+            let fetched: [Product]
+            do {
+                fetched = try await Product.products(for: [productID])
+            } catch {
+                let nsError = error as NSError
+                membershipLogger.error(
+                    "StoreKit purchase product fetch failed: id=\(productID, privacy: .public), storefront=\(storefrontCountry, privacy: .public), canMakePayments=\(canMakePayments, privacy: .public), domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public), detail=\(String(describing: error), privacy: .public)"
+                )
+                throw error
+            }
             await cache.store(fetched)
             guard let matched = fetched.first(where: { $0.id == productID }) else {
+                membershipLogger.warning(
+                    "StoreKit purchase product fetch returned empty/missing product: id=\(productID, privacy: .public), returnedCount=\(fetched.count, privacy: .public), storefront=\(storefrontCountry, privacy: .public), canMakePayments=\(canMakePayments, privacy: .public)"
+                )
                 throw MembershipStoreError.productUnavailable
             }
             product = matched
@@ -90,6 +140,9 @@ final class LiveStoreKitMembershipClient: MembershipStoreKitClient, Sendable {
                 await transaction.finish()
                 return .purchased(record)
             case .unverified(_, let error):
+                membershipLogger.error(
+                    "StoreKit purchase transaction unverified: id=\(productID, privacy: .public), detail=\(String(describing: error), privacy: .public)"
+                )
                 return .unverified(error.localizedDescription)
             }
         case .userCancelled:
@@ -102,7 +155,16 @@ final class LiveStoreKitMembershipClient: MembershipStoreKitClient, Sendable {
     }
 
     func syncAppStore() async throws {
-        try await AppStore.sync()
+        do {
+            try await AppStore.sync()
+        } catch {
+            let nsError = error as NSError
+            let storefrontCountry = await Storefront.current?.countryCode ?? "unknown"
+            membershipLogger.error(
+                "StoreKit AppStore.sync failed: storefront=\(storefrontCountry, privacy: .public), domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public), detail=\(String(describing: error), privacy: .public)"
+            )
+            throw error
+        }
     }
 
     func observeTransactionUpdates() -> AsyncStream<MembershipTransactionRecord> {
@@ -192,6 +254,7 @@ final class MembershipStore {
     private(set) var isPurchasing = false
     private(set) var isRestoring = false
     private(set) var productsLoadFailed = false
+    private(set) var productsLoadFailureReason: MembershipProductsLoadFailureReason?
 
     var statusMessage: String?
     var errorMessage: String?
@@ -254,6 +317,19 @@ final class MembershipStore {
         "\(displayPrice(for: .yearly))/年起"
     }
 
+    /// 商品拉取异常时的面向用户提示（明确区分空目录返回与网络/StoreKit 异常，不含内部敏感信息）。
+    var productsLoadNotice: String? {
+        guard productsLoadFailed, products.isEmpty else { return nil }
+        switch productsLoadFailureReason {
+        case .emptyCatalog:
+            return MembershipStoreError.productUnavailable.errorDescription
+        case .networkOrStoreError(let message):
+            return message
+        case nil:
+            return nil
+        }
+    }
+
     /// 启动订阅引擎：监听 Transaction.updates，同时拉取商品并刷新当前有效权益。
     func start() async {
         if !hasStarted {
@@ -263,6 +339,17 @@ final class MembershipStore {
         async let productsTask: Void = loadProducts()
         async let entitlementsTask: Void = refreshEntitlements()
         _ = await (productsTask, entitlementsTask)
+    }
+
+    /// 前台激活或手动刷新：刷新有效权益，若尚未拉取到 App Store 商品则一并补拉。
+    func refresh() async {
+        if products.isEmpty {
+            async let productsTask: Void = loadProducts()
+            async let entitlementsTask: Void = refreshEntitlements()
+            _ = await (productsTask, entitlementsTask)
+        } else {
+            await refreshEntitlements()
+        }
     }
 
     func stopObservingUpdates() {
@@ -279,7 +366,12 @@ final class MembershipStore {
         do {
             let loaded = try await client.loadProducts(for: MembershipPlan.productIDs)
             if loaded.isEmpty {
-                productsLoadFailed = products.isEmpty
+                let fallbackOnly = products.isEmpty
+                productsLoadFailed = fallbackOnly
+                productsLoadFailureReason = fallbackOnly ? .emptyCatalog : nil
+                membershipLogger.warning(
+                    "MembershipStore loadProducts empty: requestedIDs=\(MembershipPlan.productIDs.joined(separator: ","), privacy: .public), fallbackOnly=\(fallbackOnly, privacy: .public)"
+                )
             } else {
                 var mapped = products
                 for item in loaded {
@@ -287,9 +379,17 @@ final class MembershipStore {
                 }
                 products = mapped
                 productsLoadFailed = false
+                productsLoadFailureReason = nil
             }
         } catch {
-            productsLoadFailed = products.isEmpty
+            let readable = Self.readableErrorMessage(for: error)
+            let fallbackOnly = products.isEmpty
+            productsLoadFailed = fallbackOnly
+            productsLoadFailureReason = fallbackOnly ? .networkOrStoreError(readable) : nil
+            let nsError = error as NSError
+            membershipLogger.error(
+                "MembershipStore loadProducts threw error: domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public), detail=\(String(describing: error), privacy: .public)"
+            )
         }
     }
 
@@ -331,6 +431,10 @@ final class MembershipStore {
                 return false
             }
         } catch {
+            let nsError = error as NSError
+            membershipLogger.error(
+                "MembershipStore purchase failed: plan=\(plan.rawValue, privacy: .public), domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public), detail=\(String(describing: error), privacy: .public)"
+            )
             errorMessage = Self.readableErrorMessage(for: error)
             return false
         }
@@ -356,6 +460,10 @@ final class MembershipStore {
                 return false
             }
         } catch {
+            let nsError = error as NSError
+            membershipLogger.error(
+                "MembershipStore restorePurchases failed: domain=\(nsError.domain, privacy: .public), code=\(nsError.code, privacy: .public), detail=\(String(describing: error), privacy: .public)"
+            )
             errorMessage = Self.readableErrorMessage(for: error)
             return false
         }
@@ -390,9 +498,19 @@ final class MembershipStore {
         return result
     }
 
-    private static func readableErrorMessage(for error: any Error) -> String {
+    static func readableErrorMessage(for error: any Error) -> String {
         if let storeError = error as? MembershipStoreError, let description = storeError.errorDescription {
             return description
+        }
+        if let skError = error as? StoreKitError {
+            switch skError {
+            case .networkError:
+                return "网络连接不稳定，暂时无法连接 App Store，请稍后重试。"
+            case .notAvailableInStorefront:
+                return "当前 App Store 地区暂不支持该订阅商品。"
+            default:
+                break
+            }
         }
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain {
