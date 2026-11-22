@@ -48,7 +48,7 @@ targets:
         CFBundleDisplayName: 记金
         CFBundleDevelopmentRegion: zh-Hans
         CFBundleShortVersionString: "1.0.5"
-        CFBundleVersion: "57"
+        CFBundleVersion: "58"
         UILaunchScreen:
           UIColorName: NeoBackground
         UISupportedInterfaceOrientations:
@@ -95,7 +95,7 @@ targets:
         CFBundleDisplayName: 记金小组件
         CFBundleDevelopmentRegion: zh-Hans
         CFBundleShortVersionString: "1.0.5"
-        CFBundleVersion: "57"
+        CFBundleVersion: "58"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
   SumlyTests:
