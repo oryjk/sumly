@@ -10,6 +10,11 @@ import (
 
 func localDevelopmentCORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// /api/v1/admin/* 由管理后台专属 CORS 中间件统一处理（含 ADMIN_CORS_ORIGINS 与 X-Admin-Token）。
+		if c.Request.URL.Path == "/api/v1/admin" || strings.HasPrefix(c.Request.URL.Path, "/api/v1/admin/") {
+			c.Next()
+			return
+		}
 		origin := c.GetHeader("Origin")
 		if isLocalDevelopmentOrigin(origin) {
 			c.Header("Access-Control-Allow-Origin", origin)

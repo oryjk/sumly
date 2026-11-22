@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	appconfighttp "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/adapters/http"
+	appconfigpostgres "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/adapters/postgres"
+	appconfigapplication "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/application"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/credentials"
 	authhttp "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/http"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/jwt"
@@ -67,6 +70,8 @@ type Dependencies struct {
 	GoldHistory     *markethttp.HistoryHandler
 	Notifications   *notificationhttp.Handler
 	Macro           *macrohttp.Handler
+	AppConfig       *appconfighttp.Handler
+	AdminStaticDir  string
 }
 
 func BuildDependencies(ctx context.Context, config Config) (Dependencies, func(), error) {
@@ -229,6 +234,14 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		},
 	})
 
+	appConfigHandler := appconfighttp.NewHandler(
+		appconfigapplication.NewService(appconfigpostgres.NewRepository(pool)),
+		appconfighttp.HandlerOptions{
+			AdminToken:  config.AdminAPIToken,
+			CORSOrigins: config.AdminCORSOrigins,
+		},
+	)
+
 	return Dependencies{
 		Holdings:        holdingshttp.NewHandler(holdingsapplication.NewService(holdingspostgres.NewRepository(pool))),
 		NativeAuth:      nativeHandler,
@@ -243,5 +256,7 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		GoldHistory:     historyHandler,
 		Notifications:   notificationHandler,
 		Macro:           macroHandler,
+		AppConfig:       appConfigHandler,
+		AdminStaticDir:  config.AdminStaticDir,
 	}, closeAll, nil
 }

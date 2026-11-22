@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"net/http"
 
+	appconfighttp "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/adapters/http"
 	sharedhttp "gitee.com/oryjk/sumly/sumly_go/internal/shared/http"
 	"github.com/gin-gonic/gin"
 )
@@ -43,6 +44,10 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 		dependencies.Macro.RegisterPublicRoutes(app)
 		dependencies.Macro.RegisterInternalRoutes(v1.Group("/internal"))
 	}
+	if dependencies.AppConfig != nil {
+		dependencies.AppConfig.RegisterPublicRoutes(app)
+		dependencies.AppConfig.RegisterAdminRoutes(v1.Group("/admin"))
+	}
 	if dependencies.Notifications != nil {
 		dependencies.Notifications.RegisterRoutes(app)
 	}
@@ -58,6 +63,9 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 		if dependencies.AppUsers != nil {
 			dependencies.AppUsers.RegisterAppRoutes(userRoutes)
 		}
+	}
+	if dependencies.AdminStaticDir != "" {
+		appconfighttp.RegisterStaticRoutes(router, dependencies.AdminStaticDir)
 	}
 	return router
 }

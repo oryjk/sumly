@@ -118,3 +118,44 @@ func TestLoadConfigMacroDefaultsAndOverrides(t *testing.T) {
 		t.Fatalf("unexpected macro compliance/internal config: %+v", cfg)
 	}
 }
+
+func TestLoadConfigAdminDefaultsAndOverrides(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("JWT_SECRET", "secret")
+	t.Setenv("WECHAT_APP_ID", "appid")
+	t.Setenv("WECHAT_APP_SECRET", "appsecret")
+	t.Setenv("ADMIN_API_TOKEN", "")
+	t.Setenv("ADMIN_CORS_ORIGINS", "")
+	t.Setenv("ADMIN_STATIC_DIR", "")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.AdminAPIToken != "" || cfg.AdminStaticDir != "" {
+		t.Fatalf("expected empty optional admin defaults, got token=%q static=%q", cfg.AdminAPIToken, cfg.AdminStaticDir)
+	}
+	wantOrigins := []string{"http://localhost:5173", "http://127.0.0.1:5173", "https://oryjk.cn"}
+	if len(cfg.AdminCORSOrigins) != len(wantOrigins) {
+		t.Fatalf("default AdminCORSOrigins=%v want %v", cfg.AdminCORSOrigins, wantOrigins)
+	}
+	for i, origin := range wantOrigins {
+		if cfg.AdminCORSOrigins[i] != origin {
+			t.Fatalf("default AdminCORSOrigins[%d]=%q want %q", i, cfg.AdminCORSOrigins[i], origin)
+		}
+	}
+
+	t.Setenv("ADMIN_API_TOKEN", "  admin-secret-xyz  ")
+	t.Setenv("ADMIN_CORS_ORIGINS", " https://admin.oryjk.cn/ , http://localhost:3000 ")
+	t.Setenv("ADMIN_STATIC_DIR", "  /var/www/sumly-admin  ")
+	cfg, err = LoadConfig()
+	if err != nil {
+		t.Fatalf("load config overrides: %v", err)
+	}
+	if cfg.AdminAPIToken != "admin-secret-xyz" || cfg.AdminStaticDir != "/var/www/sumly-admin" {
+		t.Fatalf("unexpected admin overrides: token=%q static=%q", cfg.AdminAPIToken, cfg.AdminStaticDir)
+	}
+	if len(cfg.AdminCORSOrigins) != 2 || cfg.AdminCORSOrigins[0] != "https://admin.oryjk.cn" || cfg.AdminCORSOrigins[1] != "http://localhost:3000" {
+		t.Fatalf("unexpected AdminCORSOrigins override: %v", cfg.AdminCORSOrigins)
+	}
+}

@@ -4,10 +4,15 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	appconfighttp "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/adapters/http"
+	appconfigapp "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/application"
+	appconfigdomain "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/domain"
 	authhttp "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/http"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/jwt"
 	authapplication "gitee.com/oryjk/sumly/sumly_go/internal/auth/application"
@@ -355,5 +360,78 @@ func TestMacroInternalStrategyBriefRouteAuth(t *testing.T) {
 				t.Fatalf("status=%d want=%d body=%s", w.Code, tc.want, w.Body.String())
 			}
 		})
+	}
+}
+
+type routerAppConfigUseCase struct{}
+
+func (routerAppConfigUseCase) GetPublicConfig(context.Context) (appconfigdomain.PublicAppConfig, error) {
+	return appconfigdomain.PublicAppConfig{
+		MembershipPaywall: appconfigdomain.DefaultMembershipPaywallConfig(),
+		UpdatedAt:         time.Date(2026, 11, 22, 10, 35, 0, 0, time.UTC),
+	}, nil
+}
+func (routerAppConfigUseCase) ListConfigs(context.Context) ([]appconfigdomain.ConfigEntry, error) {
+	return []appconfigdomain.ConfigEntry{}, nil
+}
+func (routerAppConfigUseCase) UpdateConfig(_ context.Context, cmd appconfigapp.UpdateConfigCommand) (appconfigdomain.ConfigEntry, error) {
+	return appconfigdomain.ConfigEntry{Key: cmd.Key, ValueJSON: cmd.ValueJSON, UpdatedAt: time.Now().UTC()}, nil
+}
+func (routerAppConfigUseCase) ListAuditLogs(context.Context, int) ([]appconfigdomain.AuditLog, error) {
+	return []appconfigdomain.AuditLog{}, nil
+}
+
+func TestAppConfigPublicAdminCORSAndStaticRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	staticDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(staticDir, "index.html"), []byte("<html>ADMIN_INDEX</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	router := NewRouter(Dependencies{
+		AppConfig: appconfighttp.NewHandler(routerAppConfigUseCase{}, appconfighttp.HandlerOptions{
+			AdminToken: "admin-router-token",
+		}),
+		AdminStaticDir: staticDir,
+	})
+
+	// Public endpoint works without auth and sets no-store
+	pubRec := httptest.NewRecorder()
+	router.ServeHTTP(pubRec, httptest.NewRequest(http.MethodGet, "/api/v1/app/config", nil))
+	if pubRec.Code != http.StatusOK || pubRec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("GET /api/v1/app/config status=%d cache=%q body=%s", pubRec.Code, pubRec.Header().Get("Cache-Control"), pubRec.Body.String())
+	}
+
+	// Admin CORS preflight from https://oryjk.cn is NOT swallowed by localDevelopmentCORS
+	optReq := httptest.NewRequest(http.MethodOptions, "/api/v1/admin/configs/membership_paywall", nil)
+	optReq.Header.Set("Origin", "https://oryjk.cn")
+	optReq.Header.Set("Access-Control-Request-Method", http.MethodPut)
+	optReq.Header.Set("Access-Control-Request-Headers", "Authorization,X-Admin-Token,Content-Type")
+	optRec := httptest.NewRecorder()
+	router.ServeHTTP(optRec, optReq)
+	if optRec.Code != http.StatusNoContent || optRec.Header().Get("Access-Control-Allow-Origin") != "https://oryjk.cn" {
+		t.Fatalf("admin preflight status=%d allow-origin=%q", optRec.Code, optRec.Header().Get("Access-Control-Allow-Origin"))
+	}
+
+	// Admin verify rejects wrong token and accepts valid token
+	badRec := httptest.NewRecorder()
+	router.ServeHTTP(badRec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/verify", nil))
+	if badRec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth verify status=%d want 401", badRec.Code)
+	}
+
+	okReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/verify", nil)
+	okReq.Header.Set("Authorization", "Bearer admin-router-token")
+	okRec := httptest.NewRecorder()
+	router.ServeHTTP(okRec, okReq)
+	if okRec.Code != http.StatusOK || !strings.Contains(okRec.Body.String(), `"valid":true`) {
+		t.Fatalf("auth verify status=%d body=%s", okRec.Code, okRec.Body.String())
+	}
+
+	// Static SPA mounted on /admin
+	spaRec := httptest.NewRecorder()
+	router.ServeHTTP(spaRec, httptest.NewRequest(http.MethodGet, "/admin", nil))
+	if spaRec.Code != http.StatusOK || !strings.Contains(spaRec.Body.String(), "ADMIN_INDEX") {
+		t.Fatalf("GET /admin status=%d body=%s", spaRec.Code, spaRec.Body.String())
 	}
 }

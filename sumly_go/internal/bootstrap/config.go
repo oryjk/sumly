@@ -44,6 +44,12 @@ type Config struct {
 	MacroOfficialAccountName string
 	MacroOfficialAccountNote string
 	MacroInternalToken       string
+	// 远程应用配置与管理后台：ADMIN_API_TOKEN 留空时所有 /api/v1/admin/* 返回 503（绝不 fail-open、绝不记录日志）；
+	// ADMIN_CORS_ORIGINS 留空时默认允许 http://localhost:5173,http://127.0.0.1:5173,https://oryjk.cn；
+	// ADMIN_STATIC_DIR 可选，非空且目录存在时挂载 /admin 静态管理后台 SPA。
+	AdminAPIToken    string
+	AdminCORSOrigins []string
+	AdminStaticDir   string
 }
 
 func LoadConfig() (Config, error) {
@@ -67,6 +73,9 @@ func LoadConfig() (Config, error) {
 		MacroOfficialAccountName:       strings.TrimSpace(os.Getenv("MACRO_OFFICIAL_ACCOUNT_NAME")),
 		MacroOfficialAccountNote:       strings.TrimSpace(os.Getenv("MACRO_OFFICIAL_ACCOUNT_NOTE")),
 		MacroInternalToken:             strings.TrimSpace(os.Getenv("MACRO_INTERNAL_TOKEN")),
+		AdminAPIToken:                  strings.TrimSpace(os.Getenv("ADMIN_API_TOKEN")),
+		AdminCORSOrigins:               parseAdminCORSOrigins(os.Getenv("ADMIN_CORS_ORIGINS")),
+		AdminStaticDir:                 strings.TrimSpace(os.Getenv("ADMIN_STATIC_DIR")),
 	}
 
 	for name, value := range map[string]string{
@@ -105,4 +114,22 @@ func envOrDefault(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func parseAdminCORSOrigins(raw string) []string {
+	var origins []string
+	for _, part := range strings.Split(raw, ",") {
+		trimmed := strings.TrimRight(strings.TrimSpace(part), "/")
+		if trimmed != "" {
+			origins = append(origins, trimmed)
+		}
+	}
+	if len(origins) == 0 {
+		return []string{
+			"http://localhost:5173",
+			"http://127.0.0.1:5173",
+			"https://oryjk.cn",
+		}
+	}
+	return origins
 }
