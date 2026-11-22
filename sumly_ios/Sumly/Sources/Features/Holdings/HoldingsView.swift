@@ -6,6 +6,7 @@ struct HoldingsView: View {
     let cloud: HoldingsCloud?
     let quoteStore: LiveGoldQuoteStore?
     let onOpenCalendar: (() -> Void)?
+    let onOpenChartOverlay: (() -> Void)?
     let embedInNavigationStack: Bool
     @Query(sort: \HoldingRecord.timestamp, order: .reverse) private var records: [HoldingRecord]
     @Environment(\.modelContext) private var context
@@ -13,6 +14,9 @@ struct HoldingsView: View {
     @AppStorage("holdings.currentBook") private var book = "默认账本"
     @AppStorage("holdings.books") private var savedBooks = "默认账本"
     @AppStorage("holdings.hideAmounts") private var hideAmounts = false
+    @AppStorage(OnboardingStorageKey.quickStartDismissed, store: .standard) private var quickStartDismissed = false
+    @AppStorage(OnboardingStorageKey.visitedChartOverlay, store: .standard) private var visitedChartOverlay = false
+    @AppStorage(OnboardingStorageKey.visitedCalendar, store: .standard) private var visitedCalendar = false
     @State private var model: HoldingsViewModel
     @State private var search = ""
     @State private var filter = HoldingFilter.all
@@ -38,12 +42,14 @@ struct HoldingsView: View {
         cloud: HoldingsCloud? = nil,
         quoteStore: LiveGoldQuoteStore? = nil,
         onOpenCalendar: (() -> Void)? = nil,
+        onOpenChartOverlay: (() -> Void)? = nil,
         embedInNavigationStack: Bool = true
     ) {
         self.cloud = cloud
         self.marketBasis = marketBasis
         self.quoteStore = quoteStore
         self.onOpenCalendar = onOpenCalendar
+        self.onOpenChartOverlay = onOpenChartOverlay
         self.embedInNavigationStack = embedInNavigationStack
         let vm = HoldingsDesignPreview.makeModel(basis: marketBasis)
         if let quoteStore {
@@ -56,6 +62,13 @@ struct HoldingsView: View {
     private var bookRecords: [HoldingRecord] { records.filter { $0.bookName == book } }
     private var activeRecords: [HoldingRecord] { bookRecords.filter { $0.disposition == "holding" } }
     private var visibleRecords: [HoldingRecord] { HoldingsSelection.records(records, book: book, search: search, filter: filter, sort: sort, quote: model.quote?.cnyPerGram) }
+    private var quickStartState: QuickStartChecklistState {
+        QuickStartChecklistState(
+            hasRecordedHolding: !records.isEmpty,
+            hasViewedChartOverlay: visitedChartOverlay,
+            hasVisitedCalendar: visitedCalendar
+        )
+    }
 
     var body: some View {
         Group {
@@ -86,6 +99,20 @@ struct HoldingsView: View {
                         Text(cloud.status).font(.caption).foregroundStyle(GoldTheme.textSecondary)
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
                             .listRowBackground(GoldTheme.background).listRowSeparator(.hidden)
+                    }
+                    if !HoldingsDesignPreview.isEnabled && quickStartState.shouldShowCard(dismissed: quickStartDismissed) {
+                        OnboardingQuickStartCard(
+                            state: quickStartState,
+                            onSelectAction: handleQuickStartAction,
+                            onDismiss: {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    quickStartDismissed = true
+                                }
+                            }
+                        )
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
+                        .listRowBackground(GoldTheme.background)
+                        .listRowSeparator(.hidden)
                     }
                     summary.listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
                     GoldVaultCard(
@@ -279,6 +306,7 @@ struct HoldingsView: View {
             }
             HStack {
                 Button("记金日历", systemImage: "calendar") {
+                    visitedCalendar = true
                     if let onOpenCalendar { onOpenCalendar() } else { sheet = .calendar }
                 }
                 Spacer()
@@ -364,6 +392,23 @@ struct HoldingsView: View {
             Button("删除", role: .destructive) { deleteTargets = activeRecords.filter { selection.contains($0.id) }; showingDelete = true }.disabled(selection.isEmpty)
         }.font(.subheadline).padding(12).background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
     }
+    private func handleQuickStartAction(_ action: QuickStartAction) {
+        switch action {
+        case .recordFirstHolding:
+            sheet = .add
+        case .viewChartOverlay:
+            visitedChartOverlay = true
+            onOpenChartOverlay?()
+        case .visitCalendar:
+            visitedCalendar = true
+            if let onOpenCalendar {
+                onOpenCalendar()
+            } else {
+                sheet = .calendar
+            }
+        }
+    }
+
     private func mutate(_ operation: () -> Void) { operation(); do { try context.save() } catch { context.rollback(); self.error = "未能保存修改，请重试。" } }
 }
 
