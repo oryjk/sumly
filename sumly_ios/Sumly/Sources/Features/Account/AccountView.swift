@@ -138,12 +138,19 @@ struct AccountView: View {
     }
 
     private func heroCard(summary: AccountGoldProfileSummary) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let badge = cloudBadge
+        return AccountHeroCardSurface {
             if let user = session.user {
-                signedInHeroHeader(user: user)
-                signedInCloudStrip
-                if let guestHint = cloudBadge.guestImportHint {
-                    guestImportCallout(text: guestHint)
+                AccountSignedInHeroHeader(
+                    user: user,
+                    badge: badge,
+                    isCloudActionAvailable: badge.iconAction == .openConflictResolution || cloud != nil,
+                    onTapCloudIcon: { handleCloudIconTap(badge: badge) }
+                )
+                if let guestHint = badge.guestImportHint {
+                    AccountGuestImportCallout(text: guestHint) {
+                        showSettings = true
+                    }
                 }
             } else {
                 guestHeroHeader
@@ -151,196 +158,20 @@ struct AccountView: View {
 
             GoldTheme.cardStroke.frame(height: 1)
 
-            goldProfileArchiveStrip(summary: summary)
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            ZStack {
-                LinearGradient(
-                    colors: [GoldTheme.card, GoldTheme.card, GoldTheme.background.opacity(0.94)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                RadialGradient(
-                    colors: [GoldTheme.gold.opacity(0.11), .clear],
-                    center: .topLeading,
-                    startRadius: 8,
-                    endRadius: 200
-                )
-            }
-            .clipShape(GoldTheme.cardShape)
-        )
-        .overlay(
-            GoldTheme.cardShape.strokeBorder(
-                LinearGradient(
-                    colors: [GoldTheme.gold.opacity(0.38), GoldTheme.goldSoft.opacity(0.14), GoldTheme.cardStroke],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 1
-            )
-        )
-    }
-
-    private func signedInHeroHeader(user: NativeUser) -> some View {
-        let displayName = user.nickname.isEmpty ? "记金用户" : user.nickname
-        return HStack(spacing: 14) {
-            ZStack {
-                GoldTheme.circleShape
-                    .fill(
-                        LinearGradient(
-                            colors: [GoldTheme.goldSoft, GoldTheme.gold, GoldTheme.tempWarm],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                GoldTheme.circleShape
-                    .strokeBorder(GoldTheme.goldSoft.opacity(0.65), lineWidth: 1)
-                    .padding(2)
-                if let monogram = AccountAvatarPresentation.monogram(for: user.nickname) {
-                    Text(monogram)
-                        .font(.system(size: 21, weight: .bold, design: .rounded))
-                        .foregroundStyle(GoldTheme.onGold)
-                } else {
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(GoldTheme.onGold)
-                }
-            }
-            .frame(width: 52, height: 52)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(displayName)
-                        .font(.title3.bold())
-                        .foregroundStyle(GoldTheme.text)
-                        .lineLimit(1)
-                    Text(user.provider.loginPillTitle)
-                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(GoldTheme.goldSoft)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(GoldTheme.gold.opacity(0.16), in: GoldTheme.capsuleShape)
-                        .overlay(
-                            GoldTheme.capsuleShape.strokeBorder(
-                                GoldTheme.gold.opacity(0.34),
-                                lineWidth: 0.8
-                            )
-                        )
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                Text(user.maskedIdentifier)
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(GoldTheme.textSecondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
+            AccountGoldProfileArchiveStrip(summary: summary, hideAmounts: hideAmounts)
         }
     }
 
-    private var signedInCloudStrip: some View {
-        let badge = cloudBadge
-        return HStack(spacing: 10) {
-            AccountCloudToneIndicator(tone: badge.tone)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(badge.title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(badge.tone == .conflict ? GoldTheme.up : GoldTheme.text)
-                    .lineLimit(1)
-                Text(badge.detail)
-                    .font(.caption2)
-                    .foregroundStyle(GoldTheme.textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-
-            Spacer(minLength: 6)
-
-            if badge.conflictCount > 0 {
-                Button {
-                    showSettings = true
-                } label: {
-                    Text("去处理")
-                        .font(.system(size: 11.5, weight: .bold, design: .rounded))
-                        .foregroundStyle(GoldTheme.up)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 6)
-                        .background(GoldTheme.up.opacity(0.14), in: GoldTheme.capsuleShape)
-                        .overlay(
-                            GoldTheme.capsuleShape.strokeBorder(GoldTheme.up.opacity(0.4), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-            } else if let cloud {
-                Button {
-                    Task { await cloud.sync() }
-                } label: {
-                    HStack(spacing: 4) {
-                        if badge.isSyncing {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .tint(GoldTheme.gold)
-                        } else {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 10.5, weight: .bold))
-                        }
-                        Text(badge.isSyncing ? "同步中" : "同步")
-                            .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundStyle(GoldTheme.goldSoft)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 6)
-                    .background(GoldTheme.card, in: GoldTheme.capsuleShape)
-                    .overlay(
-                        GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.32), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(badge.isSyncing)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(GoldTheme.background, in: GoldTheme.subCardShape)
-        .overlay(
-            GoldTheme.subCardShape.strokeBorder(
-                badge.tone == .conflict ? GoldTheme.up.opacity(0.35) : GoldTheme.cardStroke,
-                lineWidth: 1
-            )
-        )
-    }
-
-    private func guestImportCallout(text: String) -> some View {
-        Button {
+    private func handleCloudIconTap(badge: AccountCloudStatusBadge) {
+        switch badge.iconAction {
+        case .sync:
+            guard let cloud else { return }
+            Task { await cloud.sync() }
+        case .openConflictResolution:
             showSettings = true
-        } label: {
-            HStack(spacing: 9) {
-                Image(systemName: "tray.and.arrow.down.fill")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(GoldTheme.gold)
-                Text(text)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(GoldTheme.goldSoft)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Spacer(minLength: 4)
-                Text("去导入")
-                    .font(.caption2.bold())
-                    .foregroundStyle(GoldTheme.gold)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(GoldTheme.gold)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(GoldTheme.gold.opacity(0.12), in: GoldTheme.subCardShape)
-            .overlay(
-                GoldTheme.subCardShape.strokeBorder(GoldTheme.gold.opacity(0.36), lineWidth: 1)
-            )
+        case .none:
+            break
         }
-        .buttonStyle(.plain)
     }
 
     private var guestHeroHeader: some View {
@@ -401,83 +232,6 @@ struct AccountView: View {
                 .buttonStyle(GoldPrimaryButtonStyle())
                 .accessibilityIdentifier("account.login")
         }
-    }
-
-    private func goldProfileArchiveStrip(summary: AccountGoldProfileSummary) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(GoldTheme.gold)
-                Text(AccountProfileCopy.profileSectionTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(GoldTheme.textSecondary)
-                Spacer(minLength: 4)
-                HStack(spacing: 4) {
-                    if summary.hasUnlockedMilestone {
-                        Image(systemName: "crown.fill")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(GoldTheme.gold)
-                    }
-                    Text(summary.milestoneTitle)
-                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(summary.hasUnlockedMilestone ? GoldTheme.goldSoft : GoldTheme.textSecondary)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
-                .background(
-                    summary.hasUnlockedMilestone ? GoldTheme.gold.opacity(0.16) : GoldTheme.calendarCell,
-                    in: GoldTheme.capsuleShape
-                )
-                .overlay(
-                    GoldTheme.capsuleShape.strokeBorder(
-                        summary.hasUnlockedMilestone ? GoldTheme.gold.opacity(0.45) : GoldTheme.cardStroke,
-                        lineWidth: 0.9
-                    )
-                )
-            }
-
-            HStack(spacing: 0) {
-                profileMetricCell(
-                    label: AccountProfileCopy.activeGramsLabel,
-                    value: summary.formattedActiveGrams(hideAmounts: hideAmounts),
-                    valueColor: GoldTheme.gold
-                )
-                GoldTheme.cardStroke
-                    .frame(width: 1, height: 28)
-                profileMetricCell(
-                    label: AccountProfileCopy.activeCountLabel,
-                    value: summary.formattedActiveCount(hideAmounts: hideAmounts),
-                    valueColor: GoldTheme.text
-                )
-                GoldTheme.cardStroke
-                    .frame(width: 1, height: 28)
-                profileMetricCell(
-                    label: AccountProfileCopy.companionDaysLabel,
-                    value: summary.formattedCompanionDays(),
-                    valueColor: GoldTheme.goldSoft
-                )
-            }
-            .padding(.vertical, 11)
-            .background(GoldTheme.background, in: GoldTheme.subCardShape)
-            .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
-        }
-    }
-
-    private func profileMetricCell(label: String, value: String, valueColor: Color) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.system(.subheadline, design: .rounded).bold())
-                .monospacedDigit()
-                .foregroundStyle(valueColor)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(GoldTheme.textSecondary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
     }
 
     // MARK: - 3. 「偏好与工具」分组卡片
@@ -823,6 +577,382 @@ private struct AccountHoldingsProfileBridge<Content: View>: View {
 
 // MARK: - 账户与设置页共享暗黑金组件
 
+struct AccountHeroCardSurface<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            content()
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            ZStack {
+                LinearGradient(
+                    colors: [GoldTheme.card, GoldTheme.card, GoldTheme.background.opacity(0.94)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                RadialGradient(
+                    colors: [GoldTheme.gold.opacity(0.11), .clear],
+                    center: .topLeading,
+                    startRadius: 8,
+                    endRadius: 200
+                )
+            }
+            .clipShape(GoldTheme.cardShape)
+        )
+        .overlay(
+            GoldTheme.cardShape.strokeBorder(
+                LinearGradient(
+                    colors: [GoldTheme.gold.opacity(0.38), GoldTheme.goldSoft.opacity(0.14), GoldTheme.cardStroke],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+        )
+    }
+}
+
+struct AccountSignedInHeroHeader: View {
+    let user: NativeUser
+    let badge: AccountCloudStatusBadge
+    var isCloudActionAvailable: Bool = true
+    let onTapCloudIcon: () -> Void
+
+    var body: some View {
+        let displayName = user.nickname.isEmpty ? "记金用户" : user.nickname
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                GoldTheme.circleShape
+                    .fill(
+                        LinearGradient(
+                            colors: [GoldTheme.goldSoft, GoldTheme.gold, GoldTheme.tempWarm],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                GoldTheme.circleShape
+                    .strokeBorder(GoldTheme.goldSoft.opacity(0.65), lineWidth: 1)
+                    .padding(2)
+                if let monogram = AccountAvatarPresentation.monogram(for: user.nickname) {
+                    Text(monogram)
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .foregroundStyle(GoldTheme.onGold)
+                } else {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(GoldTheme.onGold)
+                }
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .center, spacing: 8) {
+                    Text(displayName)
+                        .font(.title3.bold())
+                        .foregroundStyle(GoldTheme.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .truncationMode(.tail)
+                    Text(user.provider.loginPillTitle)
+                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(GoldTheme.goldSoft)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(GoldTheme.gold.opacity(0.16), in: GoldTheme.capsuleShape)
+                        .overlay(
+                            GoldTheme.capsuleShape.strokeBorder(
+                                GoldTheme.gold.opacity(0.34),
+                                lineWidth: 0.8
+                            )
+                        )
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 4)
+                    AccountCloudSyncIconButton(
+                        badge: badge,
+                        isActionAvailable: isCloudActionAvailable,
+                        onTap: onTapCloudIcon
+                    )
+                    .padding(.vertical, -5)
+                    .padding(.trailing, -5)
+                }
+
+                Text(user.maskedIdentifier)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(GoldTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+    }
+}
+
+struct AccountCloudSyncIconButton: View {
+    let badge: AccountCloudStatusBadge
+    var isActionAvailable: Bool = true
+    let onTap: () -> Void
+
+    @State private var hapticTrigger = 0
+
+    private var isEnabled: Bool {
+        badge.isIconInteractive && isActionAvailable
+    }
+
+    private var iconColor: Color {
+        switch badge.tone {
+        case .synced: GoldTheme.down
+        case .syncing: GoldTheme.gold
+        case .pending: GoldTheme.goldSoft
+        case .failed: GoldTheme.gold
+        case .conflict: GoldTheme.up
+        case .guest: GoldTheme.textSecondary
+        }
+    }
+
+    private var fillColor: Color {
+        switch badge.tone {
+        case .synced: GoldTheme.down.opacity(0.11)
+        case .syncing: GoldTheme.gold.opacity(0.11)
+        case .pending: GoldTheme.gold.opacity(0.12)
+        case .failed: GoldTheme.tempWarm.opacity(0.14)
+        case .conflict: GoldTheme.up.opacity(0.15)
+        case .guest: GoldTheme.calendarCell
+        }
+    }
+
+    private var strokeColor: Color {
+        switch badge.tone {
+        case .synced: GoldTheme.down.opacity(0.32)
+        case .syncing: GoldTheme.gold.opacity(0.22)
+        case .pending: GoldTheme.gold.opacity(0.36)
+        case .failed: GoldTheme.tempWarm.opacity(0.45)
+        case .conflict: GoldTheme.up.opacity(0.48)
+        case .guest: GoldTheme.cardStroke
+        }
+    }
+
+    var body: some View {
+        Button {
+            hapticTrigger += 1
+            onTap()
+        } label: {
+            ZStack {
+                ZStack(alignment: .topTrailing) {
+                    ZStack {
+                        GoldTheme.circleShape
+                            .fill(fillColor)
+                            .shadow(
+                                color: badge.tone == .conflict ? GoldTheme.up.opacity(0.28) : .clear,
+                                radius: 5,
+                                x: 0,
+                                y: 0
+                            )
+
+                        GoldTheme.circleShape
+                            .strokeBorder(strokeColor, lineWidth: badge.tone == .conflict ? 1.0 : 0.9)
+
+                        if badge.showsSyncSpinner {
+                            AccountCloudSyncSpinnerArc()
+                        }
+
+                        Image(systemName: badge.iconSystemName)
+                            .font(.system(size: 14.5, weight: .semibold))
+                            .foregroundStyle(iconColor)
+                            .symbolRenderingMode(.monochrome)
+                    }
+                    .frame(width: 34, height: 34)
+
+                    if let conflictText = badge.conflictBadgeText {
+                        Text(conflictText)
+                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(GoldTheme.text)
+                            .padding(.horizontal, conflictText.count > 1 ? 4 : 0)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(GoldTheme.up, in: GoldTheme.capsuleShape)
+                            .overlay(
+                                GoldTheme.capsuleShape.strokeBorder(GoldTheme.card, lineWidth: 1.5)
+                            )
+                            .offset(x: 4, y: -3)
+                    } else if badge.showsFailedIndicatorDot {
+                        GoldTheme.circleShape
+                            .fill(GoldTheme.up)
+                            .frame(width: 8.5, height: 8.5)
+                            .overlay(
+                                GoldTheme.circleShape.strokeBorder(GoldTheme.card, lineWidth: 1.5)
+                            )
+                            .offset(x: 1, y: -1)
+                    }
+                }
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(GoldTheme.circleShape)
+        }
+        .buttonStyle(AccountCloudIconButtonStyle())
+        .disabled(!isEnabled)
+        .fixedSize()
+        .sensoryFeedback(.impact(weight: .light), trigger: hapticTrigger)
+        .accessibilityIdentifier("account.cloudSyncIcon")
+        .accessibilityLabel(badge.accessibilityLabel)
+        .accessibilityHint(badge.detail)
+    }
+}
+
+private struct AccountCloudSyncSpinnerArc: View {
+    @State private var isSpinning = false
+
+    var body: some View {
+        GoldTheme.circleShape
+            .inset(by: 0.9)
+            .trim(from: 0, to: 0.34)
+            .stroke(
+                AngularGradient(
+                    stops: [
+                        .init(color: GoldTheme.gold.opacity(0.08), location: 0.0),
+                        .init(color: GoldTheme.gold, location: 0.24),
+                        .init(color: GoldTheme.goldSoft, location: 0.34)
+                    ],
+                    center: .center
+                ),
+                style: StrokeStyle(lineWidth: 1.8, lineCap: .round)
+            )
+            .rotationEffect(.degrees(-75))
+            .rotationEffect(.degrees(isSpinning ? 360 : 0))
+            .onAppear {
+                withAnimation(.linear(duration: 1.05).repeatForever(autoreverses: false)) {
+                    isSpinning = true
+                }
+            }
+    }
+}
+
+private struct AccountCloudIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
+            .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+    }
+}
+
+struct AccountGuestImportCallout: View {
+    let text: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: "tray.and.arrow.down.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(GoldTheme.gold)
+                Text(text)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(GoldTheme.goldSoft)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 4)
+                Text("去导入")
+                    .font(.caption2.bold())
+                    .foregroundStyle(GoldTheme.gold)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(GoldTheme.gold)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(GoldTheme.gold.opacity(0.12), in: GoldTheme.subCardShape)
+            .overlay(
+                GoldTheme.subCardShape.strokeBorder(GoldTheme.gold.opacity(0.36), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct AccountGoldProfileArchiveStrip: View {
+    let summary: AccountGoldProfileSummary
+    let hideAmounts: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(GoldTheme.gold)
+                Text(AccountProfileCopy.profileSectionTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(GoldTheme.textSecondary)
+                Spacer(minLength: 4)
+                HStack(spacing: 4) {
+                    if summary.hasUnlockedMilestone {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(GoldTheme.gold)
+                    }
+                    Text(summary.milestoneTitle)
+                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(summary.hasUnlockedMilestone ? GoldTheme.goldSoft : GoldTheme.textSecondary)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(
+                    summary.hasUnlockedMilestone ? GoldTheme.gold.opacity(0.16) : GoldTheme.calendarCell,
+                    in: GoldTheme.capsuleShape
+                )
+                .overlay(
+                    GoldTheme.capsuleShape.strokeBorder(
+                        summary.hasUnlockedMilestone ? GoldTheme.gold.opacity(0.45) : GoldTheme.cardStroke,
+                        lineWidth: 0.9
+                    )
+                )
+            }
+
+            HStack(spacing: 0) {
+                metricCell(
+                    label: AccountProfileCopy.activeGramsLabel,
+                    value: summary.formattedActiveGrams(hideAmounts: hideAmounts),
+                    valueColor: GoldTheme.gold
+                )
+                GoldTheme.cardStroke
+                    .frame(width: 1, height: 28)
+                metricCell(
+                    label: AccountProfileCopy.activeCountLabel,
+                    value: summary.formattedActiveCount(hideAmounts: hideAmounts),
+                    valueColor: GoldTheme.text
+                )
+                GoldTheme.cardStroke
+                    .frame(width: 1, height: 28)
+                metricCell(
+                    label: AccountProfileCopy.companionDaysLabel,
+                    value: summary.formattedCompanionDays(),
+                    valueColor: GoldTheme.goldSoft
+                )
+            }
+            .padding(.vertical, 11)
+            .background(GoldTheme.background, in: GoldTheme.subCardShape)
+            .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+        }
+    }
+
+    private func metricCell(label: String, value: String, valueColor: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(.subheadline, design: .rounded).bold())
+                .monospacedDigit()
+                .foregroundStyle(valueColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(GoldTheme.textSecondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
 struct AccountSectionHeader: View {
     let title: String
 
@@ -908,6 +1038,14 @@ struct AccountCloudToneIndicator: View {
             GoldTheme.circleShape
                 .fill(GoldTheme.goldSoft)
                 .frame(width: 8, height: 8)
+        case .failed:
+            GoldTheme.circleShape
+                .fill(GoldTheme.tempWarm)
+                .frame(width: 8, height: 8)
+                .overlay(
+                    GoldTheme.circleShape.strokeBorder(GoldTheme.up.opacity(0.45), lineWidth: 2)
+                        .frame(width: 12, height: 12)
+                )
         case .guest:
             GoldTheme.circleShape
                 .fill(GoldTheme.textFaint)

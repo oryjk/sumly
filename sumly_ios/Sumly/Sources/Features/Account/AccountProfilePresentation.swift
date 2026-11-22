@@ -215,7 +215,14 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
         case synced
         case syncing
         case pending
+        case failed
         case conflict
+    }
+
+    enum IconAction: Equatable, Sendable {
+        case none
+        case sync
+        case openConflictResolution
     }
 
     struct AttentionPill: Equatable, Sendable {
@@ -232,6 +239,69 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
     let conflictCount: Int
     let guestRecordCount: Int
     let settingsAttention: AttentionPill?
+
+    /// 100% 兼容 iOS 17.0+ 的 SF Symbol 名称（严禁使用 iOS 18+ 专属符号）。
+    var iconSystemName: String {
+        switch tone {
+        case .guest: "icloud.slash"
+        case .synced: "checkmark.icloud.fill"
+        case .syncing: "arrow.clockwise.icloud"
+        case .pending: "icloud.and.arrow.up"
+        case .failed: "exclamationmark.icloud"
+        case .conflict: "exclamationmark.icloud.fill"
+        }
+    }
+
+    /// 同步中在 34×34 圆形外圈叠加持续旋转的金色加载弧。
+    var showsSyncSpinner: Bool {
+        tone == .syncing
+    }
+
+    /// 同步失败/待重试态右上角叠加迷你警示点，与本地待上传态区分。
+    var showsFailedIndicatorDot: Bool {
+        tone == .failed
+    }
+
+    /// 多设备冲突态右上角紧凑数字角标（如 "2"、"9+"），其余状态返回 nil。
+    var conflictBadgeText: String? {
+        guard tone == .conflict, conflictCount > 0 else { return nil }
+        return conflictCount > 9 ? "9+" : "\(conflictCount)"
+    }
+
+    /// 点击「我的」页用户名行纯图标云同步按钮后应触发的交互动作。
+    var iconAction: IconAction {
+        switch tone {
+        case .synced, .pending, .failed:
+            .sync
+        case .conflict:
+            .openConflictResolution
+        case .syncing, .guest:
+            .none
+        }
+    }
+
+    /// 纯图标云同步按钮当前是否可交互（同步中/游客态禁用重复点击）。
+    var isIconInteractive: Bool {
+        iconAction != .none
+    }
+
+    /// VoiceOver 完整可读标签，清晰播报状态与轻点操作。
+    var accessibilityLabel: String {
+        switch tone {
+        case .guest:
+            "本机游客模式，未开启云同步"
+        case .synced:
+            "云端已同步，轻点立即同步"
+        case .syncing:
+            "正在同步云端数据"
+        case .pending:
+            "本地有待同步更改，轻点立即同步"
+        case .failed:
+            "云同步失败待重试，轻点重新同步"
+        case .conflict:
+            "有 \(conflictCount) 条同步冲突，轻点前往处理"
+        }
+    }
 
     static func resolve(
         isSignedIn: Bool,
@@ -301,7 +371,7 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
 
         if let notice, !notice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return AccountCloudStatusBadge(
-                tone: .pending,
+                tone: .failed,
                 title: "同步待重试",
                 detail: statusDetail ?? notice,
                 guestImportHint: importHint,

@@ -369,6 +369,7 @@ struct AccountSettingsView: View {
             case .synced: GoldTheme.down
             case .syncing: GoldTheme.gold
             case .pending: GoldTheme.goldSoft
+            case .failed: GoldTheme.tempWarm
             case .conflict: GoldTheme.up
             case .guest: GoldTheme.textSecondary
             }
@@ -378,6 +379,7 @@ struct AccountSettingsView: View {
             case .synced: GoldTheme.down.opacity(0.14)
             case .syncing: GoldTheme.gold.opacity(0.14)
             case .pending: GoldTheme.gold.opacity(0.12)
+            case .failed: GoldTheme.tempWarm.opacity(0.14)
             case .conflict: GoldTheme.up.opacity(0.14)
             case .guest: GoldTheme.calendarCell
             }
@@ -387,6 +389,7 @@ struct AccountSettingsView: View {
             case .synced: GoldTheme.down.opacity(0.35)
             case .syncing: GoldTheme.gold.opacity(0.36)
             case .pending: GoldTheme.gold.opacity(0.3)
+            case .failed: GoldTheme.tempWarm.opacity(0.42)
             case .conflict: GoldTheme.up.opacity(0.38)
             case .guest: GoldTheme.cardStroke
             }
