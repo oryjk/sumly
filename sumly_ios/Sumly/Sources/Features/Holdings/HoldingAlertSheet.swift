@@ -40,9 +40,13 @@ struct HoldingAlertSheet: View {
                     }
                 }.padding(16).foregroundStyle(GoldTheme.text)
             }.background(GoldTheme.background)
-                .safeAreaInset(edge: .bottom) {
-                    Button(saving ? "正在保存…" : "保存提醒") { saveTask = Task { await save() } }
-                        .buttonStyle(GoldPrimaryButtonStyle()).disabled(saving).padding(16).background(GoldTheme.background)
+                .goldKeyboardDismissable(showToolbar: false)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    GoldKeyboardActionBar {
+                        Button(saving ? "正在保存…" : "保存提醒") { saveTask = Task { await save() } }
+                            .buttonStyle(GoldPrimaryButtonStyle())
+                            .disabled(saving)
+                    }
                 }
                 .navigationTitle("持仓提醒").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }

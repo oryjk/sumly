@@ -131,13 +131,12 @@ struct AddHoldingSheet: View {
                 }
             }
             .background(GoldTheme.background)
-            .goldKeyboardDismissable()
-            .safeAreaInset(edge: .bottom) {
-                Button(editing == nil ? "确认入库" : "保存修改") { save() }
-                    .buttonStyle(GoldPrimaryButtonStyle())
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(GoldTheme.background)
+            .goldKeyboardDismissable(showToolbar: false)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                GoldKeyboardActionBar {
+                    Button(editing == nil ? "确认入库" : "保存修改") { save() }
+                        .buttonStyle(GoldPrimaryButtonStyle())
+                }
             }
             .navigationTitle(editing == nil ? "记一笔黄金" : "编辑持仓")
             .navigationBarTitleDisplayMode(.inline)

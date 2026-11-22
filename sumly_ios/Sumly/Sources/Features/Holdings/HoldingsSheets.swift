@@ -49,7 +49,8 @@ struct DisposeHoldingSheet: View {
                     DatePicker("日期", selection: $date, in: record.timestamp...Date.now, displayedComponents: [.date, .hourAndMinute])
                 } footer: { Text("可以操作部分克数，剩余黄金继续保留在本账本。") }
                 if let error { Text(error).foregroundStyle(GoldTheme.up) }
-            }.navigationTitle("赠卖黄金").navigationBarTitleDisplayMode(.inline)
+            }.goldKeyboardDismissable(showToolbar: false)
+                .navigationTitle("赠卖黄金").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) { Button("保存") { save() } }

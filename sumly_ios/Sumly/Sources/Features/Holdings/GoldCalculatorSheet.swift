@@ -53,10 +53,14 @@ struct GoldCalculatorSheet: View {
                     Text("以上为估算，不代表渠道报价或购买建议。") .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 }.padding(16)
             }.background(GoldTheme.background)
-                .goldKeyboardDismissable()
-                .safeAreaInset(edge: .bottom) {
-                    Button("保存为持仓") { saving = true }.buttonStyle(GoldPrimaryButtonStyle())
-                        .disabled(result == nil).opacity(result == nil ? 0.5 : 1).padding(16).background(GoldTheme.background)
+                .goldKeyboardDismissable(showToolbar: false)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    GoldKeyboardActionBar {
+                        Button("保存为持仓") { saving = true }
+                            .buttonStyle(GoldPrimaryButtonStyle())
+                            .disabled(result == nil)
+                            .opacity(result == nil ? 0.5 : 1)
+                    }
                 }
                 .navigationTitle("买前算一算").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
