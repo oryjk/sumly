@@ -2,18 +2,27 @@ import type {
   ApiEnvelope,
   AppConfigItem,
   AuditLogItem,
+  AuthLoginPayload,
+  AuthLoginResult,
+  AuthLogoutResult,
   AuthVerifyResult,
+  ChangePasswordPayload,
+  ChangePasswordResult,
   UpdateConfigPayload,
 } from '../types/config';
 import { isRecord } from '../types/config';
 import { normalizeApiBase } from '../utils/storage';
 
 const REQUEST_TIMEOUT_MS = 12_000;
+export const MUST_CHANGE_PASSWORD_ERROR_CODE = 40301;
 
 export class AdminApiError extends Error {
   readonly status: number;
   readonly code?: number;
   readonly isUnauthorized: boolean;
+  readonly isForbidden: boolean;
+  readonly isMustChangePassword: boolean;
+  readonly isUnprocessableEntity: boolean;
   readonly isServiceUnavailable: boolean;
 
   constructor(
@@ -28,13 +37,17 @@ export class AdminApiError extends Error {
     this.status = options.status;
     this.code = options.code;
     this.isUnauthorized = options.status === 401;
+    this.isForbidden = options.status === 403;
+    this.isMustChangePassword =
+      options.status === 403 && options.code === MUST_CHANGE_PASSWORD_ERROR_CODE;
+    this.isUnprocessableEntity = options.status === 422;
     this.isServiceUnavailable = options.status === 503;
   }
 }
 
 async function adminRequest<T>(
   apiBase: string,
-  token: string,
+  token: string | null,
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
@@ -44,7 +57,9 @@ async function adminRequest<T>(
   const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   const headers = new Headers(init.headers);
-  headers.set('Authorization', `Bearer ${token.trim()}`);
+  if (token && token.trim()) {
+    headers.set('Authorization', `Bearer ${token.trim()}`);
+  }
   headers.set('Accept', 'application/json');
   if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -77,6 +92,7 @@ async function adminRequest<T>(
     }
 
     const envelope = isRecord(parsed) ? (parsed as unknown as ApiEnvelope<T>) : null;
+    const serverCode = typeof envelope?.code === 'number' ? envelope.code : undefined;
     const serverMessage =
       (typeof envelope?.message === 'string' && envelope.message.trim()) ||
       (typeof envelope?.error === 'string' && envelope.error.trim()) ||
@@ -85,16 +101,23 @@ async function adminRequest<T>(
     if (!response.ok) {
       let friendly = serverMessage;
       if (response.status === 401) {
-        friendly = serverMessage || '管理员令牌无效或已过期，请核对后重试';
-      } else if (response.status === 503) {
         friendly =
-          serverMessage || '服务端未配置 ADMIN_API_TOKEN，管理接口处于安全锁定状态（503）';
+          serverMessage ||
+          (token
+            ? '登录会话无效或已过期，请重新登录'
+            : '管理员账号或密码错误，请核对后重试');
+      } else if (response.status === 403 && serverCode === MUST_CHANGE_PASSWORD_ERROR_CODE) {
+        friendly = serverMessage || '请先修改初始密码后再变更配置';
+      } else if (response.status === 422) {
+        friendly = serverMessage || '输入内容不符合校验要求，请检查后重试';
+      } else if (response.status === 503) {
+        friendly = serverMessage || '服务端管理员认证暂不可用，请检查服务端配置（503）';
       } else if (!friendly) {
         friendly = `请求失败（HTTP ${response.status}）`;
       }
       throw new AdminApiError(friendly, {
         status: response.status,
-        code: typeof envelope?.code === 'number' ? envelope.code : undefined,
+        code: serverCode,
       });
     }
 
@@ -127,7 +150,32 @@ async function adminRequest<T>(
   }
 }
 
-export async function verifyAdminToken(
+export async function loginAdmin(
+  apiBase: string,
+  payload: AuthLoginPayload,
+): Promise<AuthLoginResult> {
+  const data = await adminRequest<AuthLoginResult>(apiBase, null, '/admin/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: payload.username.trim(),
+      password: payload.password,
+    }),
+  });
+  if (!data || typeof data.token !== 'string' || !data.token.trim()) {
+    throw new AdminApiError('登录响应缺少会话令牌，请联系服务端排查', { status: 500 });
+  }
+  return {
+    token: data.token.trim(),
+    username:
+      typeof data.username === 'string' && data.username.trim()
+        ? data.username.trim()
+        : payload.username.trim() || 'admin',
+    must_change_password: Boolean(data.must_change_password),
+    expires_at: typeof data.expires_at === 'string' ? data.expires_at : undefined,
+  };
+}
+
+export async function verifyAdminSession(
   apiBase: string,
   token: string,
 ): Promise<AuthVerifyResult> {
@@ -135,9 +183,47 @@ export async function verifyAdminToken(
     method: 'GET',
   });
   if (!data || data.valid !== true) {
-    throw new AdminApiError('令牌校验未通过', { status: 401 });
+    throw new AdminApiError('登录会话校验未通过，请重新登录', { status: 401 });
   }
-  return data;
+  return {
+    valid: true,
+    username:
+      typeof data.username === 'string' && data.username.trim() ? data.username.trim() : 'admin',
+    must_change_password: Boolean(data.must_change_password),
+  };
+}
+
+export async function changeAdminPassword(
+  apiBase: string,
+  token: string,
+  payload: ChangePasswordPayload,
+): Promise<ChangePasswordResult> {
+  const data = await adminRequest<ChangePasswordResult>(
+    apiBase,
+    token,
+    '/admin/auth/change-password',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: payload.current_password,
+        new_password: payload.new_password,
+      }),
+    },
+  );
+  return {
+    username:
+      typeof data?.username === 'string' && data.username.trim() ? data.username.trim() : '',
+    must_change_password: Boolean(data?.must_change_password),
+  };
+}
+
+export async function logoutAdmin(apiBase: string, token: string): Promise<AuthLogoutResult> {
+  const data = await adminRequest<AuthLogoutResult>(apiBase, token, '/admin/auth/logout', {
+    method: 'POST',
+  });
+  return {
+    logged_out: Boolean(data?.logged_out ?? true),
+  };
 }
 
 export async function fetchConfigs(apiBase: string, token: string): Promise<AppConfigItem[]> {

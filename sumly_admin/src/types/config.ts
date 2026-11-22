@@ -1,6 +1,8 @@
 export const MEMBERSHIP_PAYWALL_KEY = 'membership_paywall' as const;
 export const FREE_ACCESS_NOTICE_MAX_LENGTH = 120;
 export const EXTENSION_JSON_MAX_BYTES = 16 * 1024;
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_BYTES = 72;
 
 export interface MembershipPaywallConfig {
   chanlun_requires_membership: boolean;
@@ -46,8 +48,36 @@ export interface ApiEnvelope<T> {
   error?: string;
 }
 
+export interface AuthLoginPayload {
+  username: string;
+  password: string;
+}
+
+export interface AuthLoginResult {
+  token: string;
+  username: string;
+  must_change_password: boolean;
+  expires_at?: string;
+}
+
 export interface AuthVerifyResult {
   valid: boolean;
+  username: string;
+  must_change_password: boolean;
+}
+
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+}
+
+export interface ChangePasswordResult {
+  username: string;
+  must_change_password: boolean;
+}
+
+export interface AuthLogoutResult {
+  logged_out: boolean;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

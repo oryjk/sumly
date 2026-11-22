@@ -9,54 +9,71 @@ import {
   Loader2,
   Server,
   ShieldCheck,
-  UserCheck,
+  User,
 } from 'lucide-react';
-import { AdminApiError, verifyAdminToken } from '../api/client';
-import { DEFAULT_API_BASE, getSavedApiBase, normalizeApiBase, type AdminSession } from '../utils/storage';
+import { AdminApiError, loginAdmin } from '../api/client';
+import {
+  DEFAULT_API_BASE,
+  getSavedApiBase,
+  normalizeApiBase,
+  type AdminSession,
+} from '../utils/storage';
 
-interface TokenGateProps {
+interface LoginScreenProps {
   onAuthenticated: (session: AdminSession) => void;
 }
 
-export function TokenGate({ onAuthenticated }: TokenGateProps) {
-  const [token, setToken] = useState('');
-  const [showToken, setShowToken] = useState(false);
-  const [operator, setOperator] = useState('admin');
+export function LoginScreen({ onAuthenticated }: LoginScreenProps) {
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [apiBase, setApiBase] = useState(() => getSavedApiBase());
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [errorDetailCode, setErrorDetailCode] = useState<number | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
 
   const normalizedBase = normalizeApiBase(apiBase);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedToken = token.trim();
-    if (!trimmedToken) {
-      setErrorMessage('请输入管理员令牌后再验证进入');
-      setErrorDetailCode(null);
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) {
+      setErrorMessage('请输入管理员账号');
+      setErrorStatus(null);
+      return;
+    }
+    if (!password) {
+      setErrorMessage('请输入登录密码');
+      setErrorStatus(null);
       return;
     }
 
     setSubmitting(true);
     setErrorMessage(null);
-    setErrorDetailCode(null);
+    setErrorStatus(null);
 
     try {
-      await verifyAdminToken(normalizedBase, trimmedToken);
+      const result = await loginAdmin(normalizedBase, {
+        username: trimmedUsername,
+        password,
+      });
+
       onAuthenticated({
-        token: trimmedToken,
+        token: result.token,
+        username: result.username,
+        mustChangePassword: result.must_change_password,
+        expiresAt: result.expires_at,
         apiBase: normalizedBase,
-        operator: operator.trim() || 'admin',
+        operator: result.username,
       });
     } catch (error) {
       if (error instanceof AdminApiError) {
         setErrorMessage(error.message);
-        setErrorDetailCode(error.status || null);
+        setErrorStatus(error.status || null);
       } else {
-        setErrorMessage('令牌验证失败，请稍后重试');
-        setErrorDetailCode(null);
+        setErrorMessage('登录失败，请检查网络连接后重试');
+        setErrorStatus(null);
       }
     } finally {
       setSubmitting(false);
@@ -80,90 +97,91 @@ export function TokenGate({ onAuthenticated }: TokenGateProps) {
           <div className="inline-flex items-center gap-2 rounded-full border border-[#F2C512]/20 bg-[#F2C512]/8 px-3 py-1 text-[11px] font-medium tracking-[0.14em] text-[#F2C512] uppercase">
             <span>Sumly Console</span>
             <span className="h-1 w-1 rounded-full bg-[#F2C512]" />
-            <span>Remote Config</span>
+            <span>Admin Auth</span>
           </div>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[#F5F2EB]">
             记金远程配置管理后台
           </h1>
           <p className="mt-1.5 text-sm text-[#9D968A]">
-            实时管控禅观付费门禁、会员入口与配置审计日志
+            使用管理员账号登录，实时管控禅观付费门禁与配置审计
           </p>
         </div>
 
         {/* Auth Card */}
         <form onSubmit={handleSubmit} className="gold-card rounded-2xl p-6 sm:p-7">
           <div className="space-y-5">
-            {/* Token Field */}
+            {/* Username Field */}
             <div>
               <label
-                htmlFor="admin-token-input"
+                htmlFor="admin-username-input"
+                className="mb-2 flex items-center justify-between text-xs font-medium text-[#CBC4B7]"
+              >
+                <span className="flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-[#F2C512]" />
+                  管理员账号
+                </span>
+                <span className="font-mono text-[11px] text-[#7D776D]">Username</span>
+              </label>
+              <input
+                id="admin-username-input"
+                type="text"
+                autoComplete="username"
+                maxLength={64}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="请输入管理员账号（默认 admin）"
+                disabled={submitting}
+                className="w-full rounded-xl border border-white/10 bg-[#141416] px-4 py-3 text-sm text-[#F5F2EB] placeholder:text-[#655F56] transition focus:border-[#F2C512]/60 focus:outline-none focus:ring-2 focus:ring-[#F2C512]/20 disabled:opacity-60"
+              />
+            </div>
+
+            {/* Password Field */}
+            <div>
+              <label
+                htmlFor="admin-password-input"
                 className="mb-2 flex items-center justify-between text-xs font-medium text-[#CBC4B7]"
               >
                 <span className="flex items-center gap-1.5">
                   <KeyRound className="h-3.5 w-3.5 text-[#F2C512]" />
-                  管理员令牌（Bearer Token）
+                  登录密码
                 </span>
-                <span className="font-mono text-[11px] text-[#7D776D]">ADMIN_API_TOKEN</span>
+                <span className="font-mono text-[11px] text-[#7D776D]">Password</span>
               </label>
 
               <div className="relative">
                 <input
-                  id="admin-token-input"
-                  type={showToken ? 'text' : 'password'}
+                  id="admin-password-input"
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   autoFocus
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="请输入服务端配置的管理员令牌"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="请输入管理员密码"
                   disabled={submitting}
-                  className="w-full rounded-xl border border-white/10 bg-[#141416] py-3 pl-4 pr-11 font-mono text-sm text-[#F5F2EB] placeholder:font-sans placeholder:text-[#655F56] transition focus:border-[#F2C512]/60 focus:outline-none focus:ring-2 focus:ring-[#F2C512]/20 disabled:opacity-60"
+                  className="w-full rounded-xl border border-white/10 bg-[#141416] py-3 pl-4 pr-11 text-sm text-[#F5F2EB] placeholder:text-[#655F56] transition focus:border-[#F2C512]/60 focus:outline-none focus:ring-2 focus:ring-[#F2C512]/20 disabled:opacity-60"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowToken((prev) => !prev)}
-                  aria-label={showToken ? '隐藏管理员令牌' : '显示管理员令牌'}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#8A8377] transition hover:bg-white/5 hover:text-[#F2C512]"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer rounded-lg p-1.5 text-[#8A8377] transition hover:bg-white/5 hover:text-[#F2C512]"
                 >
-                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
-            {/* Operator Name Field */}
-            <div>
-              <label
-                htmlFor="admin-operator-input"
-                className="mb-2 flex items-center justify-between text-xs font-medium text-[#CBC4B7]"
-              >
-                <span className="flex items-center gap-1.5">
-                  <UserCheck className="h-3.5 w-3.5 text-[#F2C512]/80" />
-                  操作人标识（写入审计日志）
-                </span>
-                <span className="text-[11px] text-[#7D776D]">可选</span>
-              </label>
-              <input
-                id="admin-operator-input"
-                type="text"
-                maxLength={40}
-                value={operator}
-                onChange={(e) => setOperator(e.target.value)}
-                placeholder="如：carl / ops-admin"
-                disabled={submitting}
-                className="w-full rounded-xl border border-white/10 bg-[#141416] px-4 py-2.5 text-sm text-[#F5F2EB] placeholder:text-[#655F56] transition focus:border-[#F2C512]/60 focus:outline-none focus:ring-2 focus:ring-[#F2C512]/20 disabled:opacity-60"
-              />
-            </div>
-
-            {/* Collapsible API Base Config */}
+            {/* Collapsible Advanced API Base Config */}
             <div className="rounded-xl border border-white/6 bg-[#141416]/70">
               <button
                 type="button"
                 onClick={() => setShowAdvanced((prev) => !prev)}
-                className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs text-[#A7A094] transition hover:text-[#F5F2EB]"
+                className="flex w-full cursor-pointer items-center justify-between px-3.5 py-2.5 text-left text-xs text-[#A7A094] transition hover:text-[#F5F2EB]"
               >
                 <span className="flex items-center gap-2">
                   <Server className="h-3.5 w-3.5 text-[#F2C512]/80" />
-                  <span>API 地址</span>
-                  <code className="max-w-[190px] truncate rounded bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-[#D8D2C7]">
+                  <span>高级设置 · API 地址</span>
+                  <code className="max-w-[165px] truncate rounded bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-[#D8D2C7]">
                     {normalizedBase}
                   </code>
                 </span>
@@ -180,7 +198,8 @@ export function TokenGate({ onAuthenticated }: TokenGateProps) {
                     htmlFor="admin-api-base-input"
                     className="mb-1.5 block text-[11px] text-[#9D968A]"
                   >
-                    自定义管理接口前缀（留空默认同源 <code className="font-mono text-[#D8D2C7]">{DEFAULT_API_BASE}</code>）
+                    自定义管理接口前缀（默认同源{' '}
+                    <code className="font-mono text-[#D8D2C7]">{DEFAULT_API_BASE}</code>）
                   </label>
                   <input
                     id="admin-api-base-input"
@@ -191,13 +210,15 @@ export function TokenGate({ onAuthenticated }: TokenGateProps) {
                     disabled={submitting}
                     className="w-full rounded-lg border border-white/10 bg-[#1B1A18] px-3 py-2 font-mono text-xs text-[#F5F2EB] placeholder:text-[#655F56] focus:border-[#F2C512]/60 focus:outline-none"
                   />
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-[#7D776D]">
-                    <span>验证端点：{normalizedBase}/admin/auth/verify</span>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-[#7D776D]">
+                    <span className="truncate font-mono">
+                      POST {normalizedBase}/admin/auth/login
+                    </span>
                     {apiBase !== DEFAULT_API_BASE ? (
                       <button
                         type="button"
                         onClick={() => setApiBase(DEFAULT_API_BASE)}
-                        className="text-[#F2C512] hover:underline"
+                        className="shrink-0 cursor-pointer text-[#F2C512] hover:underline"
                       >
                         恢复默认
                       </button>
@@ -216,11 +237,11 @@ export function TokenGate({ onAuthenticated }: TokenGateProps) {
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#FF5D5D]" />
                 <div>
                   <p className="font-medium text-[#FFD0D0]">
-                    {errorDetailCode === 503
-                      ? '管理接口未启用（HTTP 503）'
-                      : errorDetailCode === 401
-                        ? '身份验证未通过（HTTP 401）'
-                        : '无法完成验证'}
+                    {errorStatus === 503
+                      ? '管理认证服务未就绪（HTTP 503）'
+                      : errorStatus === 401
+                        ? '账号或密码校验未通过（HTTP 401）'
+                        : '无法完成登录'}
                   </p>
                   <p className="mt-0.5 text-[#F4A9A9]/90">{errorMessage}</p>
                 </div>
@@ -236,10 +257,10 @@ export function TokenGate({ onAuthenticated }: TokenGateProps) {
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  正在校验令牌...
+                  正在登录控制台...
                 </>
               ) : (
-                '验证并进入'
+                '登录控制台'
               )}
             </button>
           </div>
@@ -247,8 +268,9 @@ export function TokenGate({ onAuthenticated }: TokenGateProps) {
 
         {/* Security Footnote */}
         <p className="mt-5 text-center text-xs leading-relaxed text-[#7D776D]">
-          令牌仅保存在当前浏览器标签页的 <span className="font-mono text-[#9E978B]">sessionStorage</span> 中，
-          关闭标签页后自动清除，不会持久化写入本地磁盘。
+          会话令牌仅保存在当前浏览器标签页的{' '}
+          <span className="font-mono text-[#9E978B]">sessionStorage</span>{' '}
+          中；首次使用初始密码登录后将引导设置永久密码。
         </p>
       </div>
     </div>
