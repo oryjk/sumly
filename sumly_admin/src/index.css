@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@theme {
+  --color-obsidian: #141416;
+  --color-surface: #1e1d1b;
+  --color-surface-elevated: #262421;
+  --color-gold: #f2c512;
+  --color-gold-bright: #ffd84d;
+  --color-gold-dim: #b8940e;
+  --color-emerald-live: #3dd68c;
+  --color-crimson-lock: #ff5d5d;
+
+  --font-sans: "PingFang SC", "SF Pro Display", "SF Pro Text", "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@layer base {
+  html,
+  body {
+    background-color: #141416;
+    color: #f5f2eb;
+    font-family: var(--font-sans);
+    color-scheme: dark;
+  }
+
+  * {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* Luxury dark-gold atmospheric backdrop */
+.sumly-backdrop {
+  background-color: #141416;
+  background-image:
+    radial-gradient(ellipse 68% 44% at 18% -10%, rgba(242, 197, 18, 0.12), transparent 62%),
+    radial-gradient(ellipse 52% 38% at 88% 0%, rgba(242, 197, 18, 0.06), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 100%, rgba(61, 214, 140, 0.035), transparent 65%);
+}
+
+/* Subtle gold hairline glow */
+.gold-card {
+  background: linear-gradient(180deg, rgba(34, 32, 29, 0.96) 0%, rgba(28, 27, 25, 0.96) 100%);
+  border: 1px solid rgba(242, 197, 18, 0.14);
+  box-shadow:
+    0 20px 50px -24px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.gold-btn {
+  background: linear-gradient(135deg, #f6cf2a 0%, #e4b50c 52%, #cca006 100%);
+  color: #141416;
+  box-shadow:
+    0 10px 26px -10px rgba(242, 197, 18, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.gold-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ffe055 0%, #f2c512 55%, #d6a908 100%);
+  box-shadow:
+    0 14px 32px -10px rgba(242, 197, 18, 0.68),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.gold-btn:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+/* Refined dark scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(20, 20, 22, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(242, 197, 18, 0.22);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(242, 197, 18, 0.38);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-toast-in {
+  animation: toastIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modalIn 190ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
