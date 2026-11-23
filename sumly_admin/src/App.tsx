@@ -6,6 +6,7 @@ import {
   Layers,
   Loader2,
   LogOut,
+  MessageSquareText,
   RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import {
   AdminApiError,
+  fetchAdminFeedbacks,
   fetchAuditLogs,
   fetchConfigs,
   logoutAdmin,
@@ -24,6 +26,7 @@ import { AllConfigsPanel } from './components/AllConfigsPanel';
 import { AppPreviewCard } from './components/AppPreviewCard';
 import { AuditLogPanel } from './components/AuditLogPanel';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
+import { FeedbackPanel } from './components/FeedbackPanel';
 import { ForceChangePasswordView } from './components/ForceChangePasswordView';
 import { LoginScreen } from './components/LoginScreen';
 import { PaywallControlCard } from './components/PaywallControlCard';
@@ -37,6 +40,7 @@ import {
   type AuditLogItem,
   type MembershipPaywallConfig,
 } from './types/config';
+import { EMPTY_FEEDBACK_COUNTS, type AdminFeedbackCounts } from './types/feedback';
 import {
   clearAdminSession,
   loadAdminSession,
@@ -45,6 +49,7 @@ import {
   type AdminSession,
 } from './utils/storage';
 
+type WorkspaceMode = 'remote_config' | 'feedback';
 type ActiveTab = 'paywall' | 'audit' | 'configs';
 type SessionCheckState = 'idle' | 'verifying' | 'ready' | 'error';
 
@@ -66,9 +71,15 @@ export default function App() {
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifyAttempt, setVerifyAttempt] = useState(0);
 
+  const [workspace, setWorkspace] = useState<WorkspaceMode>('remote_config');
   const [activeTab, setActiveTab] = useState<ActiveTab>('paywall');
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const [feedbackCounts, setFeedbackCounts] = useState<AdminFeedbackCounts>({
+    ...EMPTY_FEEDBACK_COUNTS,
+  });
+  const [feedbackRefreshSignal, setFeedbackRefreshSignal] = useState(0);
 
   const [configs, setConfigs] = useState<AppConfigItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
@@ -124,6 +135,8 @@ export default function App() {
     setShowChangePasswordModal(false);
     setConfigs([]);
     setAuditLogs([]);
+    setFeedbackCounts({ ...EMPTY_FEEDBACK_COUNTS });
+    setWorkspace('remote_config');
     setLoadError(null);
     setPaywallNote('');
   }, []);
@@ -225,6 +238,31 @@ export default function App() {
     [handleUnauthorized, pushToast],
   );
 
+  const refreshFeedbackCounts = useCallback(
+    async (apiBase: string, token: string) => {
+      try {
+        const res = await fetchAdminFeedbacks(apiBase, token, {
+          status: 'all',
+          category: 'all',
+          q: '',
+          limit: 1,
+          offset: 0,
+        });
+        setFeedbackCounts(res.counts);
+      } catch (error) {
+        if (error instanceof AdminApiError && error.isUnauthorized) {
+          handleUnauthorized(error.message);
+          return;
+        }
+        if (error instanceof AdminApiError && error.isMustChangePassword) {
+          handleMustChangePasswordRequired(error.message);
+        }
+        // Silently ignore non-auth badge fetch errors so remote config workspace stays usable.
+      }
+    },
+    [handleMustChangePasswordRequired, handleUnauthorized],
+  );
+
   const loadWorkspaceData = useCallback(
     async (
       apiBase: string,
@@ -291,7 +329,15 @@ export default function App() {
       return;
     }
     void loadWorkspaceData(activeApiBase, activeToken, { syncDraft: true, notify: false });
-  }, [sessionCheckState, activeApiBase, activeToken, activeMustChangePassword, loadWorkspaceData]);
+    void refreshFeedbackCounts(activeApiBase, activeToken);
+  }, [
+    sessionCheckState,
+    activeApiBase,
+    activeToken,
+    activeMustChangePassword,
+    loadWorkspaceData,
+    refreshFeedbackCounts,
+  ]);
 
   function handleAuthenticated(nextSession: AdminSession) {
     saveAdminSession(nextSession);
@@ -579,21 +625,72 @@ export default function App() {
       {/* Top Sticky Glass Header */}
       <header className="sticky top-0 z-30 border-b border-white/8 bg-[#141416]/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6 lg:px-8">
-          {/* Brand */}
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#F2C512]/35 bg-gradient-to-br from-[#2B2516] to-[#191816] shadow-[0_8px_24px_-10px_rgba(242,197,18,0.5)]">
-              <ShieldCheck className="h-5 w-5 text-[#F2C512]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-semibold tracking-tight text-[#F8F5EE]">
-                  记金 Sumly 控制台
-                </h1>
-                <span className="hidden rounded-full border border-[#3DD68C]/30 bg-[#3DD68C]/10 px-2 py-0.5 text-[10px] font-medium text-[#5AE2A0] sm:inline-flex">
-                  已认证
-                </span>
+          {/* Brand + Primary Dual-Workspace Switcher */}
+          <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#F2C512]/35 bg-gradient-to-br from-[#2B2516] to-[#191816] shadow-[0_8px_24px_-10px_rgba(242,197,18,0.5)]">
+                <ShieldCheck className="h-5 w-5 text-[#F2C512]" />
               </div>
-              <p className="font-mono text-[11px] text-[#8A8377]">{session.apiBase}</p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base font-semibold tracking-tight text-[#F8F5EE]">
+                    记金 Sumly 控制台
+                  </h1>
+                  <span className="hidden rounded-full border border-[#3DD68C]/30 bg-[#3DD68C]/10 px-2 py-0.5 text-[10px] font-medium text-[#5AE2A0] sm:inline-flex">
+                    已认证
+                  </span>
+                </div>
+                <p className="font-mono text-[11px] text-[#8A8377]">{session.apiBase}</p>
+              </div>
+            </div>
+
+            {/* Dual-Workspace Segmented Switcher */}
+            <div
+              role="tablist"
+              aria-label="主工作台切换"
+              className="inline-flex items-center rounded-xl border border-white/10 bg-[#1B1A18] p-1"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={workspace === 'remote_config'}
+                onClick={() => setWorkspace('remote_config')}
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  workspace === 'remote_config'
+                    ? 'border border-[#F2C512]/35 bg-[#F2C512]/16 text-[#FFE066] shadow-[0_4px_14px_-6px_rgba(242,197,18,0.55)]'
+                    : 'border border-transparent text-[#9E978B] hover:text-[#EAE4D8]'
+                }`}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>远程配置</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                aria-selected={workspace === 'feedback'}
+                onClick={() => setWorkspace('feedback')}
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  workspace === 'feedback'
+                    ? 'border border-[#F2C512]/35 bg-[#F2C512]/16 text-[#FFE066] shadow-[0_4px_14px_-6px_rgba(242,197,18,0.55)]'
+                    : 'border border-transparent text-[#9E978B] hover:text-[#EAE4D8]'
+                }`}
+              >
+                <MessageSquareText className="h-3.5 w-3.5" />
+                <span>用户反馈</span>
+                {feedbackCounts.new > 0 ? (
+                  <span
+                    title={`${feedbackCounts.new} 条待处理反馈`}
+                    className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[#FF5D5D] px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-white shadow-[0_0_12px_rgba(255,93,93,0.55)] tabular-nums"
+                  >
+                    {feedbackCounts.new > 99 ? '99+' : feedbackCounts.new}
+                  </span>
+                ) : feedbackCounts.all > 0 ? (
+                  <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[#F2C512]/18 px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none text-[#FFE066] tabular-nums">
+                    0
+                  </span>
+                ) : null}
+              </button>
             </div>
           </div>
 
@@ -624,18 +721,25 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                if (workspace === 'feedback') {
+                  setFeedbackRefreshSignal((prev) => prev + 1);
+                  return;
+                }
                 void loadWorkspaceData(session.apiBase, session.token, {
                   syncDraft: !isDraftModified,
                   notify: true,
-                })
-              }
-              disabled={loadingConfigs || loadingLogs}
+                });
+                void refreshFeedbackCounts(session.apiBase, session.token);
+              }}
+              disabled={workspace === 'remote_config' && (loadingConfigs || loadingLogs)}
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/10 bg-[#1B1A18] px-3 py-2 text-xs font-medium text-[#DDD6C9] transition hover:border-[#F2C512]/40 hover:text-[#F2C512] disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 ${
-                  loadingConfigs || loadingLogs ? 'animate-spin text-[#F2C512]' : ''
+                  workspace === 'remote_config' && (loadingConfigs || loadingLogs)
+                    ? 'animate-spin text-[#F2C512]'
+                    : ''
                 }`}
               />
               <span className="hidden sm:inline">同步状态</span>
@@ -666,138 +770,155 @@ export default function App() {
           </div>
         </div>
 
-        {/* Sub-navigation Tabs */}
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <nav aria-label="控制台工作区切换" className="-mb-px flex gap-1 overflow-x-auto">
-            {(
-              [
-                {
-                  id: 'paywall',
-                  label: '功能开关工作台',
-                  icon: SlidersHorizontal,
-                  badge: livePaywall.chanlun_requires_membership ? '收费中' : '免费中',
-                  badgeTone: livePaywall.chanlun_requires_membership
-                    ? 'bg-[#FF5D5D]/15 text-[#FF8E8E]'
-                    : 'bg-[#3DD68C]/15 text-[#5AE2A0]',
-                },
-                {
-                  id: 'audit',
-                  label: '变更审计日志',
-                  icon: History,
-                  badge: `${auditLogs.length}`,
-                  badgeTone: 'bg-white/8 text-[#C5BEB2]',
-                },
-                {
-                  id: 'configs',
-                  label: '扩展配置管理',
-                  icon: Layers,
-                  badge: `${extraConfigCount}`,
-                  badgeTone: 'bg-white/8 text-[#C5BEB2]',
-                },
-              ] as const
-            ).map((tab) => {
-              const Icon = tab.icon;
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`inline-flex shrink-0 cursor-pointer items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition ${
-                    active
-                      ? 'border-[#F2C512] text-[#FFE066]'
-                      : 'border-transparent text-[#989185] hover:border-white/15 hover:text-[#E5DFD3]'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{tab.label}</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tab.badgeTone}`}
+        {/* Remote Config Sub-navigation Tabs */}
+        {workspace === 'remote_config' ? (
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <nav aria-label="远程配置子视图切换" className="-mb-px flex gap-1 overflow-x-auto">
+              {(
+                [
+                  {
+                    id: 'paywall',
+                    label: '功能开关工作台',
+                    icon: SlidersHorizontal,
+                    badge: livePaywall.chanlun_requires_membership ? '收费中' : '免费中',
+                    badgeTone: livePaywall.chanlun_requires_membership
+                      ? 'bg-[#FF5D5D]/15 text-[#FF8E8E]'
+                      : 'bg-[#3DD68C]/15 text-[#5AE2A0]',
+                  },
+                  {
+                    id: 'audit',
+                    label: '变更审计日志',
+                    icon: History,
+                    badge: `${auditLogs.length}`,
+                    badgeTone: 'bg-white/8 text-[#C5BEB2]',
+                  },
+                  {
+                    id: 'configs',
+                    label: '扩展配置管理',
+                    icon: Layers,
+                    badge: `${extraConfigCount}`,
+                    badgeTone: 'bg-white/8 text-[#C5BEB2]',
+                  },
+                ] as const
+              ).map((tab) => {
+                const Icon = tab.icon;
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`inline-flex shrink-0 cursor-pointer items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition ${
+                      active
+                        ? 'border-[#F2C512] text-[#FFE066]'
+                        : 'border-transparent text-[#989185] hover:border-white/15 hover:text-[#E5DFD3]'
+                    }`}
                   >
-                    {tab.badge}
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+                    <Icon className="h-4 w-4" />
+                    <span>{tab.label}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tab.badgeTone}`}
+                    >
+                      {tab.badge}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        ) : null}
       </header>
 
       {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        {loadError ? (
-          <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-[#FF5D5D]/35 bg-[#261919] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-[#FF5D5D]" />
-              <div>
-                <p className="text-sm font-semibold text-[#FFD2D2]">远程配置同步遇到异常</p>
-                <p className="mt-0.5 text-xs text-[#E8AAAA]">{loadError}</p>
+        {workspace === 'feedback' ? (
+          <FeedbackPanel
+            apiBase={session.apiBase}
+            token={session.token}
+            initialCounts={feedbackCounts}
+            refreshSignal={feedbackRefreshSignal}
+            onCountsChange={setFeedbackCounts}
+            onToast={pushToast}
+            onUnauthorized={handleUnauthorized}
+            onMustChangePassword={handleMustChangePasswordRequired}
+          />
+        ) : (
+          <>
+            {loadError ? (
+              <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-[#FF5D5D]/35 bg-[#261919] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-[#FF5D5D]" />
+                  <div>
+                    <p className="text-sm font-semibold text-[#FFD2D2]">远程配置同步遇到异常</p>
+                    <p className="mt-0.5 text-xs text-[#E8AAAA]">{loadError}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void loadWorkspaceData(session.apiBase, session.token, {
+                      syncDraft: true,
+                      notify: true,
+                    })
+                  }
+                  className="shrink-0 cursor-pointer rounded-xl border border-[#FF5D5D]/35 bg-[#FF5D5D]/15 px-4 py-2 text-xs font-medium text-[#FFD2D2] transition hover:bg-[#FF5D5D]/25"
+                >
+                  立即重试
+                </button>
               </div>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                void loadWorkspaceData(session.apiBase, session.token, {
-                  syncDraft: true,
-                  notify: true,
-                })
-              }
-              className="shrink-0 cursor-pointer rounded-xl border border-[#FF5D5D]/35 bg-[#FF5D5D]/15 px-4 py-2 text-xs font-medium text-[#FFD2D2] transition hover:bg-[#FF5D5D]/25"
-            >
-              立即重试
-            </button>
-          </div>
-        ) : null}
+            ) : null}
 
-        {activeTab === 'paywall' ? (
-          <div className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
-              <div className="lg:col-span-7">
-                <PaywallControlCard
-                  liveConfig={livePaywall}
-                  draftConfig={draftPaywall}
-                  onDraftChange={setDraftPaywall}
-                  note={paywallNote}
-                  onNoteChange={setPaywallNote}
-                  updatedBy={paywallItem?.updated_by ?? ''}
-                  updatedAt={paywallItem?.updated_at ?? ''}
-                  usingFallbackDefault={!paywallItem && !loadingConfigs}
-                  saving={savingPaywall}
-                  onSave={handleSavePaywall}
-                  onReset={() => {
-                    setDraftPaywall({ ...livePaywall });
-                    setPaywallNote('');
-                  }}
+            {activeTab === 'paywall' ? (
+              <div className="space-y-6">
+                <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
+                  <div className="lg:col-span-7">
+                    <PaywallControlCard
+                      liveConfig={livePaywall}
+                      draftConfig={draftPaywall}
+                      onDraftChange={setDraftPaywall}
+                      note={paywallNote}
+                      onNoteChange={setPaywallNote}
+                      updatedBy={paywallItem?.updated_by ?? ''}
+                      updatedAt={paywallItem?.updated_at ?? ''}
+                      usingFallbackDefault={!paywallItem && !loadingConfigs}
+                      saving={savingPaywall}
+                      onSave={handleSavePaywall}
+                      onReset={() => {
+                        setDraftPaywall({ ...livePaywall });
+                        setPaywallNote('');
+                      }}
+                    />
+                  </div>
+
+                  <div className="lg:col-span-5">
+                    <AppPreviewCard config={draftPaywall} isDraftModified={isDraftModified} />
+                  </div>
+                </div>
+
+                {/* Compact Recent Audit Trail right below workspace */}
+                <AuditLogPanel
+                  logs={auditLogs}
+                  loading={loadingLogs}
+                  onRefresh={() => void refreshLogs(session.apiBase, session.token)}
+                  compactLimit={5}
+                  onViewAll={() => setActiveTab('audit')}
                 />
               </div>
+            ) : null}
 
-              <div className="lg:col-span-5">
-                <AppPreviewCard config={draftPaywall} isDraftModified={isDraftModified} />
-              </div>
-            </div>
+            {activeTab === 'audit' ? (
+              <AuditLogPanel
+                logs={auditLogs}
+                loading={loadingLogs}
+                onRefresh={() => void refreshLogs(session.apiBase, session.token)}
+              />
+            ) : null}
 
-            {/* Compact Recent Audit Trail right below workspace */}
-            <AuditLogPanel
-              logs={auditLogs}
-              loading={loadingLogs}
-              onRefresh={() => void refreshLogs(session.apiBase, session.token)}
-              compactLimit={5}
-              onViewAll={() => setActiveTab('audit')}
-            />
-          </div>
-        ) : null}
-
-        {activeTab === 'audit' ? (
-          <AuditLogPanel
-            logs={auditLogs}
-            loading={loadingLogs}
-            onRefresh={() => void refreshLogs(session.apiBase, session.token)}
-          />
-        ) : null}
-
-        {activeTab === 'configs' ? (
-          <AllConfigsPanel configs={configs} onSaveConfig={handleSaveExtensionConfig} />
-        ) : null}
+            {activeTab === 'configs' ? (
+              <AllConfigsPanel configs={configs} onSaveConfig={handleSaveExtensionConfig} />
+            ) : null}
+          </>
+        )}
       </main>
     </div>
   );

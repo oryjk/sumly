@@ -11,6 +11,17 @@ import type {
   UpdateConfigPayload,
 } from '../types/config';
 import { isRecord } from '../types/config';
+import {
+  EMPTY_FEEDBACK_COUNTS,
+  type AdminFeedbackCounts,
+  type AdminFeedbackItem,
+  type AdminFeedbackListResponse,
+  type AdminFeedbackQuery,
+  type FeedbackAttachment,
+  type FeedbackCategory,
+  type FeedbackStatus,
+  type UpdateAdminFeedbackPayload,
+} from '../types/feedback';
 import { normalizeApiBase } from '../utils/storage';
 
 const REQUEST_TIMEOUT_MS = 12_000;
@@ -278,4 +289,117 @@ export async function fetchAuditLogs(
     return data.items;
   }
   return [];
+}
+
+function normalizeFeedbackCategory(value: unknown): FeedbackCategory {
+  if (value === 'suggestion' || value === 'bug' || value === 'data' || value === 'other') {
+    return value;
+  }
+  return 'other';
+}
+
+function normalizeFeedbackStatus(value: unknown): FeedbackStatus {
+  if (value === 'new' || value === 'in_progress' || value === 'resolved' || value === 'archived') {
+    return value;
+  }
+  return 'new';
+}
+
+function normalizeAttachments(raw: unknown): FeedbackAttachment[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .filter((item): item is Record<string, unknown> => isRecord(item))
+    .map((item) => ({
+      object_key: typeof item.object_key === 'string' ? item.object_key : '',
+      url: typeof item.url === 'string' ? item.url : '',
+    }))
+    .filter((item) => Boolean(item.url || item.object_key));
+}
+
+function normalizeFeedbackItem(raw: AdminFeedbackItem): AdminFeedbackItem {
+  return {
+    id: typeof raw.id === 'number' ? raw.id : Number(raw.id) || 0,
+    user_id: typeof raw.user_id === 'number' ? raw.user_id : null,
+    device_hash: typeof raw.device_hash === 'string' ? raw.device_hash : '',
+    category: normalizeFeedbackCategory(raw.category),
+    content: typeof raw.content === 'string' ? raw.content : '',
+    contact: typeof raw.contact === 'string' ? raw.contact : '',
+    attachments: normalizeAttachments(raw.attachments),
+    app_version: typeof raw.app_version === 'string' ? raw.app_version : '',
+    build_number: typeof raw.build_number === 'string' ? raw.build_number : '',
+    ios_version: typeof raw.ios_version === 'string' ? raw.ios_version : '',
+    device_model: typeof raw.device_model === 'string' ? raw.device_model : '',
+    market_mode: typeof raw.market_mode === 'string' ? raw.market_mode : '',
+    cloud_sync_enabled: Boolean(raw.cloud_sync_enabled),
+    status: normalizeFeedbackStatus(raw.status),
+    admin_note: typeof raw.admin_note === 'string' ? raw.admin_note : '',
+    admin_reply: typeof raw.admin_reply === 'string' ? raw.admin_reply : '',
+    replied_at: typeof raw.replied_at === 'string' && raw.replied_at ? raw.replied_at : null,
+    updated_by: typeof raw.updated_by === 'string' ? raw.updated_by : '',
+    created_at: typeof raw.created_at === 'string' ? raw.created_at : '',
+    updated_at: typeof raw.updated_at === 'string' ? raw.updated_at : '',
+  };
+}
+
+function normalizeFeedbackCounts(raw: unknown): AdminFeedbackCounts {
+  if (!isRecord(raw)) {
+    return { ...EMPTY_FEEDBACK_COUNTS };
+  }
+  const toCount = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
+  return {
+    all: toCount(raw.all),
+    new: toCount(raw.new),
+    in_progress: toCount(raw.in_progress),
+    resolved: toCount(raw.resolved),
+    archived: toCount(raw.archived),
+  };
+}
+
+export async function fetchAdminFeedbacks(
+  apiBase: string,
+  token: string,
+  query: AdminFeedbackQuery = {},
+): Promise<AdminFeedbackListResponse> {
+  const params = new URLSearchParams();
+  params.set('status', query.status ?? 'all');
+  params.set('category', query.category ?? 'all');
+  params.set('q', (query.q ?? '').trim());
+  const safeLimit = Math.min(100, Math.max(1, Math.floor(query.limit ?? 50)));
+  const safeOffset = Math.max(0, Math.floor(query.offset ?? 0));
+  params.set('limit', String(safeLimit));
+  params.set('offset', String(safeOffset));
+
+  const data = await adminRequest<AdminFeedbackListResponse>(
+    apiBase,
+    token,
+    `/admin/feedbacks?${params.toString()}`,
+    { method: 'GET' },
+  );
+
+  const items = Array.isArray(data?.items) ? data.items.map(normalizeFeedbackItem) : [];
+  const total =
+    typeof data?.total === 'number' && Number.isFinite(data.total) ? data.total : items.length;
+  const counts = normalizeFeedbackCounts(data?.counts);
+
+  return { items, total, counts };
+}
+
+export async function updateAdminFeedback(
+  apiBase: string,
+  token: string,
+  id: number,
+  payload: UpdateAdminFeedbackPayload,
+): Promise<AdminFeedbackItem> {
+  const data = await adminRequest<AdminFeedbackItem>(
+    apiBase,
+    token,
+    `/admin/feedbacks/${encodeURIComponent(String(id))}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
+  return normalizeFeedbackItem(data);
 }
