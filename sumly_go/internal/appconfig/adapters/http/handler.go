@@ -499,3 +499,12 @@ func adminIdentityFromContext(c *gin.Context) (domain.AdminIdentity, bool) {
 	identity, ok := raw.(domain.AdminIdentity)
 	return identity, ok
 }
+
+// AdminUsernameFromContext 提取经 AdminAuthMiddleware 鉴权后的管理员用户名。
+func AdminUsernameFromContext(c *gin.Context) string {
+	identity, ok := adminIdentityFromContext(c)
+	if !ok {
+		return ""
+	}
+	return identity.Username
+}

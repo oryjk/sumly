@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	appconfighttp "gitee.com/oryjk/sumly/sumly_go/internal/appconfig/adapters/http"
+	feedbackhttp "gitee.com/oryjk/sumly/sumly_go/internal/feedback/adapters/http"
 	sharedhttp "gitee.com/oryjk/sumly/sumly_go/internal/shared/http"
 	"github.com/gin-gonic/gin"
 )
@@ -44,9 +45,22 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 		dependencies.Macro.RegisterPublicRoutes(app)
 		dependencies.Macro.RegisterInternalRoutes(v1.Group("/internal"))
 	}
+	admin := v1.Group("/admin")
 	if dependencies.AppConfig != nil {
 		dependencies.AppConfig.RegisterPublicRoutes(app)
-		dependencies.AppConfig.RegisterAdminRoutes(v1.Group("/admin"))
+		dependencies.AppConfig.RegisterAdminRoutes(admin)
+	}
+	if dependencies.Feedback != nil {
+		dependencies.Feedback.RegisterAppRoutes(app)
+		var adminCfg feedbackhttp.AdminRouteConfig
+		if dependencies.AppConfig != nil {
+			adminCfg = feedbackhttp.AdminRouteConfig{
+				AuthMiddleware:         dependencies.AppConfig.AdminAuthMiddleware(),
+				RequirePasswordChanged: dependencies.AppConfig.RequirePasswordChangedMiddleware(),
+				OperatorFromContext:    appconfighttp.AdminUsernameFromContext,
+			}
+		}
+		dependencies.Feedback.RegisterAdminRoutes(admin, adminCfg)
 	}
 	if dependencies.Notifications != nil {
 		dependencies.Notifications.RegisterRoutes(app)

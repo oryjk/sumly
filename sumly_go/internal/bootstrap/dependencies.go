@@ -18,6 +18,11 @@ import (
 	authpostgres "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/postgres"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/wechat"
 	authapplication "gitee.com/oryjk/sumly/sumly_go/internal/auth/application"
+	feedbackfeishu "gitee.com/oryjk/sumly/sumly_go/internal/feedback/adapters/feishu"
+	feedbackhttp "gitee.com/oryjk/sumly/sumly_go/internal/feedback/adapters/http"
+	feedbackminio "gitee.com/oryjk/sumly/sumly_go/internal/feedback/adapters/minio"
+	feedbackpostgres "gitee.com/oryjk/sumly/sumly_go/internal/feedback/adapters/postgres"
+	feedbackapplication "gitee.com/oryjk/sumly/sumly_go/internal/feedback/application"
 	holdingshttp "gitee.com/oryjk/sumly/sumly_go/internal/holdings/adapters/http"
 	holdingspostgres "gitee.com/oryjk/sumly/sumly_go/internal/holdings/adapters/postgres"
 	holdingsapplication "gitee.com/oryjk/sumly/sumly_go/internal/holdings/application"
@@ -72,6 +77,7 @@ type Dependencies struct {
 	Notifications   *notificationhttp.Handler
 	Macro           *macrohttp.Handler
 	AppConfig       *appconfighttp.Handler
+	Feedback        *feedbackhttp.Handler
 	AdminStaticDir  string
 }
 
@@ -256,6 +262,27 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		},
 	)
 
+	feedbackStorage := feedbackminio.NewClient(feedbackminio.Config{
+		Endpoint:  config.FeedbackMinIOEndpoint,
+		AccessKey: config.FeedbackMinIOAccessKey,
+		SecretKey: config.FeedbackMinIOSecretKey,
+		Bucket:    config.FeedbackMinIOBucket,
+		Region:    config.FeedbackMinIORegion,
+	})
+	feedbackNotifier := feedbackfeishu.NewNotifier(config.FeishuFeedbackWebhookURL, nil)
+	feedbackService := feedbackapplication.NewService(
+		feedbackpostgres.NewRepository(pool),
+		feedbackStorage,
+		feedbackNotifier,
+		feedbackapplication.ServiceOptions{
+			MinIOPublicURLPrefix: config.FeedbackMinIOPublicURLPrefix,
+			PublicBaseURL:        config.FeedbackPublicBaseURL,
+		},
+	)
+	feedbackHandler := feedbackhttp.NewHandler(feedbackService, feedbackhttp.HandlerOptions{
+		Tokens: &authMiddleware,
+	})
+
 	return Dependencies{
 		Holdings:        holdingshttp.NewHandler(holdingsapplication.NewService(holdingspostgres.NewRepository(pool))),
 		NativeAuth:      nativeHandler,
@@ -271,6 +298,7 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		Notifications:   notificationHandler,
 		Macro:           macroHandler,
 		AppConfig:       appConfigHandler,
+		Feedback:        feedbackHandler,
 		AdminStaticDir:  config.AdminStaticDir,
 	}, closeAll, nil
 }

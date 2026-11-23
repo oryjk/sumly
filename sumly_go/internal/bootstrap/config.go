@@ -55,6 +55,15 @@ type Config struct {
 	AdminAPIToken          string
 	AdminCORSOrigins       []string
 	AdminStaticDir         string
+	// 用户反馈模块：MinIO S3 对象存储与飞书卡片通知均可选（留空不影响服务启动，绝不记录密钥或 Webhook URL）。
+	FeedbackMinIOEndpoint        string
+	FeedbackMinIOAccessKey       string
+	FeedbackMinIOSecretKey       string
+	FeedbackMinIOBucket          string
+	FeedbackMinIORegion          string
+	FeedbackMinIOPublicURLPrefix string
+	FeedbackPublicBaseURL        string
+	FeishuFeedbackWebhookURL     string
 }
 
 func LoadConfig() (Config, error) {
@@ -83,6 +92,14 @@ func LoadConfig() (Config, error) {
 		AdminAPIToken:                  strings.TrimSpace(os.Getenv("ADMIN_API_TOKEN")),
 		AdminCORSOrigins:               parseAdminCORSOrigins(os.Getenv("ADMIN_CORS_ORIGINS")),
 		AdminStaticDir:                 strings.TrimSpace(os.Getenv("ADMIN_STATIC_DIR")),
+		FeedbackMinIOEndpoint:          strings.TrimSpace(os.Getenv("FEEDBACK_MINIO_ENDPOINT")),
+		FeedbackMinIOAccessKey:         strings.TrimSpace(os.Getenv("FEEDBACK_MINIO_ACCESS_KEY")),
+		FeedbackMinIOSecretKey:         strings.TrimSpace(os.Getenv("FEEDBACK_MINIO_SECRET_KEY")),
+		FeedbackMinIOBucket:            envOrDefaultTrimmed("FEEDBACK_MINIO_BUCKET", "sumly"),
+		FeedbackMinIORegion:            envOrDefaultTrimmed("FEEDBACK_MINIO_REGION", "us-east-1"),
+		FeedbackMinIOPublicURLPrefix:   strings.TrimSpace(os.Getenv("FEEDBACK_MINIO_PUBLIC_URL_PREFIX")),
+		FeedbackPublicBaseURL:          strings.TrimSpace(os.Getenv("FEEDBACK_PUBLIC_BASE_URL")),
+		FeishuFeedbackWebhookURL:       strings.TrimSpace(os.Getenv("FEISHU_FEEDBACK_WEBHOOK_URL")),
 	}
 
 	for name, value := range map[string]string{
@@ -118,6 +135,13 @@ func parseAppEnvironment(value string) AppEnvironment {
 
 func envOrDefault(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func envOrDefaultTrimmed(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 		return value
 	}
 	return fallback

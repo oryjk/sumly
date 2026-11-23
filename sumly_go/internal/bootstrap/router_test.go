@@ -16,6 +16,10 @@ import (
 	authhttp "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/http"
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/jwt"
 	authapplication "gitee.com/oryjk/sumly/sumly_go/internal/auth/application"
+	feedbackhttp "gitee.com/oryjk/sumly/sumly_go/internal/feedback/adapters/http"
+	feedbackapp "gitee.com/oryjk/sumly/sumly_go/internal/feedback/application"
+	feedbackdomain "gitee.com/oryjk/sumly/sumly_go/internal/feedback/domain"
+	feedbackports "gitee.com/oryjk/sumly/sumly_go/internal/feedback/ports"
 	holdingshttp "gitee.com/oryjk/sumly/sumly_go/internal/holdings/adapters/http"
 	holdingsdomain "gitee.com/oryjk/sumly/sumly_go/internal/holdings/domain"
 	macrohttp "gitee.com/oryjk/sumly/sumly_go/internal/macro/adapters/http"
@@ -433,5 +437,166 @@ func TestAppConfigPublicAdminCORSAndStaticRoutes(t *testing.T) {
 	router.ServeHTTP(spaRec, httptest.NewRequest(http.MethodGet, "/admin", nil))
 	if spaRec.Code != http.StatusOK || !strings.Contains(spaRec.Body.String(), "ADMIN_INDEX") {
 		t.Fatalf("GET /admin status=%d body=%s", spaRec.Code, spaRec.Body.String())
+	}
+}
+
+type routerFeedbackUseCase struct {
+	lastUserID    *int64
+	lastUpdatedBy string
+}
+
+func (r *routerFeedbackUseCase) UploadAttachment(context.Context, []byte) (feedbackdomain.UploadedAttachment, error) {
+	return feedbackdomain.UploadedAttachment{}, feedbackdomain.ErrStorageNotConfigured
+}
+func (r *routerFeedbackUseCase) GetAttachment(context.Context, string, string) (feedbackports.ObjectStream, error) {
+	return feedbackports.ObjectStream{}, sharederror.ErrNotFound
+}
+func (r *routerFeedbackUseCase) SubmitFeedback(_ context.Context, cmd feedbackapp.SubmitFeedbackCommand) (feedbackdomain.Feedback, error) {
+	r.lastUserID = cmd.UserID
+	return feedbackdomain.Feedback{
+		ID:         1,
+		UserID:     cmd.UserID,
+		DeviceHash: cmd.DeviceHash,
+		Category:   feedbackdomain.Category(cmd.Category),
+		Content:    cmd.Content,
+		Status:     feedbackdomain.StatusNew,
+		AdminNote:  "HIDDEN_ADMIN_NOTE",
+		CreatedAt:  time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC),
+		UpdatedAt:  time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC),
+	}, nil
+}
+func (r *routerFeedbackUseCase) ListMine(_ context.Context, userID *int64, _ string, _ int) ([]feedbackdomain.Feedback, error) {
+	r.lastUserID = userID
+	return []feedbackdomain.Feedback{}, nil
+}
+func (r *routerFeedbackUseCase) ListAdmin(context.Context, feedbackapp.AdminListQuery) (feedbackports.AdminListResult, error) {
+	return feedbackports.AdminListResult{
+		Items:  []feedbackdomain.Feedback{},
+		Total:  0,
+		Counts: feedbackdomain.StatusCounts{},
+	}, nil
+}
+func (r *routerFeedbackUseCase) UpdateAdmin(_ context.Context, id int64, cmd feedbackapp.AdminUpdateCommand) (feedbackdomain.Feedback, error) {
+	r.lastUpdatedBy = cmd.UpdatedBy
+	return feedbackdomain.Feedback{
+		ID:        id,
+		Status:    feedbackdomain.StatusResolved,
+		UpdatedBy: cmd.UpdatedBy,
+		CreatedAt: time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC),
+	}, nil
+}
+
+type routerAdminAuth struct {
+	mustChangeByToken map[string]appconfigdomain.AdminIdentity
+}
+
+func (r routerAdminAuth) Login(context.Context, string, string) (appconfigdomain.AdminLoginResult, error) {
+	return appconfigdomain.AdminLoginResult{}, sharederror.ErrUnauthorized
+}
+func (r routerAdminAuth) Authenticate(_ context.Context, rawToken string) (appconfigdomain.AdminIdentity, error) {
+	if id, ok := r.mustChangeByToken[rawToken]; ok {
+		return id, nil
+	}
+	return appconfigdomain.AdminIdentity{}, sharederror.ErrUnauthorized
+}
+func (r routerAdminAuth) Logout(context.Context, appconfigdomain.AdminIdentity) error { return nil }
+func (r routerAdminAuth) ChangePassword(context.Context, appconfigdomain.AdminIdentity, string, string) (appconfigdomain.ChangePasswordResult, error) {
+	return appconfigdomain.ChangePasswordResult{}, nil
+}
+
+func TestFeedbackRoutesWiringAuthAndPasswordGate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tokens, err := jwt.NewService(routerTestSecret, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authMW := authhttp.NewMiddleware(tokens)
+	userJWT, err := tokens.IssueUser(context.Background(), 77)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fbUC := &routerFeedbackUseCase{}
+	adminAuth := routerAdminAuth{
+		mustChangeByToken: map[string]appconfigdomain.AdminIdentity{
+			"initial-admin-token": {UserID: 1, Username: "admin", MustChangePassword: true},
+			"ready-admin-token":   {UserID: 2, Username: "ops-admin", MustChangePassword: false},
+		},
+	}
+
+	router := NewRouter(Dependencies{
+		AuthMiddleware: &authMW,
+		AppConfig: appconfighttp.NewHandler(routerAppConfigUseCase{}, appconfighttp.HandlerOptions{
+			AdminAuth: adminAuth,
+		}),
+		Feedback: feedbackhttp.NewHandler(fbUC, feedbackhttp.HandlerOptions{
+			Tokens: &authMW,
+		}),
+	})
+
+	// App POST feedback as authenticated user extracts user_id=77
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/app/feedback", strings.NewReader(`{"device_hash":"device_router_01","category":"bug","content":"测试路由提交反馈内容"}`))
+	req.Header.Set("Authorization", "Bearer "+userJWT)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || fbUC.lastUserID == nil || *fbUC.lastUserID != 77 {
+		t.Fatalf("auth feedback submit status=%d user=%v body=%s", rec.Code, fbUC.lastUserID, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "HIDDEN_ADMIN_NOTE") {
+		t.Fatalf("app feedback response leaked admin_note: %s", rec.Body.String())
+	}
+
+	// Admin CORS preflight on /api/v1/admin/feedbacks/1
+	optReq := httptest.NewRequest(http.MethodOptions, "/api/v1/admin/feedbacks/1", nil)
+	optReq.Header.Set("Origin", "https://oryjk.cn")
+	optReq.Header.Set("Access-Control-Request-Method", http.MethodPatch)
+	optRec := httptest.NewRecorder()
+	router.ServeHTTP(optRec, optReq)
+	if optRec.Code != http.StatusNoContent || optRec.Header().Get("Access-Control-Allow-Origin") != "https://oryjk.cn" {
+		t.Fatalf("admin feedback preflight status=%d origin=%q", optRec.Code, optRec.Header().Get("Access-Control-Allow-Origin"))
+	}
+
+	// Admin unauthenticated -> 401
+	unauthRec := httptest.NewRecorder()
+	router.ServeHTTP(unauthRec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/feedbacks", nil))
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth admin feedbacks status=%d want 401", unauthRec.Code)
+	}
+
+	// Admin with MustChangePassword=true can GET but is blocked on PATCH with 403 (40301)
+	initListReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/feedbacks", nil)
+	initListReq.Header.Set("Authorization", "Bearer initial-admin-token")
+	initListRec := httptest.NewRecorder()
+	router.ServeHTTP(initListRec, initListReq)
+	if initListRec.Code != http.StatusOK {
+		t.Fatalf("initial admin GET feedbacks status=%d body=%s", initListRec.Code, initListRec.Body.String())
+	}
+
+	initPatchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/feedbacks/1", strings.NewReader(`{"status":"resolved"}`))
+	initPatchReq.Header.Set("Authorization", "Bearer initial-admin-token")
+	initPatchRec := httptest.NewRecorder()
+	router.ServeHTTP(initPatchRec, initPatchReq)
+	if initPatchRec.Code != http.StatusForbidden || !strings.Contains(initPatchRec.Body.String(), "40301") {
+		t.Fatalf("initial admin PATCH feedbacks status=%d body=%s", initPatchRec.Code, initPatchRec.Body.String())
+	}
+
+	// Ready admin can PATCH and updated_by is populated from admin identity
+	readyPatchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/feedbacks/1", strings.NewReader(`{"status":"resolved"}`))
+	readyPatchReq.Header.Set("Authorization", "Bearer ready-admin-token")
+	readyPatchRec := httptest.NewRecorder()
+	router.ServeHTTP(readyPatchRec, readyPatchReq)
+	if readyPatchRec.Code != http.StatusOK || fbUC.lastUpdatedBy != "ops-admin" {
+		t.Fatalf("ready admin PATCH status=%d updatedBy=%q body=%s", readyPatchRec.Code, fbUC.lastUpdatedBy, readyPatchRec.Body.String())
+	}
+
+	// Without AppConfig, admin feedback route fails closed with 503
+	failClosedRouter := NewRouter(Dependencies{
+		Feedback: feedbackhttp.NewHandler(fbUC, feedbackhttp.HandlerOptions{}),
+	})
+	fcRec := httptest.NewRecorder()
+	failClosedRouter.ServeHTTP(fcRec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/feedbacks", nil))
+	if fcRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("fail-closed admin feedback status=%d want 503", fcRec.Code)
 	}
 }

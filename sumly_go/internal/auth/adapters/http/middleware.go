@@ -36,6 +36,13 @@ func (m Middleware) RequireAdmin() gin.HandlerFunc {
 	return m.require(sharedauth.ActorAdmin)
 }
 
+func (m Middleware) Parse(ctx context.Context, rawToken string) (sharedauth.Actor, error) {
+	if m.tokens == nil {
+		return sharedauth.Actor{}, sharederror.ErrUnauthorized
+	}
+	return m.tokens.Parse(ctx, rawToken)
+}
+
 func (m Middleware) RequireActiveUser(checker ActiveUserChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		actor, ok := ActorFromContext(c)

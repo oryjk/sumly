@@ -169,3 +169,53 @@ func TestLoadConfigAdminDefaultsAndOverrides(t *testing.T) {
 		t.Fatalf("unexpected AdminCORSOrigins override: %v", cfg.AdminCORSOrigins)
 	}
 }
+
+func TestLoadConfigFeedbackDefaultsAndOverrides(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("JWT_SECRET", "secret")
+	t.Setenv("WECHAT_APP_ID", "appid")
+	t.Setenv("WECHAT_APP_SECRET", "appsecret")
+	t.Setenv("FEEDBACK_MINIO_ENDPOINT", "")
+	t.Setenv("FEEDBACK_MINIO_ACCESS_KEY", "")
+	t.Setenv("FEEDBACK_MINIO_SECRET_KEY", "")
+	t.Setenv("FEEDBACK_MINIO_BUCKET", "")
+	t.Setenv("FEEDBACK_MINIO_REGION", "")
+	t.Setenv("FEEDBACK_MINIO_PUBLIC_URL_PREFIX", "")
+	t.Setenv("FEEDBACK_PUBLIC_BASE_URL", "")
+	t.Setenv("FEISHU_FEEDBACK_WEBHOOK_URL", "")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.FeedbackMinIOBucket != "sumly" || cfg.FeedbackMinIORegion != "us-east-1" {
+		t.Fatalf("unexpected feedback defaults: bucket=%q region=%q", cfg.FeedbackMinIOBucket, cfg.FeedbackMinIORegion)
+	}
+	if cfg.FeedbackMinIOEndpoint != "" || cfg.FeishuFeedbackWebhookURL != "" {
+		t.Fatalf("expected empty optional feedback config, got %+v", cfg)
+	}
+
+	t.Setenv("FEEDBACK_MINIO_ENDPOINT", "  https://minio.example.com/  ")
+	t.Setenv("FEEDBACK_MINIO_ACCESS_KEY", "  ak-test ")
+	t.Setenv("FEEDBACK_MINIO_SECRET_KEY", " sk-test ")
+	t.Setenv("FEEDBACK_MINIO_BUCKET", " custom-bucket ")
+	t.Setenv("FEEDBACK_MINIO_REGION", " ap-east-1 ")
+	t.Setenv("FEEDBACK_MINIO_PUBLIC_URL_PREFIX", " https://cdn.example.com/sumly ")
+	t.Setenv("FEEDBACK_PUBLIC_BASE_URL", " https://oryjk.cn/sumly ")
+	t.Setenv("FEISHU_FEEDBACK_WEBHOOK_URL", " https://open.feishu.cn/open-apis/bot/v2/hook/test-only ")
+
+	cfg, err = LoadConfig()
+	if err != nil {
+		t.Fatalf("load config overrides: %v", err)
+	}
+	if cfg.FeedbackMinIOEndpoint != "https://minio.example.com/" ||
+		cfg.FeedbackMinIOAccessKey != "ak-test" ||
+		cfg.FeedbackMinIOSecretKey != "sk-test" ||
+		cfg.FeedbackMinIOBucket != "custom-bucket" ||
+		cfg.FeedbackMinIORegion != "ap-east-1" ||
+		cfg.FeedbackMinIOPublicURLPrefix != "https://cdn.example.com/sumly" ||
+		cfg.FeedbackPublicBaseURL != "https://oryjk.cn/sumly" ||
+		cfg.FeishuFeedbackWebhookURL != "https://open.feishu.cn/open-apis/bot/v2/hook/test-only" {
+		t.Fatalf("unexpected feedback overrides: %+v", cfg)
+	}
+}
