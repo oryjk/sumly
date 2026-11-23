@@ -5,7 +5,7 @@ import Testing
 import UIKit
 @testable import Sumly
 
-@Suite("GoldKeyboardDismiss")
+@Suite("GoldKeyboardDismiss", .serialized)
 struct GoldKeyboardDismissTests {
     @Test("含底部操作栏的表单禁用键盘 toolbar，并按键盘显隐切换内嵌收起按钮与主按钮宽度")
     func inlineDismissBarLayoutTransitions() {
@@ -158,9 +158,14 @@ struct GoldKeyboardDismissTests {
         #expect((gramsField.inputAccessoryView?.bounds.height ?? 0) == 0)
         #expect(Self.containsToolbar(in: gramsField.inputAccessoryView) == false)
 
+        window.makeKeyAndVisible()
         gramsField.becomeFirstResponder()
-        try await Task.sleep(for: .milliseconds(400))
+        try await Task.sleep(for: .milliseconds(120))
         controller.view.layoutIfNeeded()
+        if !gramsField.isFirstResponder {
+            window.makeKeyAndVisible()
+            gramsField.becomeFirstResponder()
+        }
         #expect(gramsField.isFirstResponder == true)
         #expect((gramsField.inputAccessoryView?.bounds.height ?? 0) == 0)
         #expect(Self.containsToolbar(in: gramsField.inputAccessoryView) == false)

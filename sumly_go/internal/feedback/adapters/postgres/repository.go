@@ -140,8 +140,8 @@ func (r *Repository) ListAdmin(ctx context.Context, filter ports.AdminListFilter
 		p := nextArg(likePattern)
 		exact := nextArg(filter.Query)
 		whereParts = append(whereParts, fmt.Sprintf(
-			`(content ILIKE %s ESCAPE '\' OR contact ILIKE %s ESCAPE '\' OR device_hash ILIKE %s ESCAPE '\' OR admin_note ILIKE %s ESCAPE '\' OR admin_reply ILIKE %s ESCAPE '\' OR CAST(id AS TEXT) = %s)`,
-			p, p, p, p, p, exact,
+			`(content ILIKE %s ESCAPE '\' OR contact ILIKE %s ESCAPE '\' OR device_hash ILIKE %s ESCAPE '\' OR device_model ILIKE %s ESCAPE '\' OR admin_note ILIKE %s ESCAPE '\' OR admin_reply ILIKE %s ESCAPE '\' OR CAST(id AS TEXT) = %s)`,
+			p, p, p, p, p, p, exact,
 		))
 	}
 

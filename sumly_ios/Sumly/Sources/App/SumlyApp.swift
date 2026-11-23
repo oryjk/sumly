@@ -4,6 +4,10 @@ import AuthenticationServices
 
 @main
 struct SumlyApp: App {
+    private static var isRunningUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
     /// 旧游客持仓容器；登录账户另有隔离的离线缓存。
     private static let holdingsContainer: ModelContainer = {
         do {
@@ -16,11 +20,15 @@ struct SumlyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            GoldRootView(guestContainer: Self.holdingsContainer)
-                .tint(GoldTheme.gold)
-                .preferredColorScheme(.dark)
+            if Self.isRunningUnitTests {
+                Color.clear
+            } else {
+                GoldRootView(guestContainer: Self.holdingsContainer)
+                    .tint(GoldTheme.gold)
+                    .preferredColorScheme(.dark)
+                    .modelContainer(Self.holdingsContainer)
+            }
         }
-        .modelContainer(Self.holdingsContainer)
     }
 }
 
