@@ -3,12 +3,17 @@ import SwiftUI
 struct AccountSettingsView: View {
     @Bindable var session: AuthSession
     var cloud: HoldingsCloud? = nil
+    @AppStorage("market.basis") private var marketBasisRaw = GoldMarketBasis.domestic.rawValue
     @State private var confirmImport = false
     @State private var confirmConflict = false
     @State private var clearingCache = false
     @State private var cacheNotice: String?
     @State private var allowedEmailLink: AppleEmailLinkScope?
     @State private var selectedEmailLink: AppleEmailLinkScope?
+
+    private var marketBasis: GoldMarketBasis {
+        GoldMarketBasis(rawValue: marketBasisRaw) ?? .domestic
+    }
 
     private var cloudBadge: AccountCloudStatusBadge {
         AccountCloudStatusBadge.from(session: session, cloud: cloud)
@@ -22,6 +27,7 @@ struct AccountSettingsView: View {
                     crossDeviceLoginSection(scope: scope)
                 }
                 storageCacheSection
+                feedbackSection
                 aboutAndComplianceSection
             }
             .padding(.horizontal, 16)
@@ -303,7 +309,45 @@ struct AccountSettingsView: View {
         }
     }
 
-    // MARK: - 4. 关于与备案
+    // MARK: - 4. 意见与反馈
+
+    private var feedbackSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AccountSectionHeader(title: FeedbackCopy.entryTitle)
+
+            NavigationLink {
+                FeedbackCenterView(session: session, marketBasis: marketBasis)
+                    .goldTabBarContentSafeArea()
+            } label: {
+                HStack(spacing: 12) {
+                    AccountRowIconBadge(systemName: "bubble.left.and.text.bubble.right.fill")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(FeedbackCopy.entryTitle)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(GoldTheme.text)
+                        Text(FeedbackCopy.entrySubtitle)
+                            .font(.caption)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(GoldTheme.textFaint)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.feedback")
+            .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+            .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+        }
+    }
+
+    // MARK: - 5. 关于与备案
 
     private var aboutAndComplianceSection: some View {
         VStack(alignment: .leading, spacing: 8) {

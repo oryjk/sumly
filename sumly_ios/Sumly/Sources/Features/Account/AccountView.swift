@@ -11,7 +11,9 @@ struct AccountView: View {
     var onOpenOnboarding: (() -> Void)? = nil
 
     @AppStorage("holdings.hideAmounts") private var hideAmounts = false
+    @AppStorage("market.basis") private var marketBasisRaw = GoldMarketBasis.domestic.rawValue
     @State private var showSettings = false
+    @State private var showFeedback = false
     @State private var showLogin = false
     @State private var showLocalPaywall = false
     @State private var reauthentication: AccountDeletionIntent?
@@ -33,6 +35,13 @@ struct AccountView: View {
                 .navigationDestination(isPresented: $showSettings) {
                     AccountSettingsView(session: session, cloud: cloud)
                         .goldTabBarContentSafeArea()
+                }
+                .navigationDestination(isPresented: $showFeedback) {
+                    FeedbackCenterView(
+                        session: session,
+                        marketBasis: GoldMarketBasis(rawValue: marketBasisRaw) ?? .domestic
+                    )
+                    .goldTabBarContentSafeArea()
                 }
         }
         .tint(GoldTheme.gold)
@@ -388,6 +397,18 @@ struct AccountView: View {
             AccountSectionHeader(title: AccountProfileCopy.supportSectionTitle)
 
             VStack(spacing: 0) {
+                Button { showFeedback = true } label: {
+                    actionRowContent(
+                        icon: "bubble.left.and.text.bubble.right.fill",
+                        title: FeedbackCopy.entryTitle,
+                        subtitle: FeedbackCopy.entrySubtitle
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("account.feedback")
+
+                rowDivider
+
                 Link(destination: URL(string: "https://oryjk.cn/sumly/privacy")!) {
                     actionRowContent(
                         icon: "hand.raised.fill",
