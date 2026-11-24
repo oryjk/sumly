@@ -40,6 +40,21 @@ enum MarketRange: String, CaseIterable {
     case tenYears = "近十年"
     case history = "1900年至今"
 
+    var localizedTitle: String {
+        switch self {
+        case .realtime: L10n.tr("实时")
+        case .month: L10n.tr("近一月")
+        case .quarter: L10n.tr("近三月")
+        case .yearToDate: L10n.tr("今年以来")
+        case .year: L10n.tr("近一年")
+        case .twoYears: L10n.tr("近两年")
+        case .threeYears: L10n.tr("近三年")
+        case .fiveYears: L10n.tr("近五年")
+        case .tenYears: L10n.tr("近十年")
+        case .history: L10n.tr("1900年至今")
+        }
+    }
+
     func dateBounds(now: Date = .now, calendar: Calendar = Calendar(identifier: .gregorian)) -> ClosedRange<Date>? {
         let end = ChartViewport.noon(calendar.date(byAdding: .day, value: -1, to: now)!, calendar: calendar)
         let start: Date
@@ -223,12 +238,12 @@ final class MarketHomeViewModel {
     }
 
     var message: String? {
-        if loading { return "正在获取行情…" }
-        if quoteFailed { return quote == nil ? "行情加载失败，点击重试" : "刷新失败，显示上次行情 · 点击重试" }
-        if price == nil { return "人民币报价暂不可用 · 点击重试" }
-        if range == .history && historyLoading { return "正在加载百年走势…" }
-        if range == .history && historyFailed { return "历史走势加载失败 · 点击重试" }
-        if range == .realtime ? realtimeFailed : (range == .history ? historyFailed : dailyFailed) { return "走势刷新失败 · 点击重试" }
+        if loading { return L10n.tr("正在获取行情…") }
+        if quoteFailed { return quote == nil ? L10n.tr("行情加载失败，点击重试") : L10n.tr("刷新失败，显示上次行情 · 点击重试") }
+        if price == nil { return L10n.tr("人民币报价暂不可用 · 点击重试") }
+        if range == .history && historyLoading { return L10n.tr("正在加载百年走势…") }
+        if range == .history && historyFailed { return L10n.tr("历史走势加载失败 · 点击重试") }
+        if range == .realtime ? realtimeFailed : (range == .history ? historyFailed : dailyFailed) { return L10n.tr("走势刷新失败 · 点击重试") }
         let timing = realtimeTiming
         if range == .realtime, timing.state == .paused, let date = quote?.asOf ?? timing.latestSample {
             return timing.pausedMessage(for: date)
@@ -237,7 +252,7 @@ final class MarketHomeViewModel {
             return timing.pausedMessage(for: quote.asOf)
         }
         if range == .realtime {
-            if realtime.isEmpty { return "暂无最新走势，请稍后再试" }
+            if realtime.isEmpty { return L10n.tr("暂无最新走势，请稍后再试") }
         }
         return nil
     }

@@ -16,12 +16,12 @@ enum GoldMarketSessionStatus: Sendable, Equatable {
 
     func shortTitle(for basis: GoldMarketBasis) -> String {
         switch self {
-        case .weekendClosed: "周末休市"
-        case .middayBreak: "午间休盘"
-        case .dailyBreak: "每日结算休盘"
-        case .closed: "已收盘"
-        case .holidayClosed: "当前休市"
-        case .awaitingTrade: basis == .domestic ? "暂无新成交" : "报价暂未刷新"
+        case .weekendClosed: L10n.tr("周末休市")
+        case .middayBreak: L10n.tr("午间休盘")
+        case .dailyBreak: L10n.tr("每日结算休盘")
+        case .closed: L10n.tr("已收盘")
+        case .holidayClosed: L10n.tr("当前休市")
+        case .awaitingTrade: basis == .domestic ? L10n.tr("暂无新成交") : L10n.tr("报价暂未刷新")
         }
     }
 
@@ -130,18 +130,22 @@ struct RealtimeChartTiming: Sendable {
     var caption: String {
         switch state {
         case .live:
-            return isSessionWindow ? "交易中 · 本交易时段分时" : "交易中 · 最近 20 分钟"
+            return isSessionWindow ? L10n.tr("交易中 · 本交易时段分时") : L10n.tr("交易中 · 最近 20 分钟")
         case .paused:
             let status = sessionStatus
             let title = status.shortTitle(for: basis)
             switch status {
             case .awaitingTrade:
-                return isSessionWindow ? "\(title) · 本交易时段分时" : "\(title) · 最近可用走势"
+                return isSessionWindow
+                    ? L10n.fmt("%@ · 本交易时段分时", title)
+                    : L10n.fmt("%@ · 最近可用走势", title)
             case .weekendClosed, .middayBreak, .dailyBreak, .closed, .holidayClosed:
-                return isSessionWindow ? "\(title) · 展示最近交易时段分时" : "\(title) · 展示收盘前走势"
+                return isSessionWindow
+                    ? L10n.fmt("%@ · 展示最近交易时段分时", title)
+                    : L10n.fmt("%@ · 展示收盘前走势", title)
             }
         case .empty:
-            return "暂无实时走势"
+            return L10n.tr("暂无实时走势")
         }
     }
 
@@ -151,9 +155,9 @@ struct RealtimeChartTiming: Sendable {
         let title = status.shortTitle(for: basis)
         switch status {
         case .weekendClosed, .closed:
-            return "\(title) · 收盘价 \(shortTime)"
+            return L10n.fmt("%@ · 收盘价 %@", title, shortTime)
         case .middayBreak, .dailyBreak, .holidayClosed, .awaitingTrade:
-            return "\(title) · 最近报价 \(shortTime)"
+            return L10n.fmt("%@ · 最近报价 %@", title, shortTime)
         }
     }
 

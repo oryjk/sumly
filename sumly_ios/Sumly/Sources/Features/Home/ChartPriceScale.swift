@@ -3,6 +3,13 @@ import Foundation
 enum ChartPriceScale: String, CaseIterable {
     case linear = "线性"
     case logarithmic = "对数"
+
+    var localizedTitle: String {
+        switch self {
+        case .linear: L10n.tr("线性")
+        case .logarithmic: L10n.tr("对数")
+        }
+    }
     func value(_ price: Double) -> Double? {
         guard price.isFinite, price > 0 else { return nil }
         return self == .linear ? price : log10(price)

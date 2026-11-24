@@ -176,20 +176,17 @@ struct ChartRangeNavigator: View {
                 .accessibilityHidden(true)
 
                 // Accessibility elements match the expanded 48pt handle and window targets.
-                accessibleHandle("开始", part: .start, range: layout.startHandleHitRange, height: geo.size.height, span: span)
-                accessibleHandle("结束", part: .end, range: layout.endHandleHitRange, height: geo.size.height, span: span)
+                accessibleHandle(L10n.tr("开始时间"), part: .start, range: layout.startHandleHitRange, height: geo.size.height, span: span)
+                accessibleHandle(L10n.tr("结束时间"), part: .end, range: layout.endHandleHitRange, height: geo.size.height, span: span)
                 if let windowRange = layout.windowHitRange {
+                    let dateFormat = Date.FormatStyle(date: .abbreviated, time: daily ? .omitted : .shortened, locale: AppLanguage.currentLocale)
                     Color.clear
                         .frame(width: windowRange.upperBound - windowRange.lowerBound, height: geo.size.height)
                         .offset(x: windowRange.lowerBound)
                         .allowsHitTesting(false)
                         .accessibilityElement()
-                        .accessibilityLabel("移动时间区间")
-                        .accessibilityValue(
-                            window.lowerBound.formatted(date: .abbreviated, time: daily ? .omitted : .shortened)
-                                + "至"
-                                + window.upperBound.formatted(date: .abbreviated, time: daily ? .omitted : .shortened)
-                        )
+                        .accessibilityLabel(L10n.tr("移动时间区间"))
+                        .accessibilityValue(L10n.fmt("%@至%@", window.lowerBound.formatted(dateFormat), window.upperBound.formatted(dateFormat)))
                         .accessibilityAdjustableAction { direction in
                             begin()
                             let fraction = window.upperBound.timeIntervalSince(window.lowerBound) / span
@@ -260,7 +257,7 @@ struct ChartRangeNavigator: View {
             .offset(x: range.lowerBound)
             .allowsHitTesting(false)
             .accessibilityElement()
-            .accessibilityLabel(label + "时间")
+            .accessibilityLabel(label)
             .accessibilityAdjustableAction { direction in
                 begin()
                 move(part, (direction == .increment ? 1 : -1) * (daily ? 86400 : 30) / span)

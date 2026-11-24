@@ -67,7 +67,22 @@ enum ChartPurchaseMarkerPresentation: Sendable {
 
     static func laborFeeTagText(_ laborFee: Double, hideAmounts: Bool) -> String? {
         guard laborFee.isFinite, laborFee > 0 else { return nil }
-        return hideAmounts ? "含工费 ••••" : "含工费 ¥\(laborFee.moneyText)"
+        return hideAmounts ? L10n.tr("含工费 ••••") : L10n.fmt("含工费 ¥%@", laborFee.moneyText)
+    }
+
+    static func localizedAssetType(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if let known = GoldAssetType(rawValue: trimmed) {
+            switch known {
+            case .bean: return L10n.tr("金豆")
+            case .bar: return L10n.tr("金条")
+            case .jewelry: return L10n.tr("金饰")
+            case .accumulation: return L10n.tr("积存金")
+            case .other: return L10n.tr("其他")
+            }
+        }
+        return trimmed
     }
 
     static func spreadMetric(
@@ -80,8 +95,8 @@ enum ChartPurchaseMarkerPresentation: Sendable {
             return nil
         }
         let anchorLabel: String = {
-            if isPendingCloseAnchor { return "最近收盘" }
-            return isInterpolatedMarketAnchor ? "临近交易日" : "当日大盘"
+            if isPendingCloseAnchor { return L10n.tr("最近收盘") }
+            return isInterpolatedMarketAnchor ? L10n.tr("临近交易日") : L10n.tr("当日大盘")
         }()
         let diff = unitCost - anchor
         let pct = (diff / anchor) * 100
@@ -89,8 +104,8 @@ enum ChartPurchaseMarkerPresentation: Sendable {
             return SpreadMetric(
                 diff: 0,
                 percent: 0,
-                capsuleText: "与\(anchorLabel)持平 (¥0.00/g)",
-                compactText: isPendingCloseAnchor ? "与最近收盘持平" : "与大盘持平",
+                capsuleText: L10n.fmt("与%@持平 (¥0.00/g)", anchorLabel),
+                compactText: isPendingCloseAnchor ? L10n.tr("与最近收盘持平") : L10n.tr("与大盘持平"),
                 isPremium: false,
                 isDiscount: false,
                 sentiment: .neutral
@@ -102,8 +117,8 @@ enum ChartPurchaseMarkerPresentation: Sendable {
             return SpreadMetric(
                 diff: diff,
                 percent: pct,
-                capsuleText: "较\(anchorLabel)多花 ¥\(absDiff)/g（贵 \(absPct)%）",
-                compactText: "多花 ¥\(absDiff)",
+                capsuleText: L10n.fmt("较%@多花 ¥%@/g（贵 %@%%）", anchorLabel, absDiff, absPct),
+                compactText: L10n.fmt("多花 ¥%@", absDiff),
                 isPremium: true,
                 isDiscount: false,
                 sentiment: .unfavorable
@@ -114,8 +129,8 @@ enum ChartPurchaseMarkerPresentation: Sendable {
             return SpreadMetric(
                 diff: diff,
                 percent: pct,
-                capsuleText: "较\(anchorLabel)省 ¥\(absDiff)/g（省 \(absPct)%）",
-                compactText: "省 ¥\(absDiff)",
+                capsuleText: L10n.fmt("较%@省 ¥%@/g（省 %@%%）", anchorLabel, absDiff, absPct),
+                compactText: L10n.fmt("省 ¥%@", absDiff),
                 isPremium: false,
                 isDiscount: true,
                 sentiment: .favorable
@@ -128,10 +143,10 @@ enum ChartPurchaseMarkerPresentation: Sendable {
         isPendingCloseAnchor: Bool = false
     ) -> String? {
         if isPendingCloseAnchor {
-            return "休市/待收盘 · 参考最近收盘"
+            return L10n.tr("休市/待收盘 · 参考最近收盘")
         }
         if isInterpolatedMarketAnchor {
-            return "休市 · 参考临近交易日"
+            return L10n.tr("休市 · 参考临近交易日")
         }
         return nil
     }
@@ -141,9 +156,9 @@ enum ChartPurchaseMarkerPresentation: Sendable {
         isPendingCloseAnchor: Bool = false
     ) -> String {
         if isPendingCloseAnchor {
-            return "最近收盘参考价"
+            return L10n.tr("最近收盘参考价")
         }
-        return isInterpolatedMarketAnchor ? "临近交易日参考" : "当日大盘参考价"
+        return isInterpolatedMarketAnchor ? L10n.tr("临近交易日参考") : L10n.tr("当日大盘参考价")
     }
 
     static func explanationText(
@@ -151,12 +166,12 @@ enum ChartPurchaseMarkerPresentation: Sendable {
         isPendingCloseAnchor: Bool = false
     ) -> String {
         if isPendingCloseAnchor {
-            return "买入日尚未产生收盘日线（休市或盘中），红点暂挂靠于最近交易日末端并参考该日收盘价；次交易日收盘后自动归位。"
+            return L10n.tr("买入日尚未产生收盘日线（休市或盘中），红点暂挂靠于最近交易日末端并参考该日收盘价；次交易日收盘后自动归位。")
         }
         if isInterpolatedMarketAnchor {
-            return "买入日为非交易日，大盘参考价按前后临近交易日收盘价插值估算；红点为计入工费与溢价后的实际买入综合单价，虚线长度即与参考价差额。"
+            return L10n.tr("买入日为非交易日，大盘参考价按前后临近交易日收盘价插值估算；红点为计入工费与溢价后的实际买入综合单价，虚线长度即与参考价差额。")
         }
-        return "红点位置为计入工费与溢价后的实际买入综合单价，图中垂直虚线长度即与当日大盘参考价的差额。"
+        return L10n.tr("红点位置为计入工费与溢价后的实际买入综合单价，图中垂直虚线长度即与当日大盘参考价的差额。")
     }
 
     static func shortDateText(_ date: Date, calendar: Calendar = .current) -> String {
@@ -166,10 +181,15 @@ enum ChartPurchaseMarkerPresentation: Sendable {
     }
 
     static func fullDateText(_ date: Date, calendar: Calendar = .current) -> String {
-        let year = calendar.component(.year, from: date)
-        let month = calendar.component(.month, from: date)
-        let day = calendar.component(.day, from: date)
-        return String(format: "%04d年%02d月%02d日", year, month, day)
+        if AppLanguage.resolvedLanguageCode == AppLanguage.zhHans.rawValue {
+            let year = String(format: "%04d", calendar.component(.year, from: date))
+            let month = String(format: "%02d", calendar.component(.month, from: date))
+            let day = String(format: "%02d", calendar.component(.day, from: date))
+            return L10n.fmt("%@年%@月%@日", year, month, day)
+        }
+        var style = Date.FormatStyle(date: .abbreviated, time: .omitted, locale: AppLanguage.currentLocale)
+        style.timeZone = calendar.timeZone
+        return date.formatted(style)
     }
 
     static func inspectionTooltip(
@@ -191,16 +211,16 @@ enum ChartPurchaseMarkerPresentation: Sendable {
             if match.isSameDay { return nil }
             let shortDate = shortDateText(marker.date, calendar: calendar)
             if match.resolved.isPendingCloseAnchor {
-                return "\(shortDate) 买入 · 待收盘参考"
+                return L10n.fmt("%@ 买入 · 待收盘参考", shortDate)
             }
-            return "\(shortDate) 买入 · 休市参考"
+            return L10n.fmt("%@ 买入 · 休市参考", shortDate)
         }()
 
         if marker.count >= 2 {
-            let headline = "买入 \(marker.count) 笔 · 共 \(gramsText(marker.totalGrams, hideAmounts: hideAmounts, compact: true))"
-            let primaryMetric = "均价 ¥\(marker.averageUnitPrice.moneyText)/g"
+            let headline = L10n.fmt("买入 %lld 笔 · 共 %@", Int64(marker.count), gramsText(marker.totalGrams, hideAmounts: hideAmounts, compact: true))
+            let primaryMetric = L10n.fmt("均价 ¥%@/g", marker.averageUnitPrice.moneyText)
             let secondaryMetric: String? = abs(marker.maxUnitCost - marker.minUnitCost) >= 0.01
-                ? "单笔 ¥\(marker.minUnitCost.moneyText)~¥\(marker.maxUnitCost.moneyText)"
+                ? L10n.fmt("单笔 ¥%@~¥%@", marker.minUnitCost.moneyText, marker.maxUnitCost.moneyText)
                 : nil
             return InspectionTooltipContent(
                 isMultiple: true,
@@ -209,24 +229,25 @@ enum ChartPurchaseMarkerPresentation: Sendable {
                 primaryMetric: primaryMetric,
                 secondaryMetric: secondaryMetric,
                 spread: spread,
-                footerHint: "轻点红点查看明细"
+                footerHint: L10n.tr("轻点红点查看明细")
             )
         } else {
             let item = marker.items.first
-            let typeText = item?.assetType.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let rawType = item?.assetType.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let typeText = localizedAssetType(rawType)
             let brandText = item?.brand.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let titlePart: String = {
-                if !typeText.isEmpty && !brandText.isEmpty && brandText != typeText {
+                if !typeText.isEmpty && !brandText.isEmpty && brandText != rawType && brandText != typeText {
                     return "\(typeText) · \(brandText)"
                 }
                 if !brandText.isEmpty { return brandText }
                 if !typeText.isEmpty { return typeText }
-                return "买入记录"
+                return L10n.tr("买入记录")
             }()
             let grams = item?.grams ?? marker.totalGrams
             let headline = "\(titlePart) · \(gramsText(grams, hideAmounts: hideAmounts, compact: true))"
             let unitCost = item?.effectiveUnitCost ?? marker.averageUnitPrice
-            let primaryMetric = "买入 ¥\(unitCost.moneyText)/g"
+            let primaryMetric = L10n.fmt("买入 ¥%@/g", unitCost.moneyText)
             return InspectionTooltipContent(
                 isMultiple: false,
                 dateBadge: dateBadge,
@@ -287,7 +308,7 @@ struct ChartPurchaseMarkerSheet: View {
         return [
             MarketHoldingOverlay.PurchaseItem(
                 id: UUID(),
-                assetType: "其他",
+                assetType: GoldAssetType.other.rawValue,
                 brand: "",
                 grams: marker.totalGrams,
                 unitPrice: marker.averageUnitPrice,
@@ -316,11 +337,11 @@ struct ChartPurchaseMarkerSheet: View {
                 .padding(.bottom, 20)
             }
             .background(GoldTheme.background)
-            .navigationTitle("买入点位明细")
+            .navigationTitle(L10n.tr("买入点位明细"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
+                    Button(L10n.tr("完成")) { dismiss() }
                         .foregroundStyle(GoldTheme.gold)
                 }
             }
@@ -371,7 +392,7 @@ struct ChartPurchaseMarkerSheet: View {
 
                     Spacer(minLength: 4)
 
-                    Text("\(marker.count) 笔 · \(ChartPurchaseMarkerPresentation.gramsText(marker.totalGrams, hideAmounts: hideAmounts))")
+                    Text(L10n.fmt("%lld 笔 · %@", Int64(marker.count), ChartPurchaseMarkerPresentation.gramsText(marker.totalGrams, hideAmounts: hideAmounts)))
                         .font(.caption.weight(.medium))
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.textSecondary)
@@ -391,7 +412,7 @@ struct ChartPurchaseMarkerSheet: View {
 
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(marker.count >= 2 ? "当日买入加权成本" : "你的买入综合成本")
+                    Text(marker.count >= 2 ? L10n.tr("当日买入加权成本") : L10n.tr("你的买入综合成本"))
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
@@ -406,7 +427,7 @@ struct ChartPurchaseMarkerSheet: View {
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
                     if marker.count >= 2 && abs(marker.maxUnitCost - marker.minUnitCost) >= 0.01 {
-                        Text("单笔 ¥\(marker.minUnitCost.moneyText) ~ ¥\(marker.maxUnitCost.moneyText)")
+                        Text(L10n.fmt("单笔 ¥%@ ~ ¥%@", marker.minUnitCost.moneyText, marker.maxUnitCost.moneyText))
                             .font(.caption2)
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.textSecondary)
@@ -440,7 +461,7 @@ struct ChartPurchaseMarkerSheet: View {
                                 .foregroundStyle(GoldTheme.textSecondary)
                         }
                     }
-                    Text(marketBasis == .domestic ? "国内 Au99.99" : "国际伦敦金折算")
+                    Text(marketBasis == .domestic ? L10n.tr("国内 Au99.99") : L10n.tr("国际伦敦金折算"))
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.textSecondary)
                         .lineLimit(1)
@@ -489,12 +510,12 @@ struct ChartPurchaseMarkerSheet: View {
     private var itemsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("当日买入清单")
+                Text(L10n.tr("当日买入清单"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
                 if hasNavigableRecord {
-                    Text("轻点单笔查看持仓详情")
+                    Text(L10n.tr("轻点单笔查看持仓详情"))
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.goldSoft)
                 }
@@ -528,6 +549,16 @@ struct ChartPurchaseMarkerSheet: View {
         )
         let laborTag = ChartPurchaseMarkerPresentation.laborFeeTagText(item.laborFee, hideAmounts: hideAmounts)
         let trimmedNote = item.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let localizedType = ChartPurchaseMarkerPresentation.localizedAssetType(item.assetType)
+        let trimmedBrand = item.brand.trimmingCharacters(in: .whitespacesAndNewlines)
+        let localizedTitle: String = {
+            if !trimmedBrand.isEmpty { return trimmedBrand }
+            let trimmedType = item.assetType.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedType.isEmpty || GoldAssetType(rawValue: trimmedType) == .other {
+                return L10n.tr("黄金记录")
+            }
+            return localizedType
+        }()
 
         return HStack(spacing: 10) {
             ZStack {
@@ -540,12 +571,12 @@ struct ChartPurchaseMarkerSheet: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(item.displayName)
+                    Text(localizedTitle)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(GoldTheme.text)
                         .lineLimit(1)
-                    if item.assetType != item.displayName, !item.assetType.isEmpty {
-                        Text(item.assetType)
+                    if localizedType != localizedTitle, !localizedType.isEmpty {
+                        Text(localizedType)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(GoldTheme.goldSoft)
                             .padding(.horizontal, 6)
@@ -558,7 +589,7 @@ struct ChartPurchaseMarkerSheet: View {
                 HStack(spacing: 6) {
                     Text(ChartPurchaseMarkerPresentation.gramsText(item.grams, hideAmounts: hideAmounts))
                     Text("·")
-                    Text("总投入 \(ChartPurchaseMarkerPresentation.totalCostText(item.totalCost, hideAmounts: hideAmounts))")
+                    Text(L10n.fmt("总投入 %@", ChartPurchaseMarkerPresentation.totalCostText(item.totalCost, hideAmounts: hideAmounts)))
                 }
                 .font(.caption)
                 .monospacedDigit()

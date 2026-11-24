@@ -21,7 +21,7 @@ struct MarketLoadingView: View {
                         .controlSize(.regular)
                         .tint(GoldTheme.gold)
                         .accessibilityHidden(true)
-                    Text("正在获取行情…")
+                    Text(L10n.tr("正在获取行情…"))
                         .font(.system(.subheadline, design: .rounded))
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
@@ -30,6 +30,6 @@ struct MarketLoadingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("正在获取行情，请稍候")
+        .accessibilityLabel(L10n.tr("正在获取行情，请稍候"))
     }
 }

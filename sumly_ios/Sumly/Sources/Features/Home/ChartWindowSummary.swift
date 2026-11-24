@@ -5,10 +5,10 @@ struct ChartWindowSummary: View {
     var body: some View {
         Group {
             if let change = statistics.change, let percent = statistics.percent {
-                Text("区间 " + signed(change) + " 元/克（" + signed(percent) + "%）")
+                Text(L10n.fmt("区间 %@ 元/克（%@%%）", signed(change), signed(percent)))
                     .foregroundStyle(change > 0 ? GoldTheme.up : change < 0 ? GoldTheme.down : GoldTheme.textSecondary)
             } else {
-                Text("区间涨跌幅暂无").foregroundStyle(GoldTheme.textSecondary)
+                Text(L10n.tr("区间涨跌幅暂无")).foregroundStyle(GoldTheme.textSecondary)
             }
         }
         .font(.system(size: 13, weight: .semibold)).monospacedDigit()

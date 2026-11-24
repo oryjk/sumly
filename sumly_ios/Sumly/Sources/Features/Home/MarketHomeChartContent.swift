@@ -60,7 +60,7 @@ struct MarketHomeChartContent: View {
                 HStack(spacing: 6) {
                     ChartWindowSummary(statistics: model.windowStatistics)
                     if showHoldingOverlay, let breakEven = holdingOverlay?.breakEvenPrice {
-                        Text("· 保本 ¥\(breakEven.moneyText)")
+                        Text(L10n.fmt("· 保本 ¥%@", breakEven.moneyText))
                             .font(.system(size: 12, weight: .medium)).monospacedDigit()
                             .foregroundStyle(GoldTheme.goldSoft)
                             .lineLimit(1)
@@ -72,20 +72,20 @@ struct MarketHomeChartContent: View {
                             Circle()
                                 .fill(GoldTheme.up)
                                 .frame(width: 6, height: 6)
-                            Text("买入点")
+                            Text(L10n.tr("买入点"))
                                 .foregroundStyle(GoldTheme.textSecondary)
                         }
                         .font(.system(size: 11, weight: .medium))
                         .lineLimit(1)
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("红点代表历史买入成本")
+                        .accessibilityLabel(L10n.tr("红点代表历史买入成本"))
                     } else if showHoldingOverlay, model.range != .realtime, outOfViewportPurchaseCount > 0 {
-                        Text("· 视口外有 \(outOfViewportPurchaseCount) 笔买入")
+                        Text(L10n.fmt("· 视口外有 %lld 笔买入", Int64(outOfViewportPurchaseCount)))
                             .font(.system(size: 11, weight: .medium))
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.textSecondary)
                             .lineLimit(1)
-                            .accessibilityLabel("当前视口外有 \(outOfViewportPurchaseCount) 笔历史买入记录")
+                            .accessibilityLabel(L10n.fmt("当前视口外有 %lld 笔历史买入记录", Int64(outOfViewportPurchaseCount)))
                     }
                 }
                 .minimumScaleFactor(0.82)
@@ -93,9 +93,9 @@ struct MarketHomeChartContent: View {
 
             if model.range == .realtime || model.range.dateBounds() != nil {
                 trendChart(data: visibleData, domain: priceDomain, resolvedMarkers: resolvedMarkers)
-                    .accessibilityLabel("\(rangeTitle(model.range))黄金价格走势图，当前区间\(model.windowPoints.count)个行情点")
+                    .accessibilityLabel(L10n.fmt("%@黄金价格走势图，当前区间%lld个行情点", rangeTitle(model.range), Int64(model.windowPoints.count)))
             } else {
-                Text("今年暂无已收盘数据，首个交易日收盘后更新")
+                Text(L10n.tr("今年暂无已收盘数据，首个交易日收盘后更新"))
                     .font(.subheadline).foregroundStyle(GoldTheme.textSecondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -109,7 +109,7 @@ struct MarketHomeChartContent: View {
 
     private var quoteHeader: some View {
         VStack(spacing: 4) {
-            Text("黄金价格")
+            Text(L10n.tr("黄金价格"))
                 .font(.caption.weight(.medium)).foregroundStyle(GoldTheme.goldSoft)
                 .frame(maxWidth: .infinity)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -118,17 +118,17 @@ struct MarketHomeChartContent: View {
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.2), value: model.price)
-                Text("元/克").font(.caption)
+                Text(L10n.tr("元/克")).font(.caption)
             }.foregroundStyle(GoldTheme.gold)
                 .lineLimit(1).minimumScaleFactor(0.75)
                 .padding(.horizontal, 44)
                 .frame(maxWidth: .infinity)
-                .accessibilityLabel("黄金价格，\(model.price.map { String(format: "%.2f", $0) } ?? "暂无报价") 元每克")
+                .accessibilityLabel(L10n.fmt("黄金价格，%@ 元每克", model.price.map { String(format: "%.2f", $0) } ?? L10n.tr("暂无报价")))
             if let snapshot = quoteSnapshot, let change = snapshot.changeCNY, let percent = snapshot.changePercent {
                 let isUp = change >= 0
                 let tintColor = change == 0 ? GoldTheme.textSecondary : (isUp ? GoldTheme.up : GoldTheme.down)
                 HStack(spacing: 6) {
-                    Text("今日 \(change.signedMoneyText)")
+                    Text(L10n.fmt("今日 %@", change.signedMoneyText))
                     Text("(\(percent.signedMoneyText)%)")
                 }
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -214,7 +214,7 @@ struct MarketHomeChartContent: View {
                 HStack(spacing: 3) {
                     Image(systemName: showHoldingOverlay ? "checkmark.circle.fill" : "circle")
                         .font(.caption2)
-                    Text("持仓")
+                    Text(L10n.tr("持仓"))
                         .font(.system(.caption, design: .rounded).weight(.semibold))
                 }
                 .lineLimit(1)
@@ -225,14 +225,14 @@ struct MarketHomeChartContent: View {
             }
             .buttonStyle(.plain)
             .fixedSize()
-            .accessibilityLabel("在走势图叠加持仓保本线与买入点")
-            .accessibilityValue(showHoldingOverlay ? "已开启" : "已关闭")
+            .accessibilityLabel(L10n.tr("在走势图叠加持仓保本线与买入点"))
+            .accessibilityValue(showHoldingOverlay ? L10n.tr("已开启") : L10n.tr("已关闭"))
         }
     }
 
     private var rangeMenu: some View {
         Menu {
-            Picker("时间区间", selection: $model.range) {
+            Picker(L10n.tr("时间区间"), selection: $model.range) {
                 ForEach(MarketRange.allCases, id: \.self) { range in
                     Text(rangeTitle(range)).tag(range)
                 }
@@ -240,7 +240,7 @@ struct MarketHomeChartContent: View {
         } label: {
             let isQuick = Self.quickRanges.contains(model.range)
             HStack(spacing: 4) {
-                Text(isQuick ? "更多区间" : rangeTitle(model.range))
+                Text(isQuick ? L10n.tr("更多区间") : rangeTitle(model.range))
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                 Image(systemName: "chevron.down").font(.caption2.weight(.bold))
             }
@@ -250,7 +250,7 @@ struct MarketHomeChartContent: View {
             .frame(maxWidth: .infinity, minHeight: 30)
             .contentShape(GoldTheme.capsuleShape)
         }
-        .accessibilityLabel("时间区间")
+        .accessibilityLabel(L10n.tr("时间区间"))
         .accessibilityValue(rangeTitle(model.range))
         .accessibilityIdentifier("chart.range")
     }
@@ -260,7 +260,7 @@ struct MarketHomeChartContent: View {
             ForEach(ChartPriceScale.allCases, id: \.self) { scale in
                 let isSelected = model.priceScale == scale
                 Button { model.priceScale = scale } label: {
-                    Text(scale.rawValue)
+                    Text(scale.localizedTitle)
                         .font(.system(.caption, design: .rounded).weight(.semibold))
                         .lineLimit(1)
                         .padding(.horizontal, 7)
@@ -269,7 +269,7 @@ struct MarketHomeChartContent: View {
                         .background(isSelected ? GoldTheme.gold : Color.clear, in: GoldTheme.capsuleShape)
                         .contentShape(GoldTheme.capsuleShape)
                 }.buttonStyle(.plain)
-                    .accessibilityLabel(scale.rawValue + "价格刻度")
+                    .accessibilityLabel(L10n.fmt("%@价格刻度", scale.localizedTitle))
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                     .accessibilityIdentifier(scale == .linear ? "chart.scale.linear" : "chart.scale.log")
             }
@@ -283,7 +283,7 @@ struct MarketHomeChartContent: View {
             HStack(spacing: 3) {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.caption2.weight(.semibold))
-                Text("复位")
+                Text(L10n.tr("复位"))
                     .font(.system(.caption, design: .rounded).weight(.semibold))
             }
             .lineLimit(1)
@@ -332,7 +332,7 @@ struct MarketHomeChartContent: View {
                 Spacer()
                 Text(overviewLabel(model.fullDomain.upperBound))
             }.font(.system(size: 10)).foregroundStyle(GoldTheme.textFaint)
-            Text("区间内拖动浏览 · 两端缩放 · 主图单指查价")
+            Text(L10n.tr("区间内拖动浏览 · 两端缩放 · 主图单指查价"))
                 .font(.system(size: 11)).foregroundStyle(GoldTheme.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.8)
         }
@@ -343,12 +343,12 @@ struct MarketHomeChartContent: View {
     }
 
     private var pointCount: some View {
-        Text("\(model.windowPoints.count) 个点").font(.caption).foregroundStyle(GoldTheme.textSecondary)
+        Text(L10n.fmt("%lld 个点", Int64(model.windowPoints.count))).font(.caption).foregroundStyle(GoldTheme.textSecondary)
     }
 
     private func rangeTitle(_ range: MarketRange) -> String {
-        if model.basis == .domestic, range == .history { return "全部历史" }
-        return range.rawValue
+        if model.basis == .domestic, range == .history { return L10n.tr("全部历史") }
+        return range.localizedTitle
     }
 
     private var windowLabel: String {
@@ -356,23 +356,24 @@ struct MarketHomeChartContent: View {
         if model.range == .realtime {
             return model.realtimeTiming.windowLabel(window)
         }
-        return window.lowerBound.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits)) + " — " + window.upperBound.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits))
+        let format = Date.FormatStyle.dateTime.year().month(.twoDigits).day(.twoDigits).locale(AppLanguage.currentLocale)
+        return window.lowerBound.formatted(format) + " — " + window.upperBound.formatted(format)
     }
 
     private var chartCaption: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 if model.range == .realtime {
-                    Text(model.basis == .domestic ? "国内 Au99.99 · 元/克" : "国际伦敦金 · 人民币折算 / 克")
+                    Text(model.basis == .domestic ? L10n.tr("国内 Au99.99 · 元/克") : L10n.tr("国际伦敦金 · 人民币折算 / 克"))
                     Text(model.realtimeTiming.caption)
                         .foregroundStyle(model.realtimeTiming.state == .paused ? GoldTheme.goldSoft : GoldTheme.textSecondary)
                 } else {
-                    Text(model.basis == .domestic ? "截至昨天 · 元/克 · Au99.99" : "截至昨天 · 元/克 · 按最新汇率折算")
+                    Text(model.basis == .domestic ? L10n.tr("截至昨天 · 元/克 · Au99.99") : L10n.tr("截至昨天 · 元/克 · 按最新汇率折算"))
                 }
             }
             Button { showingHistorySources = true } label: {
                 Image(systemName: "info.circle").foregroundStyle(GoldTheme.goldSoft)
-            }.accessibilityLabel("行情数据说明")
+            }.accessibilityLabel(L10n.tr("行情数据说明"))
         }.font(.system(size: 11)).foregroundStyle(GoldTheme.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -394,42 +395,47 @@ struct MarketHomeChartContent: View {
         }()
         let activeMarkerID = highlightedMarkerID ?? inspectedMarkerMatch?.resolved.id
 
+        let timeAxisLabel = L10n.tr("时间")
+        let baselineAxisLabel = L10n.tr("基线")
+        let priceScaleAxisLabel = L10n.tr("价格刻度")
+        let breakEvenAxisLabel = L10n.tr("保本价")
+
         return ZStack {
             Chart {
                 ForEach(data, id: \.date) { point in
-                    AreaMark(x: .value("时间", point.date),
-                             yStart: .value("基线", baseline),
-                             yEnd: .value("价格刻度", model.priceScale.value(point.price) ?? domain.lowerBound))
+                    AreaMark(x: .value(timeAxisLabel, point.date),
+                             yStart: .value(baselineAxisLabel, baseline),
+                             yEnd: .value(priceScaleAxisLabel, model.priceScale.value(point.price) ?? domain.lowerBound))
                         .foregroundStyle(LinearGradient(
                             colors: [GoldTheme.chartFill, GoldTheme.gold.opacity(0)],
                             startPoint: .top, endPoint: .bottom))
                         .interpolationMethod(.monotone)
-                    LineMark(x: .value("时间", point.date), y: .value("价格刻度", model.priceScale.value(point.price) ?? domain.lowerBound))
+                    LineMark(x: .value(timeAxisLabel, point.date), y: .value(priceScaleAxisLabel, model.priceScale.value(point.price) ?? domain.lowerBound))
                         .foregroundStyle(GoldTheme.gold)
                         .lineStyle(StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
                         .interpolationMethod(.monotone)
                     if data.count == 1 {
-                        PointMark(x: .value("时间", point.date), y: .value("价格刻度", model.priceScale.value(point.price) ?? domain.lowerBound))
+                        PointMark(x: .value(timeAxisLabel, point.date), y: .value(priceScaleAxisLabel, model.priceScale.value(point.price) ?? domain.lowerBound))
                             .foregroundStyle(GoldTheme.gold)
                     }
                 }
                 if let high = statistics.high {
-                    PointMark(x: .value("时间", high.date), y: .value("价格刻度", model.priceScale.value(high.price) ?? baseline))
+                    PointMark(x: .value(timeAxisLabel, high.date), y: .value(priceScaleAxisLabel, model.priceScale.value(high.price) ?? baseline))
                         .foregroundStyle(GoldTheme.goldSoft).symbolSize(24)
                 }
                 if let low = statistics.low, low.price != statistics.high?.price {
-                    PointMark(x: .value("时间", low.date), y: .value("价格刻度", model.priceScale.value(low.price) ?? baseline))
+                    PointMark(x: .value(timeAxisLabel, low.date), y: .value(priceScaleAxisLabel, model.priceScale.value(low.price) ?? baseline))
                         .foregroundStyle(GoldTheme.goldSoft).symbolSize(24)
                 }
                 if showHoldingOverlay, let overlay = holdingOverlay {
                     if let breakEven = overlay.breakEvenPrice,
                        let scaled = model.priceScale.value(breakEven),
                        domain.contains(scaled) {
-                        RuleMark(y: .value("保本价", scaled))
+                        RuleMark(y: .value(breakEvenAxisLabel, scaled))
                             .foregroundStyle(GoldTheme.goldSoft.opacity(0.75))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                             .annotation(position: .top, alignment: .leading) {
-                                Text("保本 ¥\(breakEven.moneyText)")
+                                Text(L10n.fmt("保本 ¥%@", breakEven.moneyText))
                                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                                     .monospacedDigit()
                                     .foregroundStyle(GoldTheme.onGold)
@@ -442,9 +448,9 @@ struct MarketHomeChartContent: View {
                         let isActive = item.id == activeMarkerID
                         if let range = item.connectorRange, let anchor = item.scaledMarketAnchor {
                             RuleMark(
-                                x: .value("时间", item.plotDate),
-                                yStart: .value("价格刻度", range.lowerBound),
-                                yEnd: .value("价格刻度", range.upperBound)
+                                x: .value(timeAxisLabel, item.plotDate),
+                                yStart: .value(priceScaleAxisLabel, range.lowerBound),
+                                yEnd: .value(priceScaleAxisLabel, range.upperBound)
                             )
                             .foregroundStyle(GoldTheme.up.opacity(isActive ? 0.9 : 0.45))
                             .lineStyle(StrokeStyle(
@@ -453,8 +459,8 @@ struct MarketHomeChartContent: View {
                             ))
 
                             PointMark(
-                                x: .value("时间", item.plotDate),
-                                y: .value("价格刻度", anchor)
+                                x: .value(timeAxisLabel, item.plotDate),
+                                y: .value(priceScaleAxisLabel, anchor)
                             )
                             .foregroundStyle(GoldTheme.up.opacity(isActive ? 0.92 : 0.55))
                             .symbolSize(isActive ? 28 : 16)
@@ -462,10 +468,10 @@ struct MarketHomeChartContent: View {
                     }
                 }
                 if let point = model.selectedPoint {
-                    RuleMark(x: .value("时间", point.date))
+                    RuleMark(x: .value(timeAxisLabel, point.date))
                         .foregroundStyle(GoldTheme.gold.opacity(0.6))
                         .lineStyle(StrokeStyle(lineWidth: 0.6))
-                    PointMark(x: .value("时间", point.date), y: .value("价格刻度", model.priceScale.value(point.price) ?? domain.lowerBound))
+                    PointMark(x: .value(timeAxisLabel, point.date), y: .value(priceScaleAxisLabel, model.priceScale.value(point.price) ?? domain.lowerBound))
                         .foregroundStyle(GoldTheme.gold)
                         .symbolSize(32)
                 }
@@ -510,10 +516,10 @@ struct MarketHomeChartContent: View {
 
                         if model.selectedPoint == nil {
                             if let high = statistics.high {
-                                extremumLabel(high, title: high.price == statistics.low?.price ? "最高 / 最低" : "最高", above: true, other: high.price == statistics.low?.price ? nil : statistics.low, markerPoints: markerScreenPoints, proxy: proxy, frame: frame)
+                                extremumLabel(high, title: high.price == statistics.low?.price ? L10n.tr("最高 / 最低") : L10n.tr("最高"), above: true, other: high.price == statistics.low?.price ? nil : statistics.low, markerPoints: markerScreenPoints, proxy: proxy, frame: frame)
                             }
                             if let low = statistics.low, low.price != statistics.high?.price {
-                                extremumLabel(low, title: "最低", above: false, other: statistics.high, markerPoints: markerScreenPoints, proxy: proxy, frame: frame)
+                                extremumLabel(low, title: L10n.tr("最低"), above: false, other: statistics.high, markerPoints: markerScreenPoints, proxy: proxy, frame: frame)
                             }
                         }
 
@@ -570,11 +576,11 @@ struct MarketHomeChartContent: View {
                         )
                             .frame(width: frame.width, height: frame.height)
                             .position(x: frame.midX, y: frame.midY)
-                            .accessibilityLabel("走势图时间轴")
-                            .accessibilityValue("\(axisLabel(model.xDomain.lowerBound))至\(axisLabel(model.xDomain.upperBound))")
-                            .accessibilityAction(named: "放大") { model.accessibleZoom(2) }
-                            .accessibilityAction(named: "缩小") { model.accessibleZoom(0.5) }
-                            .accessibilityAction(named: "复位") { model.resetViewport() }
+                            .accessibilityLabel(L10n.tr("走势图时间轴"))
+                            .accessibilityValue(L10n.fmt("%@至%@", axisLabel(model.xDomain.lowerBound), axisLabel(model.xDomain.upperBound)))
+                            .accessibilityAction(named: L10n.tr("放大")) { model.accessibleZoom(2) }
+                            .accessibilityAction(named: L10n.tr("缩小")) { model.accessibleZoom(0.5) }
+                            .accessibilityAction(named: L10n.tr("复位")) { model.resetViewport() }
                     }
                     if let point = model.selectedPoint, let x = proxy.position(forX: point.date) {
                         inspectionTooltip(
@@ -588,7 +594,7 @@ struct MarketHomeChartContent: View {
                 }
             }
             if data.isEmpty {
-                Text(model.chartLoading ? "正在加载走势…" : (model.range == .realtime ? "暂无最新走势" : "暂无走势数据"))
+                Text(model.chartLoading ? L10n.tr("正在加载走势…") : (model.range == .realtime ? L10n.tr("暂无最新走势") : L10n.tr("暂无走势数据")))
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
             }
@@ -782,7 +788,7 @@ struct MarketHomeChartContent: View {
                 return baseCenterX
             }()
             VStack(spacing: 3) {
-                Text(title + " ¥" + point.price.formatted(.number.precision(.fractionLength(2))))
+                Text(L10n.fmt("%@ ¥%@", title, point.price.formatted(.number.precision(.fractionLength(2)))))
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(GoldTheme.goldSoft)
                 Text(pointLabel(point))
                     .font(.system(size: 9)).foregroundStyle(GoldTheme.textSecondary)
@@ -792,26 +798,33 @@ struct MarketHomeChartContent: View {
                 .background(GoldTheme.card.opacity(0.95), in: GoldTheme.rangeShape)
                 .position(x: centerX, y: centerY)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(title + " " + point.price.formatted(.number.precision(.fractionLength(2))) + " 元每克，" + pointLabel(point))
+                .accessibilityLabel(L10n.fmt("%@ %@ 元每克，%@", title, point.price.formatted(.number.precision(.fractionLength(2))), pointLabel(point)))
                 .allowsHitTesting(false)
         }
     }
 
     private func overviewLabel(_ date: Date) -> String {
-        if model.range != .realtime { return date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits)) }
+        if model.range != .realtime {
+            return date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).locale(AppLanguage.currentLocale))
+        }
         return model.realtimeTiming.boundaryLabel(date, window: model.fullDomain)
     }
     private func axisLabel(_ date: Date) -> String {
         let span = model.xDomain.upperBound.timeIntervalSince(model.xDomain.lowerBound)
-        if span > 730 * 86400 { return date.formatted(.dateTime.year()) }
-        if model.range != .realtime { return date.formatted(.dateTime.year(.twoDigits).month(.twoDigits).day(.twoDigits)) }
+        if span > 730 * 86400 { return date.formatted(.dateTime.year().locale(AppLanguage.currentLocale)) }
+        if model.range != .realtime {
+            return date.formatted(.dateTime.year(.twoDigits).month(.twoDigits).day(.twoDigits).locale(AppLanguage.currentLocale))
+        }
         return model.realtimeTiming.axisLabel(date, window: model.xDomain)
     }
     private func pointLabel(_ point: MarketChartPoint) -> String {
         switch point.granularity {
-        case .annual: return point.date.formatted(.dateTime.year()) + " · 年均价参考"
-        case .daily: return point.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits)) + " · 收盘"
-        case .realtime: return point.date.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))
+        case .annual:
+            return L10n.fmt("%@ · 年均价参考", point.date.formatted(.dateTime.year().locale(AppLanguage.currentLocale)))
+        case .daily:
+            return L10n.fmt("%@ · 收盘", point.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).locale(AppLanguage.currentLocale)))
+        case .realtime:
+            return point.date.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits).locale(AppLanguage.currentLocale))
         }
     }
 

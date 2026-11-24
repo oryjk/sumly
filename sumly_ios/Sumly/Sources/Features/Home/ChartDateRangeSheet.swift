@@ -14,23 +14,23 @@ struct ChartDateRangeSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("精确选择日期") {
-                    DatePicker("开始日期", selection: $start,
+                Section(L10n.tr("精确选择日期")) {
+                    DatePicker(L10n.tr("开始日期"), selection: $start,
                                in: bounds.lowerBound...max(bounds.lowerBound, Calendar.current.date(byAdding: .day, value: -1, to: end)!), displayedComponents: .date)
-                    DatePicker("结束日期", selection: $end,
+                    DatePicker(L10n.tr("结束日期"), selection: $end,
                                in: min(bounds.upperBound, Calendar.current.date(byAdding: .day, value: 1, to: start)!)...bounds.upperBound, displayedComponents: .date)
                 }
                 Section {
-                    Text("仅可选择当前区间内的日期，非实时走势截至昨天。休市日不补点，1900–2015 年保留年度数据。")
+                    Text(L10n.tr("仅可选择当前区间内的日期，非实时走势截至昨天。休市日不补点，1900–2015 年保留年度数据。"))
                         .font(.footnote).foregroundStyle(GoldTheme.textSecondary)
                 }
             }
             .scrollContentBackground(.hidden).background(GoldTheme.background)
-            .navigationTitle("时间区间").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(L10n.tr("时间区间")).navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L10n.tr("取消")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("应用") { apply(ChartViewport.noon(start)...ChartViewport.noon(end)); dismiss() }
+                    Button(L10n.tr("应用")) { apply(ChartViewport.noon(start)...ChartViewport.noon(end)); dismiss() }
                         .fontWeight(.semibold)
                 }
             }

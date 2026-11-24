@@ -10,6 +10,16 @@ enum PriceRange: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    var localizedTitle: String {
+        switch self {
+        case .oneMonth: L10n.tr("1月")
+        case .threeMonths: L10n.tr("3月")
+        case .sixMonths: L10n.tr("6月")
+        case .oneYear: L10n.tr("1年")
+        case .all: L10n.tr("全部")
+        }
+    }
+
     /// 走势平滑窗口（天）：短区间保留细节，长区间过滤日级噪声。
     var smoothingWindow: Int {
         switch self {
