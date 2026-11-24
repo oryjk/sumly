@@ -111,6 +111,19 @@ struct FeedbackAttachment: Codable, Equatable, Hashable, Identifiable, Sendable 
         return URL(string: trimmed, relativeTo: baseURL)?.absoluteURL
     }
 
+    func productionImageURL(baseURL: URL) -> URL? {
+        let prefix = "/api/v1/app/feedback/attachments/"
+        let raw = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard baseURL == SumlyProductionEndpoints.apiBaseURL, raw.hasPrefix(prefix),
+              let components = URLComponents(string: raw), components.query == nil, components.fragment == nil else {
+            return nil
+        }
+        let path = components.path.dropFirst(prefix.count)
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return nil }
+        return resolvedURL(baseURL: baseURL)
+    }
+
     /// 从 API Base URL（如 `https://oryjk.cn/sumly/api/v1`）提取站点根前缀（`https://oryjk.cn/sumly`）。
     static func siteRootURL(from apiBaseURL: URL) -> URL {
         var raw = apiBaseURL.absoluteString

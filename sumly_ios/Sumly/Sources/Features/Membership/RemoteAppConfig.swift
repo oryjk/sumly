@@ -121,7 +121,7 @@ struct BackendRemoteAppConfigService: RemoteAppConfigServicing, Sendable {
 
     func fetchConfig() async throws -> RemoteAppConfig {
         let request = Self.makeRequest(baseURL: baseURL)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.sumlyData(for: request, baseURL: baseURL)
         guard let http = response as? HTTPURLResponse else {
             throw ServiceError.badResponse
         }

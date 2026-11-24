@@ -83,9 +83,7 @@ struct FeedbackCenterView: View {
             }
         }
         .sheet(item: $previewAttachment) { attachment in
-            FeedbackImageLightboxSheet(
-                url: attachment.resolvedURL(baseURL: model.service.baseURL)
-            )
+            FeedbackImageLightboxSheet(attachment: attachment, baseURL: model.service.baseURL)
         }
     }
 
@@ -868,7 +866,7 @@ struct FeedbackRecordCard: View {
                 Button {
                     onTapAttachment(attachment)
                 } label: {
-                    AsyncImage(url: attachment.resolvedURL(baseURL: baseURL)) { phase in
+                    FeedbackAttachmentImage(attachment: attachment, baseURL: baseURL) { phase in
                         switch phase {
                         case .empty:
                             ZStack {
@@ -946,7 +944,8 @@ struct FeedbackRecordCard: View {
 // MARK: - 3. 截图大图预览弹窗（Lightbox）
 
 private struct FeedbackImageLightboxSheet: View {
-    let url: URL?
+    let attachment: FeedbackAttachment
+    let baseURL: URL
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -954,8 +953,8 @@ private struct FeedbackImageLightboxSheet: View {
             ZStack {
                 GoldTheme.background.ignoresSafeArea()
 
-                if let url {
-                    AsyncImage(url: url) { phase in
+                if attachment.resolvedURL(baseURL: baseURL) != nil {
+                    FeedbackAttachmentImage(attachment: attachment, baseURL: baseURL) { phase in
                         switch phase {
                         case .empty:
                             VStack(spacing: 10) {

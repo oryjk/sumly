@@ -52,13 +52,11 @@ struct HoldingCloudService: HoldingCloudServicing {
     private func execute(token: String, body: Data? = nil) async throws -> HoldingCloudSnapshot {
         let request = try Self.makeRequest(baseURL: baseURL, token: token, body: body)
         do {
-            let (bytes, response) = try await session.bytes(for: request, delegate: NoHoldingRedirects())
+            let (data, response) = try await session.sumlyData(
+                for: request, baseURL: baseURL, delegate: NoHoldingRedirects(),
+                maxBytes: Self.maxBytes, oversized: HoldingCloudError.tooLarge
+            )
             guard let http = response as? HTTPURLResponse else { throw HoldingCloudError.malformed }
-            var data = Data()
-            for try await byte in bytes {
-                guard data.count < Self.maxBytes else { throw HoldingCloudError.tooLarge }
-                data.append(byte)
-            }
             return try Self.unwrap(data, status: http.statusCode)
         } catch let error as AuthError { throw error }
         catch let error as HoldingCloudError { throw error }

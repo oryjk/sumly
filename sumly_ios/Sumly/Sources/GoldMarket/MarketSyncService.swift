@@ -55,7 +55,7 @@ struct BackendMarketSyncTransport: MarketSyncTransport {
         if let cursor { components.queryItems?.append(URLQueryItem(name: "cursor", value: cursor)) }
         var request = URLRequest(url: components.url!, cachePolicy: .reloadIgnoringLocalCacheData)
         request.timeoutInterval = 20
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.sumlyData(for: request, baseURL: baseURL)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw BackendGoldPriceService.ServiceError.badResponse
         }

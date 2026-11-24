@@ -226,7 +226,7 @@ struct BackendFeedbackService: FeedbackServicing, Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await session.sumlyData(for: request, baseURL: baseURL)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

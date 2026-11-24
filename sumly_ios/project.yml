@@ -56,7 +56,7 @@ targets:
           - pt
           - ja
         CFBundleShortVersionString: "1.0.6"
-        CFBundleVersion: "63"
+        CFBundleVersion: "64"
         UILaunchScreen:
           UIColorName: NeoBackground
         UISupportedInterfaceOrientations:
@@ -76,6 +76,7 @@ targets:
       - SumlyWidget/Sources
       - SumlyWidget/Shared
       - SumlyWidget/Resources
+      - Sumly/Sources/Features/Account/Core/Networking
       - Sumly/Sources/DesignSystem/GoldTheme.swift
       - Sumly/Sources/Shared/Localization
       - path: Sumly/Resources
@@ -115,7 +116,7 @@ targets:
           - pt
           - ja
         CFBundleShortVersionString: "1.0.6"
-        CFBundleVersion: "63"
+        CFBundleVersion: "64"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
   SumlyTests:

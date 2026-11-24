@@ -4,6 +4,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType
 import okhttp3.OkHttpClient
@@ -32,16 +33,19 @@ import java.util.concurrent.TimeUnit
 class ApiException(val httpStatus: Int, val code: Int, message: String) : IOException(message)
 
 /** Shared transport for the app API, including the path prefix used by the production proxy. */
-class ApiClient(baseUrl: String = DefaultBaseUrl) {
+class ApiClient internal constructor(url: HttpUrl, private val failover: ApiHostFailover?) {
     private val routes: AppRoutes
 
+    constructor(baseUrl: String = DefaultBaseUrl) : this((baseUrl.trimEnd('/') + "/").toHttpUrl())
+
+    private constructor(url: HttpUrl) : this(url, productionFailover.takeIf { url == it.primary })
+
     init {
-        val url = (baseUrl.trimEnd('/') + "/").toHttpUrl()
         require(url.isHttps || url.host in loopbackHosts) { "The API requires HTTPS outside loopback." }
         require(url.encodedUsername.isEmpty() && url.encodedPassword.isEmpty())
         require(url.query == null && url.fragment == null)
 
-        val http = OkHttpClient.Builder()
+        val httpBuilder = OkHttpClient.Builder()
             .callTimeout(20, TimeUnit.SECONDS)
             .followRedirects(false)
             .followSslRedirects(false)
@@ -61,11 +65,17 @@ class ApiClient(baseUrl: String = DefaultBaseUrl) {
                     response.newBuilder().body(BoundedResponseBody(body, limit.bytes)).build()
                 }
             }
-            .build()
+        if (failover != null) {
+            httpBuilder.addNetworkInterceptor { chain ->
+                val response = chain.proceed(chain.request())
+                // OkHttp can replay a 503 with Retry-After: 0 even with connection retries disabled.
+                if (response.code == 503) response.newBuilder().removeHeader("Retry-After").build() else response
+            }
+        }
 
         routes = Retrofit.Builder()
             .baseUrl(url)
-            .client(http)
+            .client(httpBuilder.build())
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(AppRoutes::class.java)
@@ -76,35 +86,42 @@ class ApiClient(baseUrl: String = DefaultBaseUrl) {
         query: Map<String, String> = emptyMap(),
         accessToken: String? = null,
         maxResponseBytes: Long? = null,
-    ): JSONObject = request {
-        routes.get(checkedPath(path), query, authorization(accessToken), maxResponseBytes?.let(::ResponseSizeLimit))
+    ): JSONObject = request(path, safeRead = true) { route ->
+        routes.get(route, query, authorization(accessToken), maxResponseBytes?.let(::ResponseSizeLimit))
     }
 
     suspend fun post(path: String, body: JSONObject, accessToken: String? = null): JSONObject =
-        request { routes.post(checkedPath(path), JsonParser.parseString(body.toString()).asJsonObject, authorization(accessToken)) }
+        request(path) { route ->
+            routes.post(route, JsonParser.parseString(body.toString()).asJsonObject, authorization(accessToken))
+        }
 
     suspend fun put(
         path: String,
         body: JSONObject,
         accessToken: String? = null,
         maxResponseBytes: Long? = null,
-    ): JSONObject = request {
+    ): JSONObject = request(path) { route ->
         routes.put(
-            checkedPath(path), JsonParser.parseString(body.toString()).asJsonObject,
+            route, JsonParser.parseString(body.toString()).asJsonObject,
             authorization(accessToken), maxResponseBytes?.let(::ResponseSizeLimit),
         )
     }
 
-    suspend fun delete(path: String, accessToken: String? = null, body: JSONObject? = null): JSONObject = request {
-        val relativePath = checkedPath(path)
+    suspend fun delete(path: String, accessToken: String? = null, body: JSONObject? = null): JSONObject = request(path) { route ->
         val header = authorization(accessToken)
-        if (body == null) routes.delete(relativePath, header)
-        else routes.deleteWithBody(relativePath, JsonParser.parseString(body.toString()).asJsonObject, header)
+        if (body == null) routes.delete(route, header)
+        else routes.deleteWithBody(route, JsonParser.parseString(body.toString()).asJsonObject, header)
     }
 
-    private suspend fun request(call: suspend () -> Response<JsonObject>): JSONObject {
+    private suspend fun request(
+        path: String,
+        safeRead: Boolean = false,
+        call: suspend (String) -> Response<JsonObject>,
+    ): JSONObject {
+        val route = checkedPath(path)
         val response = try {
-            call()
+            failover?.send(safeRead) { origin -> call(checkNotNull(origin.resolve(route)).toString()) }
+                ?: call(route)
         } catch (_: JsonParseException) {
             throw ApiException(0, -1, "服务返回格式异常。")
         }
@@ -180,6 +197,8 @@ class ApiClient(baseUrl: String = DefaultBaseUrl) {
         private const val DefaultSiteUrl = "https://oryjk.cn:18443/sumly/"
         const val DefaultBaseUrl = "${DefaultSiteUrl}api/v1/"
         const val DefaultPrivacyPolicyUrl = "${DefaultSiteUrl}privacy"
+        private const val BackupBaseUrl = "https://backup.oryjk.cn:19443/sumly/api/v1/"
+        private val productionFailover = ApiHostFailover(DefaultBaseUrl.toHttpUrl(), BackupBaseUrl.toHttpUrl())
         private val loopbackHosts = setOf("localhost", "127.0.0.1", "::1")
         private val relativePath = Regex("app(?:/[A-Za-z0-9_-]+)+")
     }

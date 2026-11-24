@@ -252,7 +252,7 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
     private func get<T: Decodable>(_ path: String) async throws -> T {
         var request = URLRequest(url: Self.requestURL(baseURL: baseURL, path: path))
         request.timeoutInterval = 10
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.sumlyData(for: request, baseURL: baseURL)
         guard let http = response as? HTTPURLResponse else { throw ServiceError.badResponse }
         guard (200..<300).contains(http.statusCode) else { throw ServiceError.httpStatus(http.statusCode) }
         let envelope = try JSONDecoder().decode(Envelope<T>.self, from: data)

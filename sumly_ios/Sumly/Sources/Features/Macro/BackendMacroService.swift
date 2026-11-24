@@ -146,7 +146,7 @@ struct BackendMacroService: MacroServicing, Sendable {
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.sumlyData(for: request, baseURL: baseURL)
         guard let http = response as? HTTPURLResponse else {
             throw ServiceError.badResponse
         }

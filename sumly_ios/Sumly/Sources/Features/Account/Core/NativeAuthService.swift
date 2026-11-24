@@ -45,13 +45,11 @@ struct NativeAuthService: AuthServicing {
         let urlRequest = try Self.makeRequest(request, baseURL: baseURL)
         do {
             // Stream with a hard cap so an oversized response cannot grow memory without bound.
-            let (bytes, response) = try await session.bytes(for: urlRequest, delegate: NoAuthRedirects())
+            let (data, response) = try await session.sumlyData(
+                for: urlRequest, baseURL: baseURL, delegate: NoAuthRedirects(),
+                maxBytes: 1_048_576, oversized: AuthError.malformed
+            )
             guard let http = response as? HTTPURLResponse else { throw AuthError.malformed }
-            var data = Data()
-            for try await byte in bytes {
-                guard data.count < 1_048_576 else { throw AuthError.malformed }
-                data.append(byte)
-            }
             if request.path == "account", http.statusCode == 401 || http.statusCode == 403 { throw AuthError.reauthenticate }
             return try Self.unwrap(data, status: http.statusCode)
         } catch let error as AuthError { throw error }

@@ -647,7 +647,7 @@ struct GoldWidgetAPIClient: Sendable {
         request.timeoutInterval = 10
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.sumlyData(for: request, baseURL: baseURL)
         guard let http = response as? HTTPURLResponse else {
             throw ClientError.badResponse
         }
