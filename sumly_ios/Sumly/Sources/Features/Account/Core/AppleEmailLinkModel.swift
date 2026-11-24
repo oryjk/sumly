@@ -108,7 +108,7 @@ import Observation
             let delivery = try await session.sendAppleEmailCode(address, scope: scope)
             guard isCurrent, !Task.isCancelled else { return }
             cooldowns[address] = Date().addingTimeInterval(Double(max(0, delivery.retryAfter)))
-            message = "验证码已发送，请查看邮箱。"
+            message = AuthL10n.tr("验证码已发送，请查看邮箱。")
         } catch {
             if isCurrent, !Task.isCancelled { handleEmailError(error) }
         }
@@ -160,11 +160,11 @@ import Observation
             verified = false
             requestedFor = nil
             clearSecrets()
-            error = "请再次完成 Apple 验证。"
+            error = AuthL10n.tr("请再次完成 Apple 验证。")
         case .server(409, _):
-            error = "该邮箱已用于记金账户。请检查绑定状态，或使用另一个可收信邮箱。"
+            error = AuthL10n.tr("该邮箱已用于记金账户。请检查绑定状态，或使用另一个可收信邮箱。")
         case .server(422, _):
-            error = "验证码错误或已失效，请重新获取。"
+            error = AuthL10n.tr("验证码错误或已失效，请重新获取。")
         default:
             error = failure.localizedDescription
         }

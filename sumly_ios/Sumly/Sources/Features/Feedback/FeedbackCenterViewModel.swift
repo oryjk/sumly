@@ -181,17 +181,17 @@ final class FeedbackCenterViewModel {
         switch validationResult {
         case .tooShort(let remaining):
             if FeedbackValidation.trimmedContent(content).isEmpty {
-                return "至少输入 \(FeedbackValidation.minContentLength) 个字"
+                return L10n.fmt("至少输入 %d 个字", FeedbackValidation.minContentLength)
             }
-            return "再输入 \(remaining) 个字即可提交"
+            return L10n.fmt("再输入 %d 个字即可提交", remaining)
         case .tooLong(let excess):
-            return "已超出 \(excess) 字，请精简至 \(FeedbackValidation.maxContentLength) 字以内"
+            return L10n.fmt("已超出 %d 字，请精简至 %d 字以内", excess, FeedbackValidation.maxContentLength)
         case .contactTooLong:
-            return "联系方式过长，请控制在 \(FeedbackValidation.maxContactLength) 字以内"
+            return L10n.fmt("联系方式过长，请控制在 %d 字以内", FeedbackValidation.maxContactLength)
         case .tooManyAttachments:
-            return "最多上传 \(FeedbackValidation.maxAttachmentCount) 张截图"
+            return L10n.fmt("最多上传 %d 张截图", FeedbackValidation.maxAttachmentCount)
         case .valid:
-            return "描述越清晰，越方便我们快速定位"
+            return L10n.tr("描述越清晰，越方便我们快速定位")
         }
     }
 
@@ -250,7 +250,7 @@ final class FeedbackCenterViewModel {
         }
 
         if failures > 0 {
-            formError = "有 \(failures) 张图片读取或压缩失败，已跳过。"
+            formError = L10n.fmt("有 %d 张图片读取或压缩失败，已跳过。", failures)
         }
     }
 
@@ -297,7 +297,7 @@ final class FeedbackCenterViewModel {
         let totalToUpload = pendingIndices.count
 
         for (step, index) in pendingIndices.enumerated() {
-            submissionStatusText = "正在上传截图 \(step + 1)/\(totalToUpload)…"
+            submissionStatusText = L10n.fmt("正在上传截图 %d/%d…", step + 1, totalToUpload)
             draftAttachments[index].uploadState = .uploading
             let item = draftAttachments[index]
             do {
@@ -313,7 +313,7 @@ final class FeedbackCenterViewModel {
             } catch {
                 let message = error.localizedDescription
                 draftAttachments[index].uploadState = .failed(message)
-                formError = "截图上传失败：\(message)"
+                formError = L10n.fmt("截图上传失败：%@", message)
                 return false
             }
         }

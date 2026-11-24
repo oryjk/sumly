@@ -181,7 +181,7 @@ struct MembershipPaywallContent: View {
                     .contentShape(GoldTheme.circleShape)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("关闭")
+            .accessibilityLabel(L10n.tr("关闭"))
             .accessibilityIdentifier("membership.close")
         }
         .padding(.horizontal, 18)
@@ -302,14 +302,14 @@ struct MembershipPaywallContent: View {
     private var activeEntitlementCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 8) {
-                Text("当前生效方案")
+                Text(L10n.tr("当前生效方案"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.textSecondary)
 
                 Spacer()
 
                 if membership.entitlement.isSandbox {
-                    Text("沙盒环境")
+                    Text(L10n.tr("沙盒环境"))
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundStyle(GoldTheme.goldSoft)
                         .padding(.horizontal, 8)
@@ -340,13 +340,13 @@ struct MembershipPaywallContent: View {
 
             VStack(spacing: 8) {
                 infoRow(
-                    label: "有效期至",
-                    value: membership.entitlement.formattedExpirationDate() ?? "持续有效",
+                    label: L10n.tr("有效期至"),
+                    value: membership.entitlement.formattedExpirationDate() ?? L10n.tr("持续有效"),
                     valueColor: GoldTheme.text
                 )
                 infoRow(
-                    label: "续费方式",
-                    value: membership.entitlement.willAutoRenew ? "到期自动续费" : "已关闭自动续费",
+                    label: L10n.tr("续费方式"),
+                    value: membership.entitlement.willAutoRenew ? L10n.tr("到期自动续费") : L10n.tr("已关闭自动续费"),
                     valueColor: membership.entitlement.willAutoRenew ? GoldTheme.down : GoldTheme.goldSoft
                 )
             }
@@ -402,7 +402,7 @@ struct MembershipPaywallContent: View {
                 Image(systemName: "sparkles")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(GoldTheme.gold)
-                Text(isUnlocked ? "已解锁会员权益" : "会员核心权益")
+                Text(isUnlocked ? L10n.tr("已解锁会员权益") : L10n.tr("会员核心权益"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.goldSoft)
                 Spacer()
@@ -456,7 +456,7 @@ struct MembershipPaywallContent: View {
     private var planSelectionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("选择订阅方案")
+                Text(L10n.tr("选择订阅方案"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.textSecondary)
                     .padding(.leading, 2)
@@ -466,7 +466,7 @@ struct MembershipPaywallContent: View {
                         ProgressView()
                             .controlSize(.mini)
                             .tint(GoldTheme.gold)
-                        Text("正在获取价格…")
+                        Text(L10n.tr("正在获取价格…"))
                             .font(.caption2)
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
@@ -564,7 +564,7 @@ struct MembershipPaywallContent: View {
                     }
 
                     HStack(spacing: 6) {
-                        Text("订阅周期：\(periodText)")
+                        Text(L10n.fmt("订阅周期：%@", periodText))
                             .font(.caption)
                             .foregroundStyle(GoldTheme.textSecondary)
 

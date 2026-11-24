@@ -15,9 +15,9 @@ enum FeedbackImageProcessor {
 
         var errorDescription: String? {
             switch self {
-            case .unreadableImage: "无法读取所选图片，请重新选择。"
-            case .encodingFailed: "图片压缩失败，请尝试其他图片。"
-            case .exceedsSizeLimit: "图片体积过大，请选择更小的截图。"
+            case .unreadableImage: L10n.tr("无法读取所选图片，请重新选择。")
+            case .encodingFailed: L10n.tr("图片压缩失败，请尝试其他图片。")
+            case .exceedsSizeLimit: L10n.tr("图片体积过大，请选择更小的截图。")
             }
         }
     }

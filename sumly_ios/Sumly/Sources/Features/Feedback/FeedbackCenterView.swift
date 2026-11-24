@@ -56,7 +56,7 @@ struct FeedbackCenterView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(GoldTheme.gold)
                     }
-                    .accessibilityLabel("收起键盘")
+                    .accessibilityLabel(L10n.tr("收起键盘"))
                     .accessibilityIdentifier("feedback.dismissKeyboard")
                 }
             }
@@ -316,7 +316,7 @@ struct FeedbackCenterView: View {
                                         Image(systemName: "plus")
                                             .font(.system(size: 18, weight: .semibold))
                                             .foregroundStyle(GoldTheme.gold)
-                                        Text("添加截图")
+                                        Text(L10n.tr("添加截图"))
                                             .font(.caption2.weight(.medium))
                                             .foregroundStyle(GoldTheme.textSecondary)
                                     }
@@ -381,7 +381,7 @@ struct FeedbackCenterView: View {
                             ProgressView()
                                 .controlSize(.small)
                                 .tint(GoldTheme.gold)
-                            Text("上传中")
+                            Text(L10n.tr("上传中"))
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(GoldTheme.goldSoft)
                         }
@@ -406,7 +406,7 @@ struct FeedbackCenterView: View {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.footnote)
                                 .foregroundStyle(GoldTheme.up)
-                            Text("待重试")
+                            Text(L10n.tr("待重试"))
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(GoldTheme.up)
                         }
@@ -424,7 +424,7 @@ struct FeedbackCenterView: View {
                         .padding(4)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("移除截图")
+                .accessibilityLabel(L10n.tr("移除截图"))
             }
         }
         .aspectRatio(1, contentMode: .fit)
@@ -502,11 +502,11 @@ struct FeedbackCenterView: View {
 
             if isDiagnosticExpanded {
                 VStack(spacing: 6) {
-                    diagnosticRow(label: "应用版本", value: "v\(context.appVersion) (\(context.buildNumber))")
-                    diagnosticRow(label: "系统版本", value: context.iosVersion)
-                    diagnosticRow(label: "设备型号", value: context.deviceModel)
-                    diagnosticRow(label: "行情口径", value: context.marketModeDisplayTitle)
-                    diagnosticRow(label: "账户模式", value: context.cloudSyncDisplayTitle)
+                    diagnosticRow(label: L10n.tr("应用版本"), value: "v\(context.appVersion) (\(context.buildNumber))")
+                    diagnosticRow(label: L10n.tr("系统版本"), value: context.iosVersion)
+                    diagnosticRow(label: L10n.tr("设备型号"), value: context.deviceModel)
+                    diagnosticRow(label: L10n.tr("行情口径"), value: context.marketModeDisplayTitle)
+                    diagnosticRow(label: L10n.tr("账户模式"), value: context.cloudSyncDisplayTitle)
                 }
                 .padding(10)
                 .background(GoldTheme.background, in: GoldTheme.subCardShape)
@@ -644,7 +644,7 @@ struct FeedbackCenterView: View {
         VStack(spacing: 14) {
             AccountRowIconBadge(systemName: "wifi.exclamationmark", style: .destructive)
             VStack(spacing: 4) {
-                Text("暂时无法加载记录")
+                Text(L10n.tr("暂时无法加载记录"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(GoldTheme.text)
                 Text(message)
@@ -747,7 +747,7 @@ struct FeedbackCenterView: View {
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("关闭提示")
+            .accessibilityLabel(L10n.tr("关闭提示"))
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -782,7 +782,7 @@ struct FeedbackRecordCard: View {
                     Image(systemName: "person.text.rectangle")
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.textFaint)
-                    Text("预留联系：\(item.trimmedContact)")
+                    Text(L10n.fmt("预留联系：%@", item.trimmedContact))
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.textFaint)
                         .lineLimit(1)
@@ -897,7 +897,7 @@ struct FeedbackRecordCard: View {
                     .overlay(GoldTheme.badgeShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("查看反馈截图")
+                .accessibilityLabel(L10n.tr("查看反馈截图"))
             }
             Spacer(minLength: 0)
         }
@@ -961,7 +961,7 @@ private struct FeedbackImageLightboxSheet: View {
                             VStack(spacing: 10) {
                                 ProgressView()
                                     .tint(GoldTheme.gold)
-                                Text("正在加载原图…")
+                                Text(L10n.tr("正在加载原图…"))
                                     .font(.caption)
                                     .foregroundStyle(GoldTheme.textSecondary)
                             }
@@ -975,7 +975,7 @@ private struct FeedbackImageLightboxSheet: View {
                                 Image(systemName: "photo.badge.exclamationmark")
                                     .font(.title2)
                                     .foregroundStyle(GoldTheme.textSecondary)
-                                Text("截图加载失败")
+                                Text(L10n.tr("截图加载失败"))
                                     .font(.footnote)
                                     .foregroundStyle(GoldTheme.textSecondary)
                             }
@@ -984,16 +984,16 @@ private struct FeedbackImageLightboxSheet: View {
                         }
                     }
                 } else {
-                    Text("无效的截图地址")
+                    Text(L10n.tr("无效的截图地址"))
                         .font(.footnote)
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
             }
-            .navigationTitle("截图预览")
+            .navigationTitle(L10n.tr("截图预览"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("关闭") { dismiss() }
+                    Button(L10n.tr("关闭")) { dismiss() }
                         .foregroundStyle(GoldTheme.gold)
                 }
             }

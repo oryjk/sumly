@@ -234,7 +234,7 @@ import Observation
         let stamp = generation
         guard let token else { return }
         do { _ = try await service.execute(.logout(token)) }
-        catch { if stamp == generation { notice = "已退出本机登录；网络异常，服务端会话可能仍有效。" } }
+        catch { if stamp == generation { notice = AuthL10n.tr("已退出本机登录；网络异常，服务端会话可能仍有效。") } }
     }
     func clearLocal() {
         loginAttemptGeneration += 1
@@ -255,6 +255,6 @@ import Observation
         _ = try await service.execute(.delete(current.result.token))
         guard stamp == generation else { throw AuthError.stale }
         clearLocal()
-        notice = "账户与云端持仓已注销。此设备的独立游客记录保留。"
+        notice = AuthL10n.tr("账户与云端持仓已注销。此设备的独立游客记录保留。")
     }
 }

@@ -22,21 +22,21 @@ enum FeedbackServiceError: Error, LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .badResponse:
-            "服务返回异常，请稍后重试。"
+            L10n.tr("服务返回异常，请稍后重试。")
         case .rateLimited(let message):
-            message.isEmpty ? "操作过于频繁，请稍后再试。" : message
+            message.isEmpty ? L10n.tr("操作过于频繁，请稍后再试。") : message
         case .serviceUnavailable(let message):
-            message.isEmpty ? "服务暂不可用，请稍后重试。" : message
+            message.isEmpty ? L10n.tr("服务暂不可用，请稍后重试。") : message
         case .httpStatus(_, let message):
-            message.isEmpty ? "请求失败，请稍后重试。" : message
+            message.isEmpty ? L10n.tr("请求失败，请稍后重试。") : message
         case .envelope(_, let message):
-            message.isEmpty ? "提交失败，请稍后重试。" : message
+            message.isEmpty ? L10n.tr("提交失败，请稍后重试。") : message
         case .emptyData:
-            "服务返回内容为空，请稍后重试。"
+            L10n.tr("服务返回内容为空，请稍后重试。")
         case .attachmentTooLarge:
-            "单张截图不能超过 3MB，请重新选择。"
+            L10n.tr("单张截图不能超过 3MB，请重新选择。")
         case .network:
-            "网络连接失败，请检查网络后重试。"
+            L10n.tr("网络连接失败，请检查网络后重试。")
         }
     }
 }

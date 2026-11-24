@@ -33,7 +33,7 @@ struct OnboardingQuickStartCard: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(GoldTheme.gold)
 
-            Text("3 步开启记金")
+            Text(L10n.tr("3 步开启记金"))
                 .font(.subheadline.bold())
                 .foregroundStyle(GoldTheme.text)
 
@@ -47,14 +47,14 @@ struct OnboardingQuickStartCard: View {
                 .overlay(
                     GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.30), lineWidth: 0.8)
                 )
-                .accessibilityLabel("已完成 \(state.completedCount) 项，共 \(state.totalCount) 项")
+                .accessibilityLabel(L10n.fmt("已完成 %d 项，共 %d 项", state.completedCount, state.totalCount))
 
             Spacer(minLength: 4)
 
             Button {
                 onDismiss()
             } label: {
-                Text("收起")
+                Text(L10n.tr("收起"))
                     .font(.caption.weight(.medium))
                     .foregroundStyle(GoldTheme.textSecondary)
                     .padding(.horizontal, 8)
@@ -62,7 +62,7 @@ struct OnboardingQuickStartCard: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("收起新手引导任务卡")
+            .accessibilityLabel(L10n.tr("收起新手引导任务卡"))
             .accessibilityIdentifier("onboarding.quickStart.dismiss")
         }
     }
@@ -143,7 +143,7 @@ struct OnboardingQuickStartCard: View {
                 Spacer(minLength: 6)
 
                 if item.isCompleted {
-                    Text("已完成")
+                    Text(L10n.tr("已完成"))
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(GoldTheme.gold.opacity(0.82))
                 } else {
@@ -157,8 +157,8 @@ struct OnboardingQuickStartCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(item.title)，\(item.isCompleted ? "已完成" : "待完成")")
-        .accessibilityHint(item.isCompleted ? "点击可再次前往" : item.subtitle)
+        .accessibilityLabel(L10n.fmt("%@，%@", item.title, item.isCompleted ? L10n.tr("已完成") : L10n.tr("待完成")))
+        .accessibilityHint(item.isCompleted ? L10n.tr("点击可再次前往") : item.subtitle)
         .accessibilityIdentifier("onboarding.quickStart.step.\(item.action.rawValue)")
     }
 }

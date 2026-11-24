@@ -18,10 +18,10 @@ enum GoldPrimaryTab: Int, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .market: "行情"
-        case .holdings: "持有"
-        case .calendar: "日历"
-        case .account: "我的"
+        case .market: L10n.tr("行情")
+        case .holdings: L10n.tr("持有")
+        case .calendar: L10n.tr("日历")
+        case .account: L10n.tr("我的")
         }
     }
 
@@ -47,8 +47,10 @@ struct GoldFloatingTabBar: View {
 
     @Namespace private var tabHighlight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let languageStore = AppLanguageStore.shared
 
     var body: some View {
+        let _ = languageStore.revision
         ZStack(alignment: .bottom) {
             bottomScrim
             HStack(spacing: GoldTabBarLayout.itemSpacing) {
@@ -168,7 +170,7 @@ struct GoldFloatingTabBar: View {
                 .shadow(color: GoldTheme.addButtonShadow, radius: 10, x: 0, y: 4)
         }
         .buttonStyle(GoldScalePressStyle())
-        .accessibilityLabel("添加黄金")
+        .accessibilityLabel(L10n.tr("添加黄金"))
         .accessibilityIdentifier("tabbar.add")
     }
 }

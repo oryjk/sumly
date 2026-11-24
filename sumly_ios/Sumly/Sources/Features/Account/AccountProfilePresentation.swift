@@ -3,89 +3,93 @@ import Foundation
 // MARK: - 账户页静态文案与合规声明（单一数据源，供视图与合规单测共用）
 
 enum AccountProfileCopy {
-    static let pageTitle = "我的"
-    static let pageSubtitle = "记下每一克，积累每一天"
+    static var pageTitle: String { L10n.tr("我的") }
+    static var pageSubtitle: String { L10n.tr("记下每一克，积累每一天") }
 
-    static let guestHeadline = "让积累，有自己的名字"
-    static let guestModeLabel = "本机游客模式"
-    static let guestSubtitle = "本机离线即可记录，随时登录开启多端同步"
-    static let guestValueTags: [String] = [
-        "多端云同步",
-        "离线可用",
-        "游客数据独立"
-    ]
-    static let loginActionTitle = "登录 / 注册"
+    static var guestHeadline: String { L10n.tr("让积累，有自己的名字") }
+    static var guestModeLabel: String { L10n.tr("本机游客模式") }
+    static var guestSubtitle: String { L10n.tr("本机离线即可记录，随时登录开启多端同步") }
+    static var guestValueTags: [String] {
+        [
+            L10n.tr("多端云同步"),
+            L10n.tr("离线可用"),
+            L10n.tr("游客数据独立")
+        ]
+    }
+    static var loginActionTitle: String { L10n.tr("登录 / 注册") }
 
-    static let profileSectionTitle = "我的攒金档案"
-    static let activeGramsLabel = "当前持有"
-    static let activeCountLabel = "持仓笔数"
-    static let companionDaysLabel = "攒金陪伴"
+    static var profileSectionTitle: String { L10n.tr("我的攒金档案") }
+    static var activeGramsLabel: String { L10n.tr("当前持有") }
+    static var activeCountLabel: String { L10n.tr("持仓笔数") }
+    static var companionDaysLabel: String { L10n.tr("攒金陪伴") }
 
-    static let preferencesSectionTitle = "偏好与工具"
-    static let membershipTitle = MembershipCopy.title
-    static let membershipSubtitle = MembershipCopy.accountInactiveSubtitle
-    static let chanlunMemberBadge = MembershipCopy.chanlunMemberBadge
-    static let privacyMaskTitle = "隐私遮罩"
-    static let privacyMaskSubtitle = "隐藏全应用金额与持仓克重"
-    static let chanlunTitle = "禅观"
-    static let chanlunSubtitle = "查看行情走势与复盘"
-    static let onboardingTitle = "新手引导"
-    static let onboardingSubtitle = "快速了解记金核心功能"
-    static let cloudSettingsTitle = "云同步与系统设置"
-    static let cloudSettingsSubtitle = "同步、跨设备登录与缓存管理"
+    static var preferencesSectionTitle: String { L10n.tr("偏好与工具") }
+    static var membershipTitle: String { MembershipCopy.title }
+    static var membershipSubtitle: String { MembershipCopy.accountInactiveSubtitle }
+    static var chanlunMemberBadge: String { MembershipCopy.chanlunMemberBadge }
+    static var privacyMaskTitle: String { L10n.tr("隐私遮罩") }
+    static var privacyMaskSubtitle: String { L10n.tr("隐藏全应用金额与持仓克重") }
+    static var chanlunTitle: String { L10n.tr("禅观") }
+    static var chanlunSubtitle: String { L10n.tr("查看行情走势与复盘") }
+    static var onboardingTitle: String { L10n.tr("新手引导") }
+    static var onboardingSubtitle: String { L10n.tr("快速了解记金核心功能") }
+    static var cloudSettingsTitle: String { L10n.tr("云同步与系统设置") }
+    static var cloudSettingsSubtitle: String { L10n.tr("同步、跨设备登录与缓存管理") }
 
-    static let supportSectionTitle = "支持与合规"
-    static let privacyPolicyTitle = "隐私政策"
-    static let privacyPolicySubtitle = "了解数据存储与隐私保护说明"
-    static let supportTitle = "联系支持"
+    static var supportSectionTitle: String { L10n.tr("支持与合规") }
+    static var privacyPolicyTitle: String { L10n.tr("隐私政策") }
+    static var privacyPolicySubtitle: String { L10n.tr("了解数据存储与隐私保护说明") }
+    static var supportTitle: String { L10n.tr("联系支持") }
     static let supportSubtitle = "oryjk@qq.com"
-    static let icpTitle = "App 备案号"
+    static var icpTitle: String { L10n.tr("App 备案号") }
     static let icpNumber = "蜀ICP备2020035100号-3A"
 
-    static let securitySectionTitle = "账户安全"
-    static let logoutTitle = "退出登录"
-    static let logoutSubtitle = "本机缓存保留，退出后切换回游客视图"
-    static let deleteAccountTitle = "注销账户"
-    static let deleteAccountSubtitle = "永久删除账户与云端持仓，需 5 分钟内重验"
+    static var securitySectionTitle: String { L10n.tr("账户安全") }
+    static var logoutTitle: String { L10n.tr("退出登录") }
+    static var logoutSubtitle: String { L10n.tr("本机缓存保留，退出后切换回游客视图") }
+    static var deleteAccountTitle: String { L10n.tr("注销账户") }
+    static var deleteAccountSubtitle: String { L10n.tr("永久删除账户与云端持仓，需 5 分钟内重验") }
 
-    static let disclaimer = "记金用于个人记录与回收估算，不提供黄金交易或投资建议。"
+    static var disclaimer: String { L10n.tr("记金用于个人记录与回收估算，不提供黄金交易或投资建议。") }
 
-    static let allPromotionalAndUICopy: [String] = [
-        pageTitle,
-        pageSubtitle,
-        guestHeadline,
-        guestModeLabel,
-        guestSubtitle,
-        loginActionTitle,
-        profileSectionTitle,
-        activeGramsLabel,
-        activeCountLabel,
-        companionDaysLabel,
-        preferencesSectionTitle,
-        membershipTitle,
-        membershipSubtitle,
-        chanlunMemberBadge,
-        privacyMaskTitle,
-        privacyMaskSubtitle,
-        chanlunTitle,
-        chanlunSubtitle,
-        onboardingTitle,
-        onboardingSubtitle,
-        cloudSettingsTitle,
-        cloudSettingsSubtitle,
-        supportSectionTitle,
-        privacyPolicyTitle,
-        privacyPolicySubtitle,
-        supportTitle,
-        supportSubtitle,
-        icpTitle,
-        icpNumber,
-        securitySectionTitle,
-        logoutTitle,
-        logoutSubtitle,
-        deleteAccountTitle,
-        deleteAccountSubtitle
-    ] + guestValueTags
+    static var allPromotionalAndUICopy: [String] {
+        [
+            pageTitle,
+            pageSubtitle,
+            guestHeadline,
+            guestModeLabel,
+            guestSubtitle,
+            loginActionTitle,
+            profileSectionTitle,
+            activeGramsLabel,
+            activeCountLabel,
+            companionDaysLabel,
+            preferencesSectionTitle,
+            membershipTitle,
+            membershipSubtitle,
+            chanlunMemberBadge,
+            privacyMaskTitle,
+            privacyMaskSubtitle,
+            chanlunTitle,
+            chanlunSubtitle,
+            onboardingTitle,
+            onboardingSubtitle,
+            cloudSettingsTitle,
+            cloudSettingsSubtitle,
+            supportSectionTitle,
+            privacyPolicyTitle,
+            privacyPolicySubtitle,
+            supportTitle,
+            supportSubtitle,
+            icpTitle,
+            icpNumber,
+            securitySectionTitle,
+            logoutTitle,
+            logoutSubtitle,
+            deleteAccountTitle,
+            deleteAccountSubtitle
+        ] + guestValueTags
+    }
 }
 
 // MARK: - 登录方式与头像展示辅助
@@ -93,9 +97,9 @@ enum AccountProfileCopy {
 extension AuthProvider {
     var loginPillTitle: String {
         switch self {
-        case .apple: "Apple 登录"
-        case .phone: "手机登录"
-        case .email: "邮箱登录"
+        case .apple: L10n.tr("Apple 登录")
+        case .phone: L10n.tr("手机登录")
+        case .email: L10n.tr("邮箱登录")
         }
     }
 }
@@ -177,9 +181,9 @@ struct AccountGoldProfileSummary: Equatable, Sendable {
                 return current.title
             }
             if totalActiveGrams > 0 {
-                return "蓄力首克"
+                return L10n.tr("蓄力首克")
             }
-            return "待启首克"
+            return L10n.tr("待启首克")
         }()
 
         self.activeGrams = totalActiveGrams
@@ -205,11 +209,11 @@ struct AccountGoldProfileSummary: Equatable, Sendable {
 
     func formattedActiveCount(hideAmounts: Bool) -> String {
         if hideAmounts { return "••••" }
-        return "\(activeCount) 笔"
+        return L10n.fmt("%d 笔", activeCount)
     }
 
     func formattedCompanionDays() -> String {
-        "\(companionDays) 天"
+        L10n.fmt("%d 天", companionDays)
     }
 }
 
@@ -295,17 +299,17 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
     var accessibilityLabel: String {
         switch tone {
         case .guest:
-            "本机游客模式，未开启云同步"
+            L10n.tr("本机游客模式，未开启云同步")
         case .synced:
-            "云端已同步，轻点立即同步"
+            L10n.tr("云端已同步，轻点立即同步")
         case .syncing:
-            "正在同步云端数据"
+            L10n.tr("正在同步云端数据")
         case .pending:
-            "本地有待同步更改，轻点立即同步"
+            L10n.tr("本地有待同步更改，轻点立即同步")
         case .failed:
-            "云同步失败待重试，轻点重新同步"
+            L10n.tr("云同步失败待重试，轻点重新同步")
         case .conflict:
-            "有 \(conflictCount) 条同步冲突，轻点前往处理"
+            L10n.fmt("有 %d 条同步冲突，轻点前往处理", conflictCount)
         }
     }
 
@@ -323,7 +327,7 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
             return AccountCloudStatusBadge(
                 tone: .guest,
                 title: AccountProfileCopy.guestModeLabel,
-                detail: statusDetail ?? "游客记录仅保存在此设备，登录后可导入账户。",
+                detail: statusDetail ?? L10n.tr("游客记录仅保存在此设备，登录后可导入账户。"),
                 guestImportHint: nil,
                 canSyncNow: false,
                 isSyncing: false,
@@ -335,14 +339,14 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
 
         let safeConflicts = max(0, conflictCount)
         let safeGuestRecords = max(0, guestRecordCount)
-        let importHint = safeGuestRecords > 0 ? "可导入 \(safeGuestRecords) 条游客记录" : nil
+        let importHint = safeGuestRecords > 0 ? L10n.fmt("可导入 %d 条游客记录", safeGuestRecords) : nil
 
         let attention: AttentionPill? = {
             if safeConflicts > 0 {
-                return AttentionPill(text: "\(safeConflicts) 条冲突", isUrgent: true)
+                return AttentionPill(text: L10n.fmt("%d 条冲突", safeConflicts), isUrgent: true)
             }
             if safeGuestRecords > 0 {
-                return AttentionPill(text: "可导入 \(safeGuestRecords) 条", isUrgent: false)
+                return AttentionPill(text: L10n.fmt("可导入 %d 条", safeGuestRecords), isUrgent: false)
             }
             return nil
         }()
@@ -350,8 +354,8 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
         if isSyncing {
             return AccountCloudStatusBadge(
                 tone: .syncing,
-                title: "同步中…",
-                detail: statusDetail ?? "正在同步云端持仓与账本…",
+                title: L10n.tr("同步中…"),
+                detail: statusDetail ?? L10n.tr("正在同步云端持仓与账本…"),
                 guestImportHint: importHint,
                 canSyncNow: false,
                 isSyncing: true,
@@ -364,8 +368,8 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
         if safeConflicts > 0 {
             return AccountCloudStatusBadge(
                 tone: .conflict,
-                title: "有 \(safeConflicts) 条同步冲突",
-                detail: statusDetail ?? "\(safeConflicts) 条记录在多台设备上均有更改，请选择保留版本。",
+                title: L10n.fmt("有 %d 条同步冲突", safeConflicts),
+                detail: statusDetail ?? L10n.fmt("%d 条记录在多台设备上均有更改，请选择保留版本。", safeConflicts),
                 guestImportHint: importHint,
                 canSyncNow: true,
                 isSyncing: false,
@@ -378,7 +382,7 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
         if let notice, !notice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return AccountCloudStatusBadge(
                 tone: .failed,
-                title: "同步待重试",
+                title: L10n.tr("同步待重试"),
                 detail: statusDetail ?? notice,
                 guestImportHint: importHint,
                 canSyncNow: true,
@@ -392,8 +396,8 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
         if hasPendingChanges {
             return AccountCloudStatusBadge(
                 tone: .pending,
-                title: "待同步更改",
-                detail: statusDetail ?? "有更改等待同步，记录已保存在本机。",
+                title: L10n.tr("待同步更改"),
+                detail: statusDetail ?? L10n.tr("有更改等待同步，记录已保存在本机。"),
                 guestImportHint: importHint,
                 canSyncNow: true,
                 isSyncing: false,
@@ -404,12 +408,12 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
         }
 
         let syncedDetail = statusDetail ?? lastSyncedAt.map {
-            "已同步 · \($0.formatted(date: .omitted, time: .shortened))"
-        } ?? "已开启云同步，本机缓存支持离线记录。"
+            L10n.fmt("已同步 · %@", $0.formatted(date: .omitted, time: .shortened))
+        } ?? L10n.tr("已开启云同步，本机缓存支持离线记录。")
 
         return AccountCloudStatusBadge(
             tone: .synced,
-            title: "云端已同步",
+            title: L10n.tr("云端已同步"),
             detail: syncedDetail,
             guestImportHint: importHint,
             canSyncNow: true,
@@ -444,13 +448,13 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
 
 enum AccountAppVersionFormatter {
     static func format(
-        appName: String = "记金",
+        appName: String = L10n.tr("记金"),
         shortVersion: String?,
         buildNumber: String? = nil,
         includeBuild: Bool = false
     ) -> String {
         let trimmedName = appName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = trimmedName.isEmpty ? "记金" : trimmedName
+        let name = trimmedName.isEmpty ? L10n.tr("记金") : trimmedName
         let version = shortVersion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let build = buildNumber?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
@@ -468,7 +472,7 @@ enum AccountAppVersionFormatter {
 
     static func format(
         bundle: Bundle = .main,
-        appName: String = "记金",
+        appName: String = L10n.tr("记金"),
         includeBuild: Bool = false
     ) -> String {
         let shortVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String

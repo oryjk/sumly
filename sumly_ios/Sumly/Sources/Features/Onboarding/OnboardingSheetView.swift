@@ -8,7 +8,7 @@ struct OnboardingSheetView: View {
     @State private var currentIndex = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let steps = OnboardingStep.allSteps
+    private var steps: [OnboardingStep] { OnboardingStep.allSteps }
 
     private var currentStep: OnboardingStep {
         steps[min(max(0, currentIndex), steps.count - 1)]
@@ -84,14 +84,14 @@ struct OnboardingSheetView: View {
             Button {
                 onDismiss()
             } label: {
-                Text("跳过")
+                Text(L10n.tr("跳过"))
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(GoldTheme.textSecondary)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("跳过新手引导")
+            .accessibilityLabel(L10n.tr("跳过新手引导"))
             .accessibilityIdentifier("onboarding.skip")
         }
     }
@@ -223,7 +223,7 @@ struct OnboardingSheetView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("第 \(step.id + 1) 页，共 \(steps.count) 页")
+                    .accessibilityLabel(L10n.fmt("第 %d 页，共 %d 页", step.id + 1, steps.count))
                     .accessibilityAddTraits(isActive ? .isSelected : [])
                 }
             }
@@ -318,7 +318,7 @@ private struct HoldingsPreviewArtwork: View {
                 Image(systemName: "sparkles")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.gold)
-                Text("3 秒极简入库 · 自动算清保本价")
+                Text(L10n.tr("3 秒极简入库 · 自动算清保本价"))
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(GoldTheme.goldSoft)
                     .lineLimit(1)
@@ -365,7 +365,7 @@ private struct MarketChartPreviewArtwork: View {
                     Circle()
                         .fill(GoldTheme.gold)
                         .frame(width: 6, height: 6)
-                    Text("Au99.99 走势")
+                    Text(L10n.tr("Au99.99 走势"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(GoldTheme.text)
                 }
@@ -375,7 +375,7 @@ private struct MarketChartPreviewArtwork: View {
                 HStack(spacing: 4) {
                     Image(systemName: "thermometer.medium")
                         .font(.caption2.weight(.semibold))
-                    Text("52° 温和")
+                    Text(L10n.tr("52° 温和"))
                         .font(.caption2.weight(.semibold))
                         .monospacedDigit()
                 }
@@ -385,7 +385,7 @@ private struct MarketChartPreviewArtwork: View {
                 .background(GoldTheme.background.opacity(0.75), in: GoldTheme.capsuleShape)
                 .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.tempNeutral.opacity(0.32), lineWidth: 1))
 
-                Text("美债压力")
+                Text(L10n.tr("美债压力"))
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(GoldTheme.chartSecondary)
                     .padding(.horizontal, 8)
@@ -492,7 +492,7 @@ private struct MarketChartPreviewArtwork: View {
                         .position(buyPt)
 
                         if idx == 0 {
-                            Text("买入点")
+                            Text(L10n.tr("买入点"))
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(GoldTheme.up)
                                 .padding(.horizontal, 6)
@@ -504,7 +504,7 @@ private struct MarketChartPreviewArtwork: View {
                     }
 
                     // 保本线右侧微标签
-                    Text("保本虚线")
+                    Text(L10n.tr("保本虚线"))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(GoldTheme.goldSoft)
                         .padding(.horizontal, 6)
@@ -525,7 +525,9 @@ private struct MarketChartPreviewArtwork: View {
 // MARK: - 第 3 页插画：7×4 暗金日历热力矩阵 + 攒金盒里程碑微卡
 
 private struct CalendarVaultPreviewArtwork: View {
-    private static let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+    private static var weekdays: [String] {
+        [L10n.tr("一"), L10n.tr("二"), L10n.tr("三"), L10n.tr("四"), L10n.tr("五"), L10n.tr("六"), L10n.tr("日")]
+    }
     /// 28 格热力强度：0=无记录，1=轻度，2=中度，3=高光。
     private static let intensities: [Int] = [
         0, 1, 0, 0, 2, 0, 0,
@@ -572,10 +574,10 @@ private struct CalendarVaultPreviewArtwork: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
-                        Text("攒金盒里程碑")
+                        Text(L10n.tr("攒金盒里程碑"))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(GoldTheme.text)
-                        Text("10g 初成")
+                        Text(L10n.tr("10g 初成"))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(GoldTheme.goldSoft)
                     }
@@ -597,7 +599,7 @@ private struct CalendarVaultPreviewArtwork: View {
                     .frame(height: 5)
                 }
 
-                Text("云同步可选")
+                Text(L10n.tr("云同步可选"))
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(GoldTheme.goldSoft)
                     .padding(.horizontal, 8)

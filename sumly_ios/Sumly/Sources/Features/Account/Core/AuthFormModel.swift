@@ -3,7 +3,14 @@ import Observation
 
 enum AuthFormMode: String, CaseIterable {
     case phone, email, register, reset
-    var title: String { switch self { case .phone: "手机号登录"; case .email: "邮箱登录"; case .register: "注册邮箱账户"; case .reset: "重设密码" } }
+    var title: String {
+        switch self {
+        case .phone: AuthL10n.tr("手机号登录")
+        case .email: AuthL10n.tr("邮箱登录")
+        case .register: AuthL10n.tr("注册邮箱账户")
+        case .reset: AuthL10n.tr("重设密码")
+        }
+    }
 }
 @MainActor @Observable final class AuthFormModel {
     let session: AuthSession
@@ -73,7 +80,7 @@ enum AuthFormMode: String, CaseIterable {
             let delivery = try await session.service.fetch(CodeDelivery.self, request)
             guard active else { return }
             cooldowns[key] = Date().addingTimeInterval(Double(max(0, delivery.retryAfter)))
-            message = mode == .phone ? "验证码已发送，5 分钟内有效。" : "如果此邮箱符合条件，将收到验证码，请检查收件箱。"
+            message = mode == .phone ? AuthL10n.tr("验证码已发送，5 分钟内有效。") : AuthL10n.tr("如果此邮箱符合条件，将收到验证码，请检查收件箱。")
         } catch { if active { self.error = error.localizedDescription } }
     }
     func submit() async {
@@ -101,7 +108,7 @@ enum AuthFormMode: String, CaseIterable {
                     session.clearLocal()
                 }
                 mode = .email
-                message = "密码已重设，请使用新密码登录。原有登录会话已失效。"
+                message = AuthL10n.tr("密码已重设，请使用新密码登录。原有登录会话已失效。")
             }
             if submittingMode != .reset { authenticated = true }
             clearSecrets()

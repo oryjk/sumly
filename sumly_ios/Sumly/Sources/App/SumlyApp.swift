@@ -38,6 +38,7 @@ private struct GoldRootView: View {
     @State private var session = AuthSession(service: NativeAuthService(baseURL: BackendGoldPriceService.defaultBaseURL), store: KeychainCredentialStore())
     @State private var membership = MembershipStore()
     @State private var remoteConfig = RemoteAppConfigStore()
+    @State private var languageStore = AppLanguageStore.shared
     @State private var selectedTab = HoldingsDesignPreview.isEnabled ? 1 : 0
     @State private var pendingChanlunAfterLogin = false
     @Environment(\.scenePhase) private var scenePhase
@@ -51,6 +52,8 @@ private struct GoldRootView: View {
             pendingChanlunAfterLogin: $pendingChanlunAfterLogin
         )
             .id(session.user?.id ?? 0)
+            .environment(languageStore)
+            .environment(\.locale, languageStore.effectiveLocale)
             .task {
                 async let restoreSession: Void = session.restore()
                 async let startMembership: Void = membership.start()
@@ -70,7 +73,7 @@ private struct GoldRootView: View {
             .onReceive(NotificationCenter.default.publisher(for: ASAuthorizationAppleIDProvider.credentialRevokedNotification)) { _ in
                 if session.stored?.appleUserID != nil {
                     session.clearLocal()
-                    session.notice = "Apple 授权已撤销，请重新登录。"
+                    session.notice = L10n.tr("Apple 授权已撤销，请重新登录。")
                 }
             }
     }
@@ -83,9 +86,11 @@ private struct HoldingWorkspaceShell: View {
     let guestContainer: ModelContainer
     @Binding var selectedTab: Int
     @Binding var pendingChanlunAfterLogin: Bool
+    @Environment(AppLanguageStore.self) private var languageStore
     @State private var cloud: HoldingsCloud?
     @State private var storageError: String?
     var body: some View {
+        let _ = languageStore.revision
         Group {
             if let cloud {
                 GoldWorkspaceView(
@@ -100,11 +105,11 @@ private struct HoldingWorkspaceShell: View {
                     .defaultAppStorage(cloud.defaults)
             } else if let storageError {
                 VStack(spacing: 16) {
-                    Text("无法打开持仓缓存").font(.headline)
+                    Text(L10n.tr("无法打开持仓缓存")).font(.headline)
                     Text(storageError).font(.footnote)
-                    Button("重试") { openWorkspace() }
+                    Button(L10n.tr("重试")) { openWorkspace() }
                 }.padding().foregroundStyle(GoldTheme.text)
-            } else { ProgressView("正在打开持仓…") }
+            } else { ProgressView(L10n.tr("正在打开持仓…")) }
         }.frame(maxWidth: .infinity, maxHeight: .infinity).background(GoldTheme.background)
             .task { openWorkspace() }
     }
@@ -122,7 +127,8 @@ private struct GoldWorkspaceView: View {
     @Binding var selectedTab: Int
     @Binding var pendingChanlunAfterLogin: Bool
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("market.basis") private var marketBasisRaw = GoldMarketBasis.domestic.rawValue
+    @Environment(AppLanguageStore.self) private var languageStore
+    @AppStorage private var marketBasisRaw: String
     @AppStorage("market.showHoldingOverlay") private var showHoldingOverlay = true
     @AppStorage("holdings.currentBook") private var currentBook = "默认账本"
     @AppStorage("holdings.hideAmounts") private var hideAmounts = false
@@ -142,13 +148,35 @@ private struct GoldWorkspaceView: View {
     @State private var showingLoginForChanlun = false
     @State private var showingChanlun = false
 
+    init(
+        session: AuthSession,
+        membership: MembershipStore,
+        remoteConfig: RemoteAppConfigStore,
+        cloud: HoldingsCloud,
+        selectedTab: Binding<Int>,
+        pendingChanlunAfterLogin: Binding<Bool>
+    ) {
+        self.session = session
+        self.membership = membership
+        self.remoteConfig = remoteConfig
+        self.cloud = cloud
+        self._selectedTab = selectedTab
+        self._pendingChanlunAfterLogin = pendingChanlunAfterLogin
+        let initialBasis = GoldMarketBasis.resolveInitialBasis(in: cloud.defaults)
+        self._marketBasisRaw = AppStorage(
+            wrappedValue: initialBasis.rawValue,
+            GoldMarketBasis.storageKey,
+            store: cloud.defaults
+        )
+    }
+
     private var marketBasis: GoldMarketBasis {
-        GoldMarketBasis(rawValue: marketBasisRaw) ?? .domestic
+        GoldMarketBasis(rawValue: marketBasisRaw) ?? GoldMarketBasis.initialDefault()
     }
 
     private var marketBasisBinding: Binding<GoldMarketBasis> {
         Binding(
-            get: { GoldMarketBasis(rawValue: marketBasisRaw) ?? .domestic },
+            get: { GoldMarketBasis(rawValue: marketBasisRaw) ?? GoldMarketBasis.initialDefault() },
             set: { marketBasisRaw = $0.rawValue }
         )
     }
@@ -234,6 +262,7 @@ private struct GoldWorkspaceView: View {
     }
 
     var body: some View {
+        let languageRevision = languageStore.revision
         GeometryReader { geometry in
             let tabBarLayout = GoldTabBarLayout.resolve(
                 containerWidth: geometry.size.width,
@@ -253,6 +282,7 @@ private struct GoldWorkspaceView: View {
                         onOpenHoldings: { selectedTab = 1 },
                         onOpenChanlun: openChanlun
                     )
+                    .id(languageRevision)
                     .opacity(selectedTab == 0 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 0)
                     .accessibilityHidden(selectedTab != 0)
@@ -267,6 +297,7 @@ private struct GoldWorkspaceView: View {
                         },
                         onOpenChartOverlay: openChartOverlayGuide
                     )
+                    .id(languageRevision)
                     .opacity(selectedTab == 1 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 1)
                     .accessibilityHidden(selectedTab != 1)
@@ -278,6 +309,7 @@ private struct GoldWorkspaceView: View {
                         quoteStore: quoteStore,
                         isEmbeddedTab: true
                     )
+                    .id(languageRevision)
                     .opacity(selectedTab == 2 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 2)
                     .accessibilityHidden(selectedTab != 2)
@@ -309,7 +341,7 @@ private struct GoldWorkspaceView: View {
                             Image(systemName: "chart.xyaxis.line")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(GoldTheme.gold)
-                            Text("已开启「持仓」叠加 · 切至近 1 月及以上可看保本线与买入红点")
+                            Text(L10n.tr("已开启「持仓」叠加 · 切至近 1 月及以上可看保本线与买入红点"))
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(GoldTheme.text)
                                 .lineLimit(2)
@@ -325,7 +357,7 @@ private struct GoldWorkspaceView: View {
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("关闭提示")
+                            .accessibilityLabel(L10n.tr("关闭提示"))
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)

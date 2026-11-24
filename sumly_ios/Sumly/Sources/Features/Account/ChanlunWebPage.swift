@@ -197,26 +197,26 @@ struct ChanlunWebPage: View {
                             .progressViewStyle(.linear)
                             .tint(GoldTheme.gold)
                         Spacer()
-                        ProgressView("正在打开禅观…")
+                        ProgressView(L10n.tr("正在打开禅观…"))
                         Spacer()
                     }
                 } else if webSession.failed {
                     VStack(spacing: 16) {
-                        Text("暂时无法打开禅观")
-                        Button("重试") { attempt += 1 }
+                        Text(L10n.tr("暂时无法打开禅观"))
+                        Button(L10n.tr("重试")) { attempt += 1 }
                     }
                 }
             }
             .background(GoldTheme.background)
             .foregroundStyle(GoldTheme.text)
-            .navigationTitle("禅观")
+            .navigationTitle(L10n.tr("禅观"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(GoldTheme.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: {
-                        Label("返回", systemImage: "chevron.left")
+                        Label(L10n.tr("返回"), systemImage: "chevron.left")
                     }
                     .accessibilityIdentifier("chanlun.back")
                 }

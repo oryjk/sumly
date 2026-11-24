@@ -6,6 +6,7 @@ configs:
 options:
   bundleIdPrefix: com.oryjk
   createIntermediateGroups: true
+  developmentLanguage: zh-Hans
   deploymentTarget:
     iOS: "17.0"
 settings:
@@ -47,6 +48,13 @@ targets:
       properties:
         CFBundleDisplayName: 记金
         CFBundleDevelopmentRegion: zh-Hans
+        CFBundleLocalizations:
+          - zh-Hans
+          - en
+          - es
+          - fr
+          - pt
+          - ja
         CFBundleShortVersionString: "1.0.5"
         CFBundleVersion: "60"
         UILaunchScreen:
@@ -67,7 +75,12 @@ targets:
     sources:
       - SumlyWidget/Sources
       - SumlyWidget/Shared
+      - SumlyWidget/Resources
       - Sumly/Sources/DesignSystem/GoldTheme.swift
+      - Sumly/Sources/Shared/Localization
+      - path: Sumly/Resources
+        includes:
+          - "*.lproj/Localizable.strings"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.oryjk.sumly.widget
@@ -94,6 +107,13 @@ targets:
       properties:
         CFBundleDisplayName: 记金小组件
         CFBundleDevelopmentRegion: zh-Hans
+        CFBundleLocalizations:
+          - zh-Hans
+          - en
+          - es
+          - fr
+          - pt
+          - ja
         CFBundleShortVersionString: "1.0.5"
         CFBundleVersion: "60"
         NSExtension:

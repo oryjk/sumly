@@ -67,44 +67,46 @@ struct OnboardingStep: Identifiable, Equatable, Sendable {
         [badge, title, subtitle, primaryButtonTitle] + highlights + (secondaryButtonTitle.map { [$0] } ?? [])
     }
 
-    static let allSteps: [OnboardingStep] = [
-        OnboardingStep(
-            kind: .holdings,
-            badge: "01 · 极简记账",
-            title: "记下每一克，算清真实保本价",
-            subtitle: "支持金豆、金条、金饰与积存金，自动计入工费、纯度与回收扣减，一眼看清真实盈亏与保本金价。",
-            highlights: [
-                "4 种黄金形态预设常见纯度与工费",
-                "按回收规则实时核算预计到手与保本价"
-            ],
-            primaryButtonTitle: "下一步",
-            secondaryButtonTitle: nil
-        ),
-        OnboardingStep(
-            kind: .marketChart,
-            badge: "02 · 行情对照",
-            title: "看懂大盘与你的买入点位",
-            subtitle: "实时切换国内与国际金价走势，同图叠加黄色保本虚线与红色买入点连线，并附黄金温度与美债压力客观读数。",
-            highlights: [
-                "黄色保本虚线与红色买入点清晰对照",
-                "黄金温度与美债压力基于历史分位客观展示"
-            ],
-            primaryButtonTitle: "下一步",
-            secondaryButtonTitle: nil
-        ),
-        OnboardingStep(
-            kind: .calendarVault,
-            badge: "03 · 攒金陪伴",
-            title: "攒金陪伴日历，见证每一次积累",
-            subtitle: "日历热力记录每日克重轨迹，攒金盒点亮阶段里程碑。本机游客即可直接使用，随时开启多端云同步。",
-            highlights: [
-                "本机游客免登录即用，记录随时可查",
-                "登录账户即可按需开启多端云同步"
-            ],
-            primaryButtonTitle: "立刻记下第一笔黄金",
-            secondaryButtonTitle: "先随便逛逛"
-        )
-    ]
+    static var allSteps: [OnboardingStep] {
+        [
+            OnboardingStep(
+                kind: .holdings,
+                badge: L10n.tr("01 · 极简记账"),
+                title: L10n.tr("记下每一克，算清真实保本价"),
+                subtitle: L10n.tr("支持金豆、金条、金饰与积存金，自动计入工费、纯度与回收扣减，一眼看清真实盈亏与保本金价。"),
+                highlights: [
+                    L10n.tr("4 种黄金形态预设常见纯度与工费"),
+                    L10n.tr("按回收规则实时核算预计到手与保本价")
+                ],
+                primaryButtonTitle: L10n.tr("下一步"),
+                secondaryButtonTitle: nil
+            ),
+            OnboardingStep(
+                kind: .marketChart,
+                badge: L10n.tr("02 · 行情对照"),
+                title: L10n.tr("看懂大盘与你的买入点位"),
+                subtitle: L10n.tr("实时切换国内与国际金价走势，同图叠加黄色保本虚线与红色买入点连线，并附黄金温度与美债压力客观读数。"),
+                highlights: [
+                    L10n.tr("黄色保本虚线与红色买入点清晰对照"),
+                    L10n.tr("黄金温度与美债压力基于历史分位客观展示")
+                ],
+                primaryButtonTitle: L10n.tr("下一步"),
+                secondaryButtonTitle: nil
+            ),
+            OnboardingStep(
+                kind: .calendarVault,
+                badge: L10n.tr("03 · 攒金陪伴"),
+                title: L10n.tr("攒金陪伴日历，见证每一次积累"),
+                subtitle: L10n.tr("日历热力记录每日克重轨迹，攒金盒点亮阶段里程碑。本机游客即可直接使用，随时开启多端云同步。"),
+                highlights: [
+                    L10n.tr("本机游客免登录即用，记录随时可查"),
+                    L10n.tr("登录账户即可按需开启多端云同步")
+                ],
+                primaryButtonTitle: L10n.tr("立刻记下第一笔黄金"),
+                secondaryButtonTitle: L10n.tr("先随便逛逛")
+            )
+        ]
+    }
 
     static var allCopyStrings: [String] {
         allSteps.flatMap(\.allCopyStrings)
@@ -153,24 +155,24 @@ struct QuickStartChecklistState: Equatable, Sendable {
             QuickStartTaskItem(
                 action: .recordFirstHolding,
                 stepNumber: 1,
-                title: "记下第一笔黄金",
-                subtitle: "3 秒记录克重与金价，算清真实保本价",
+                title: L10n.tr("记下第一笔黄金"),
+                subtitle: L10n.tr("3 秒记录克重与金价，算清真实保本价"),
                 iconName: "plus.circle.fill",
                 isCompleted: hasRecordedHolding
             ),
             QuickStartTaskItem(
                 action: .viewChartOverlay,
                 stepNumber: 2,
-                title: "在走势图点亮持仓红点",
-                subtitle: "前往行情页开启「持仓」，对照保本线与买入点",
+                title: L10n.tr("在走势图点亮持仓红点"),
+                subtitle: L10n.tr("前往行情页开启「持仓」，对照保本线与买入点"),
                 iconName: "chart.xyaxis.line",
                 isCompleted: hasViewedChartOverlay
             ),
             QuickStartTaskItem(
                 action: .visitCalendar,
                 stepNumber: 3,
-                title: "打开攒金陪伴日历",
-                subtitle: "浏览日历热力与每月克重积累轨迹",
+                title: L10n.tr("打开攒金陪伴日历"),
+                subtitle: L10n.tr("浏览日历热力与每月克重积累轨迹"),
                 iconName: "calendar",
                 isCompleted: hasVisitedCalendar
             )
@@ -203,6 +205,6 @@ struct QuickStartChecklistState: Equatable, Sendable {
 
     static var allCopyStrings: [String] {
         let sample = QuickStartChecklistState()
-        return ["3 步开启记金", "收起", "已完成"] + sample.items.flatMap { [$0.title, $0.subtitle] }
+        return [L10n.tr("3 步开启记金"), L10n.tr("收起"), L10n.tr("已完成")] + sample.items.flatMap { [$0.title, $0.subtitle] }
     }
 }

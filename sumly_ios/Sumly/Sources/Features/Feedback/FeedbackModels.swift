@@ -13,10 +13,10 @@ enum FeedbackCategory: String, CaseIterable, Identifiable, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .suggestion: "功能建议"
-        case .bug: "问题报错"
-        case .data: "数据核对"
-        case .other: "其他"
+        case .suggestion: L10n.tr("功能建议")
+        case .bug: L10n.tr("问题报错")
+        case .data: L10n.tr("数据核对")
+        case .other: L10n.tr("其他")
         }
     }
 
@@ -33,13 +33,13 @@ enum FeedbackCategory: String, CaseIterable, Identifiable, Codable, Sendable {
     var placeholder: String {
         switch self {
         case .suggestion:
-            "说说您希望增加的新功能、交互优化或使用场景…"
+            L10n.tr("说说您希望增加的新功能、交互优化或使用场景…")
         case .bug:
-            "请描述遇到的问题、出现页面和复现步骤，附截图更有助于排查…"
+            L10n.tr("请描述遇到的问题、出现页面和复现步骤，附截图更有助于排查…")
         case .data:
-            "请说明行情报价、涨跌幅或单位换算中的疑问（无需填写您的持仓金额）…"
+            L10n.tr("请说明行情报价、涨跌幅或单位换算中的疑问（无需填写您的持仓金额）…")
         case .other:
-            "欢迎留下任何关于记金的想法、使用体验或疑问…"
+            L10n.tr("欢迎留下任何关于记金的想法、使用体验或疑问…")
         }
     }
 
@@ -58,10 +58,10 @@ enum FeedbackStatus: String, CaseIterable, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .new: "待处理"
-        case .inProgress: "处理中"
-        case .resolved: "已解决"
-        case .archived: "已归档"
+        case .new: L10n.tr("待处理")
+        case .inProgress: L10n.tr("处理中")
+        case .resolved: L10n.tr("已解决")
+        case .archived: L10n.tr("已归档")
         }
     }
 
@@ -323,14 +323,14 @@ struct FeedbackDiagnosticContext: Equatable, Sendable {
 
     var marketModeDisplayTitle: String {
         switch marketMode {
-        case GoldMarketBasis.domestic.rawValue: "国内金价"
-        case GoldMarketBasis.international.rawValue: "国际金价"
+        case GoldMarketBasis.domestic.rawValue: L10n.tr("国内金价")
+        case GoldMarketBasis.international.rawValue: L10n.tr("国际金价")
         default: marketMode
         }
     }
 
     var cloudSyncDisplayTitle: String {
-        cloudSyncEnabled ? "已登录云同步" : "游客离线模式"
+        cloudSyncEnabled ? L10n.tr("已登录云同步") : L10n.tr("游客离线模式")
     }
 
     @MainActor
@@ -472,61 +472,63 @@ enum FeedbackDateFormatter {
 // MARK: - 6. 静态文案（单一数据源，便于零投资建议合规测试）
 
 enum FeedbackCopy {
-    static let pageTitle = "意见与反馈"
-    static let entryTitle = "意见与反馈"
-    static let entrySubtitle = "提交建议、反馈问题或查看回复"
+    static var pageTitle: String { L10n.tr("意见与反馈") }
+    static var entryTitle: String { L10n.tr("意见与反馈") }
+    static var entrySubtitle: String { L10n.tr("提交建议、反馈问题或查看回复") }
 
-    static let submitTabTitle = "提交反馈"
-    static let historyTabTitle = "我的记录"
+    static var submitTabTitle: String { L10n.tr("提交反馈") }
+    static var historyTabTitle: String { L10n.tr("我的记录") }
 
-    static let categorySectionTitle = "反馈类型"
-    static let contentSectionTitle = "详细描述"
-    static let attachmentsSectionTitle = "截图附件"
-    static let attachmentsOptionalHint = "选填，最多 3 张"
-    static let attachmentsFootnote = "图片会自动压缩上传，仅用于辅助定位问题。"
-    static let contactSectionTitle = "联系方式"
-    static let contactOptionalHint = "选填"
-    static let contactPlaceholder = "微信号或邮箱，方便一对一回复"
+    static var categorySectionTitle: String { L10n.tr("反馈类型") }
+    static var contentSectionTitle: String { L10n.tr("详细描述") }
+    static var attachmentsSectionTitle: String { L10n.tr("截图附件") }
+    static var attachmentsOptionalHint: String { L10n.tr("选填，最多 3 张") }
+    static var attachmentsFootnote: String { L10n.tr("图片会自动压缩上传，仅用于辅助定位问题。") }
+    static var contactSectionTitle: String { L10n.tr("联系方式") }
+    static var contactOptionalHint: String { L10n.tr("选填") }
+    static var contactPlaceholder: String { L10n.tr("微信号或邮箱，方便一对一回复") }
 
-    static let diagnosticTitle = "随附排障环境信息"
-    static let diagnosticPrivacyNotice = "仅用于排查问题，绝不上报您的克重、金额或任何持仓记录"
+    static var diagnosticTitle: String { L10n.tr("随附排障环境信息") }
+    static var diagnosticPrivacyNotice: String { L10n.tr("仅用于排查问题，绝不上报您的克重、金额或任何持仓记录") }
 
-    static let submitButtonTitle = "提交反馈"
-    static let submittingFeedbackText = "正在提交反馈…"
-    static let submitSuccessMessage = "感谢反馈，已收到您的消息。开发者回复后可在此查看。"
+    static var submitButtonTitle: String { L10n.tr("提交反馈") }
+    static var submittingFeedbackText: String { L10n.tr("正在提交反馈…") }
+    static var submitSuccessMessage: String { L10n.tr("感谢反馈，已收到您的消息。开发者回复后可在此查看。") }
 
-    static let developerReplyTitle = "开发者回复"
-    static let emptyHistoryTitle = "还没有提交过反馈"
-    static let emptyHistorySubtitle = "无论是新功能想法还是使用中的小问题，都很欢迎随时告诉我们。"
-    static let emptyHistoryAction = "去写一条反馈"
-    static let loadingHistoryText = "正在加载反馈记录…"
-    static let retryActionTitle = "重新加载"
+    static var developerReplyTitle: String { L10n.tr("开发者回复") }
+    static var emptyHistoryTitle: String { L10n.tr("还没有提交过反馈") }
+    static var emptyHistorySubtitle: String { L10n.tr("无论是新功能想法还是使用中的小问题，都很欢迎随时告诉我们。") }
+    static var emptyHistoryAction: String { L10n.tr("去写一条反馈") }
+    static var loadingHistoryText: String { L10n.tr("正在加载反馈记录…") }
+    static var retryActionTitle: String { L10n.tr("重新加载") }
 
-    static let allUICopy: [String] = [
-        pageTitle,
-        entryTitle,
-        entrySubtitle,
-        submitTabTitle,
-        historyTabTitle,
-        categorySectionTitle,
-        contentSectionTitle,
-        attachmentsSectionTitle,
-        attachmentsOptionalHint,
-        attachmentsFootnote,
-        contactSectionTitle,
-        contactOptionalHint,
-        contactPlaceholder,
-        diagnosticTitle,
-        diagnosticPrivacyNotice,
-        submitButtonTitle,
-        submittingFeedbackText,
-        submitSuccessMessage,
-        developerReplyTitle,
-        emptyHistoryTitle,
-        emptyHistorySubtitle,
-        emptyHistoryAction,
-        loadingHistoryText,
-        retryActionTitle
-    ] + FeedbackCategory.allCases.flatMap { [$0.title, $0.placeholder] }
-      + FeedbackStatus.allCases.map(\.title)
+    static var allUICopy: [String] {
+        [
+            pageTitle,
+            entryTitle,
+            entrySubtitle,
+            submitTabTitle,
+            historyTabTitle,
+            categorySectionTitle,
+            contentSectionTitle,
+            attachmentsSectionTitle,
+            attachmentsOptionalHint,
+            attachmentsFootnote,
+            contactSectionTitle,
+            contactOptionalHint,
+            contactPlaceholder,
+            diagnosticTitle,
+            diagnosticPrivacyNotice,
+            submitButtonTitle,
+            submittingFeedbackText,
+            submitSuccessMessage,
+            developerReplyTitle,
+            emptyHistoryTitle,
+            emptyHistorySubtitle,
+            emptyHistoryAction,
+            loadingHistoryText,
+            retryActionTitle
+        ] + FeedbackCategory.allCases.flatMap { [$0.title, $0.placeholder] }
+          + FeedbackStatus.allCases.map(\.title)
+    }
 }

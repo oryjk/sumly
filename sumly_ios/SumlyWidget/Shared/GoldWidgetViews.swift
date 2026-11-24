@@ -138,7 +138,7 @@ struct GoldWidgetSparklineView: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(GoldTheme.card.opacity(0.45))
                     .overlay(
-                        Text("走势待同步")
+                        Text(L10n.tr("走势待同步"))
                             .font(.system(size: 10, weight: .medium, design: .rounded))
                             .foregroundStyle(GoldTheme.textFaint)
                     )
@@ -173,7 +173,7 @@ struct GoldSmallWidgetView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                 Spacer(minLength: 2)
-                Text("¥/克")
+                Text(L10n.tr("¥/克"))
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(GoldTheme.textSecondary)
             }
@@ -249,10 +249,10 @@ struct GoldSmallWidgetView: View {
             } else {
                 Spacer(minLength: 8)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("暂无实时金价")
+                    Text(L10n.tr("暂无实时金价"))
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(GoldTheme.text)
-                    Text("轻点打开记金同步最新行情")
+                    Text(L10n.tr("轻点打开记金同步最新行情"))
                         .font(.system(size: 10.5, weight: .regular, design: .rounded))
                         .foregroundStyle(GoldTheme.textSecondary)
                         .lineLimit(2)
@@ -266,7 +266,7 @@ struct GoldSmallWidgetView: View {
 
     private func updatedLabel(for snapshot: GoldWidgetSnapshot) -> String {
         let time = GoldWidgetFormatting.formatUpdatedTime(snapshot.asOf, now: now, compact: true)
-        return snapshot.isCachedFallback ? "缓存 \(time)" : time
+        return snapshot.isCachedFallback ? L10n.fmt("缓存 %@", time) : time
     }
 }
 
@@ -296,7 +296,7 @@ struct GoldMediumWidgetView: View {
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
                             .foregroundStyle(GoldTheme.goldSoft)
                             .lineLimit(1)
-                        Text("¥/克")
+                        Text(L10n.tr("¥/克"))
                             .font(.system(size: 10, weight: .medium, design: .rounded))
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
@@ -326,7 +326,7 @@ struct GoldMediumWidgetView: View {
                     .padding(.top, 2)
 
                     if let usdText = GoldWidgetFormatting.formatUSDPerOz(snapshot.usdPerOz) {
-                        Text("国际现货 \(usdText)")
+                        Text(L10n.fmt("国际现货 %@", usdText))
                             .font(.system(size: 9.5, weight: .medium, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.textFaint)
@@ -367,7 +367,7 @@ struct GoldMediumWidgetView: View {
                 // 右侧：近一月折线图 + 最高/最低价 + 更新时间
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .center, spacing: 4) {
-                        Text("近一月走势")
+                        Text(L10n.tr("近一月走势"))
                             .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                             .foregroundStyle(GoldTheme.textSecondary)
                         Spacer(minLength: 2)
@@ -384,7 +384,7 @@ struct GoldMediumWidgetView: View {
                     HStack(spacing: 6) {
                         if let high = snapshot.rangeHighCNY {
                             HStack(spacing: 2) {
-                                Text("高")
+                                Text(L10n.tr("高"))
                                     .foregroundStyle(GoldTheme.textFaint)
                                 Text(GoldWidgetFormatting.formatCompactPriceCNY(high))
                                     .foregroundStyle(GoldTheme.goldSoft)
@@ -395,7 +395,7 @@ struct GoldMediumWidgetView: View {
                         Spacer(minLength: 4)
                         if let low = snapshot.rangeLowCNY {
                             HStack(spacing: 2) {
-                                Text("低")
+                                Text(L10n.tr("低"))
                                     .foregroundStyle(GoldTheme.textFaint)
                                 Text(GoldWidgetFormatting.formatCompactPriceCNY(low))
                                     .foregroundStyle(GoldTheme.textSecondary)
@@ -421,10 +421,10 @@ struct GoldMediumWidgetView: View {
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
                             .foregroundStyle(GoldTheme.goldSoft)
                     }
-                    Text("暂未获取到实时金价")
+                    Text(L10n.tr("暂未获取到实时金价"))
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundStyle(GoldTheme.text)
-                    Text("网络恢复后自动同步，轻点可进入记金查看行情")
+                    Text(L10n.tr("网络恢复后自动同步，轻点可进入记金查看行情"))
                         .font(.system(size: 11, weight: .regular, design: .rounded))
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
@@ -437,7 +437,7 @@ struct GoldMediumWidgetView: View {
 
     private func updatedLabel(for snapshot: GoldWidgetSnapshot) -> String {
         let time = GoldWidgetFormatting.formatUpdatedTime(snapshot.asOf, now: now, compact: true)
-        return snapshot.isCachedFallback ? "缓存 \(time)" : time
+        return snapshot.isCachedFallback ? L10n.fmt("缓存 %@", time) : time
     }
 }
 
@@ -482,12 +482,12 @@ struct GoldAccessoryCircularView: View {
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("¥/克")
+                        Text(L10n.tr("¥/克"))
                             .font(.system(size: 9, weight: .medium, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("记金")
+                    Text(L10n.tr("记金"))
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                     Text("--")
                         .font(.system(size: 10, weight: .medium, design: .rounded))
@@ -523,7 +523,7 @@ struct GoldAccessoryRectangularView: View {
             }
 
             if let snapshot, snapshot.hasValidPrice {
-                Text("¥\(GoldWidgetFormatting.formatPriceCNY(snapshot.cnyPerGram))/克")
+                Text(L10n.fmt("¥%@/克", GoldWidgetFormatting.formatPriceCNY(snapshot.cnyPerGram)))
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
@@ -541,9 +541,9 @@ struct GoldAccessoryRectangularView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             } else {
-                Text("暂无金价")
+                Text(L10n.tr("暂无金价"))
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text("轻点打开记金刷新")
+                Text(L10n.tr("轻点打开记金刷新"))
                     .font(.system(size: 10.5, weight: .regular, design: .rounded))
                     .foregroundStyle(.secondary)
             }

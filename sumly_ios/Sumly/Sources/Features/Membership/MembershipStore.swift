@@ -19,11 +19,11 @@ enum MembershipStoreError: LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .productUnavailable:
-            "App Store 暂未返回订阅商品，请稍后重试。"
+            L10n.tr("App Store 暂未返回订阅商品，请稍后重试。")
         case .verificationFailed(let detail):
-            detail.isEmpty ? "无法验证本次购买凭证，请稍后重试或点击恢复购买。" : detail
+            detail.isEmpty ? L10n.tr("无法验证本次购买凭证，请稍后重试或点击恢复购买。") : detail
         case .networkFailure(let detail):
-            detail.isEmpty ? "连接 App Store 失败，请检查网络连接后重试。" : detail
+            detail.isEmpty ? L10n.tr("连接 App Store 失败，请检查网络连接后重试。") : detail
         }
     }
 }
@@ -150,7 +150,7 @@ final class LiveStoreKitMembershipClient: MembershipStoreKitClient, Sendable {
         case .pending:
             return .pending
         @unknown default:
-            return .unverified("无法识别的购买状态，请稍后重试。")
+            return .unverified(L10n.tr("无法识别的购买状态，请稍后重试。"))
         }
     }
 
@@ -197,13 +197,13 @@ final class LiveStoreKitMembershipClient: MembershipStoreKitClient, Sendable {
             }
             switch period.unit {
             case .year:
-                return period.value == 1 ? "1 年" : "\(period.value) 年"
+                return period.value == 1 ? L10n.tr("1 年") : L10n.fmt("%d 年", period.value)
             case .month:
-                return period.value == 1 ? "1 个月" : "\(period.value) 个月"
+                return period.value == 1 ? L10n.tr("1 个月") : L10n.fmt("%d 个月", period.value)
             case .week:
-                return period.value == 1 ? "1 周" : "\(period.value) 周"
+                return period.value == 1 ? L10n.tr("1 周") : L10n.fmt("%d 周", period.value)
             case .day:
-                return period.value == 1 ? "1 天" : "\(period.value) 天"
+                return period.value == 1 ? L10n.tr("1 天") : L10n.fmt("%d 天", period.value)
             @unknown default:
                 return plan.periodLabel
             }
@@ -309,12 +309,12 @@ final class MembershipStore {
 
     /// 主 CTA 按钮标题，如 `"立即订阅 · ¥99/年"`。
     func ctaTitle(for plan: MembershipPlan) -> String {
-        "立即订阅 · \(displayPrice(for: plan))/\(plan.billingUnit)"
+        L10n.fmt("立即订阅 · %@/%@", displayPrice(for: plan), plan.billingUnit)
     }
 
     /// 「我的」入口未开通态胶囊文案，如 `"¥99/年起"`。
     var entryPriceBadgeText: String {
-        "\(displayPrice(for: .yearly))/年起"
+        L10n.fmt("%@/年起", displayPrice(for: .yearly))
     }
 
     /// 商品拉取异常时的面向用户提示（明确区分空目录返回与网络/StoreKit 异常，不含内部敏感信息）。
@@ -418,7 +418,7 @@ final class MembershipStore {
                     statusMessage = MembershipCopy.purchaseSucceededNotice
                     return true
                 } else {
-                    errorMessage = "该订阅已失效或被撤销，请确认购买状态后重试。"
+                    errorMessage = L10n.tr("该订阅已失效或被撤销，请确认购买状态后重试。")
                     return false
                 }
             case .userCancelled:
@@ -505,18 +505,18 @@ final class MembershipStore {
         if let skError = error as? StoreKitError {
             switch skError {
             case .networkError:
-                return "网络连接不稳定，暂时无法连接 App Store，请稍后重试。"
+                return L10n.tr("网络连接不稳定，暂时无法连接 App Store，请稍后重试。")
             case .notAvailableInStorefront:
-                return "当前 App Store 地区暂不支持该订阅商品。"
+                return L10n.tr("当前 App Store 地区暂不支持该订阅商品。")
             default:
                 break
             }
         }
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain {
-            return "网络连接不稳定，暂时无法连接 App Store，请稍后重试。"
+            return L10n.tr("网络连接不稳定，暂时无法连接 App Store，请稍后重试。")
         }
         let localized = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        return localized.isEmpty ? "连接 App Store 失败，请稍后重试。" : localized
+        return localized.isEmpty ? L10n.tr("连接 App Store 失败，请稍后重试。") : localized
     }
 }

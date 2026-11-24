@@ -2,7 +2,13 @@ import Foundation
 
 enum AuthProvider: String, Codable, Sendable {
     case apple, phone, email
-    var title: String { switch self { case .apple: "Apple"; case .phone: "手机号"; case .email: "邮箱" } }
+    var title: String {
+        switch self {
+        case .apple: "Apple"
+        case .phone: AuthL10n.tr("手机号")
+        case .email: AuthL10n.tr("邮箱")
+        }
+    }
 }
 struct NativeUser: Codable, Sendable, Equatable {
     let id: Int64
@@ -19,7 +25,7 @@ struct NativeUser: Codable, Sendable, Equatable {
     var maskedIdentifier: String {
         if let phoneNumber { return String(phoneNumber.prefix(6)) + "****" + String(phoneNumber.suffix(4)) }
         if let email, let at = email.firstIndex(of: "@") { return String(email.prefix(1)) + "***" + email[at...] }
-        return "Apple 私密账户"
+        return AuthL10n.tr("Apple 私密账户")
     }
 }
 struct LoginResult: Codable, Sendable {
@@ -79,17 +85,17 @@ enum AuthError: Error, LocalizedError, Equatable {
     case server(Int, String)
     var errorDescription: String? {
         switch self {
-        case .unauthorized: "登录已失效，请重新登录。"
-        case .accountMismatch: "登录的账户与待注销账户不一致，未切换账户。请使用原账户重新验证。"
-        case .appleEmailAccountMismatch: "请选择当前记金账户使用的 Apple 账户。"
-        case .reauthenticate: "注销账户前请重新登录，并在 5 分钟内再次确认注销。"
-        case .unavailable: "此登录方式暂未开放，请稍后再试。"
-        case .network: "网络连接失败，请稍后重试。已保存的登录状态会保留。"
-        case .malformed: "服务返回异常，请稍后重试。"
-        case .stale: "操作已取消，请重试。"
-        case .insecureURL: "登录服务地址必须使用 HTTPS（本机开发地址除外）。"
-        case .keychain: "无法访问安全凭据，请解锁设备后重试。"
-        case .server(_, let message): message.isEmpty ? "操作失败，请稍后重试。" : message
+        case .unauthorized: AuthL10n.tr("登录已失效，请重新登录。")
+        case .accountMismatch: AuthL10n.tr("登录的账户与待注销账户不一致，未切换账户。请使用原账户重新验证。")
+        case .appleEmailAccountMismatch: AuthL10n.tr("请选择当前记金账户使用的 Apple 账户。")
+        case .reauthenticate: AuthL10n.tr("注销账户前请重新登录，并在 5 分钟内再次确认注销。")
+        case .unavailable: AuthL10n.tr("此登录方式暂未开放，请稍后再试。")
+        case .network: AuthL10n.tr("网络连接失败，请稍后重试。已保存的登录状态会保留。")
+        case .malformed: AuthL10n.tr("服务返回异常，请稍后重试。")
+        case .stale: AuthL10n.tr("操作已取消，请重试。")
+        case .insecureURL: AuthL10n.tr("登录服务地址必须使用 HTTPS（本机开发地址除外）。")
+        case .keychain: AuthL10n.tr("无法访问安全凭据，请解锁设备后重试。")
+        case .server(_, let message): message.isEmpty ? AuthL10n.tr("操作失败，请稍后重试。") : message
         }
     }
 }

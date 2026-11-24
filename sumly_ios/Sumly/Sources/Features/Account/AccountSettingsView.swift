@@ -3,7 +3,8 @@ import SwiftUI
 struct AccountSettingsView: View {
     @Bindable var session: AuthSession
     var cloud: HoldingsCloud? = nil
-    @AppStorage("market.basis") private var marketBasisRaw = GoldMarketBasis.domestic.rawValue
+    var languageStore: AppLanguageStore = .shared
+    @AppStorage(GoldMarketBasis.storageKey) private var marketBasisRaw = GoldMarketBasis.initialDefault().rawValue
     @State private var confirmImport = false
     @State private var confirmConflict = false
     @State private var clearingCache = false
@@ -12,7 +13,7 @@ struct AccountSettingsView: View {
     @State private var selectedEmailLink: AppleEmailLinkScope?
 
     private var marketBasis: GoldMarketBasis {
-        GoldMarketBasis(rawValue: marketBasisRaw) ?? .domestic
+        GoldMarketBasis(rawValue: marketBasisRaw) ?? GoldMarketBasis.initialDefault()
     }
 
     private var cloudBadge: AccountCloudStatusBadge {
@@ -20,12 +21,14 @@ struct AccountSettingsView: View {
     }
 
     var body: some View {
+        let _ = languageStore.revision
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 cloudSyncSection
                 if let scope = session.appleEmailLinkScope, allowedEmailLink == scope {
                     crossDeviceLoginSection(scope: scope)
                 }
+                languageSection
                 storageCacheSection
                 feedbackSection
                 aboutAndComplianceSection
@@ -35,23 +38,23 @@ struct AccountSettingsView: View {
         }
         .background(GoldTheme.background)
         .foregroundStyle(GoldTheme.text)
-        .navigationTitle("设置")
+        .navigationTitle(L10n.tr("设置"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .task(id: session.appleEmailLinkScope) { await loadEmailLink() }
         .sheet(item: $selectedEmailLink, onDismiss: { Task { await loadEmailLink() } }) { scope in
             AppleEmailLinkSheet(session: session, scope: scope)
         }
-        .confirmationDialog("将游客记录导入当前账户？", isPresented: $confirmImport, titleVisibility: .visible) {
-            Button("导入并同步") { Task { await cloud?.importGuestRecords() } }
+        .confirmationDialog(L10n.tr("将游客记录导入当前账户？"), isPresented: $confirmImport, titleVisibility: .visible) {
+            Button(L10n.tr("导入并同步")) { Task { await cloud?.importGuestRecords() } }
         } message: {
-            Text("导入到 \(session.user?.maskedIdentifier ?? "")。记录使用原有 ID，重复导入跳过相同记录。游客原记录会保留。")
+            Text(L10n.fmt("导入到 %@。记录使用原有 ID，重复导入跳过相同记录。游客原记录会保留。", session.user?.maskedIdentifier ?? ""))
         }
-        .confirmationDialog("处理多设备修改冲突", isPresented: $confirmConflict, titleVisibility: .visible) {
-            Button("冲突记录保留本机版本") { Task { await cloud?.sync(choice: .local) } }
-            Button("冲突记录使用云端版本", role: .destructive) { Task { await cloud?.sync(choice: .remote) } }
+        .confirmationDialog(L10n.tr("处理多设备修改冲突"), isPresented: $confirmConflict, titleVisibility: .visible) {
+            Button(L10n.tr("冲突记录保留本机版本")) { Task { await cloud?.sync(choice: .local) } }
+            Button(L10n.tr("冲突记录使用云端版本"), role: .destructive) { Task { await cloud?.sync(choice: .remote) } }
         } message: {
-            Text("同一购入记录及其部分处置记录作为整体选择，其他记录自动合并。选择某一版本将放弃这些冲突记录在另一端的更改（包括删除）。")
+            Text(L10n.tr("同一购入记录及其部分处置记录作为整体选择，其他记录自动合并。选择某一版本将放弃这些冲突记录在另一端的更改（包括删除）。"))
         }
     }
 
@@ -61,16 +64,16 @@ struct AccountSettingsView: View {
         let badge = cloudBadge
         let signedIn = session.user != nil
         return VStack(alignment: .leading, spacing: 8) {
-            AccountSectionHeader(title: signedIn ? "账户持仓云同步" : "游客持仓")
+            AccountSectionHeader(title: signedIn ? L10n.tr("账户持仓云同步") : L10n.tr("游客持仓"))
 
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
                     AccountRowIconBadge(systemName: signedIn ? "icloud.fill" : "iphone")
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(signedIn ? "云端同步状态" : "本机游客持仓")
+                        Text(signedIn ? L10n.tr("云端同步状态") : L10n.tr("本机游客持仓"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(GoldTheme.text)
-                        Text(signedIn ? "离线可记录，联网自动合并" : "记录保存在当前设备")
+                        Text(signedIn ? L10n.tr("离线可记录，联网自动合并") : L10n.tr("记录保存在当前设备"))
                             .font(.caption)
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
@@ -78,7 +81,7 @@ struct AccountSettingsView: View {
                     statusCapsule(badge: badge)
                 }
 
-                Text(cloud?.status ?? "登录后持仓与账本保存到服务端，本机保留离线缓存。")
+                Text(cloud?.status ?? L10n.tr("登录后持仓与账本保存到服务端，本机保留离线缓存。"))
                     .font(.footnote)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .lineSpacing(4)
@@ -99,7 +102,7 @@ struct AccountSettingsView: View {
                                     Image(systemName: "arrow.triangle.2.circlepath")
                                         .font(.footnote.bold())
                                 }
-                                Text(cloud.isSyncing ? "正在同步…" : "立即同步")
+                                Text(cloud.isSyncing ? L10n.tr("正在同步…") : L10n.tr("立即同步"))
                             }
                         }
                         .buttonStyle(GoldPrimaryButtonStyle())
@@ -110,7 +113,7 @@ struct AccountSettingsView: View {
                                 HStack(spacing: 8) {
                                     Image(systemName: "exclamationmark.triangle.fill")
                                         .font(.footnote.weight(.semibold))
-                                    Text("处理同步冲突（\(cloud.conflictCount) 条）")
+                                    Text(L10n.fmt("处理同步冲突（%d 条）", cloud.conflictCount))
                                         .font(.subheadline.weight(.semibold))
                                     Spacer()
                                     Image(systemName: "chevron.right")
@@ -132,7 +135,7 @@ struct AccountSettingsView: View {
                                     HStack(spacing: 8) {
                                         Image(systemName: "tray.and.arrow.down.fill")
                                             .font(.footnote.weight(.semibold))
-                                        Text("导入此设备的游客记录（\(cloud.guestRecordCount) 条）")
+                                        Text(L10n.fmt("导入此设备的游客记录（%d 条）", cloud.guestRecordCount))
                                             .font(.subheadline.weight(.semibold))
                                             .lineLimit(1)
                                             .minimumScaleFactor(0.85)
@@ -150,7 +153,7 @@ struct AccountSettingsView: View {
                                 .buttonStyle(.plain)
                                 .disabled(cloud.isSyncing)
 
-                                Text("游客记录不会自动归入账户；导入后原记录仍保留，重复导入会跳过相同记录。")
+                                Text(L10n.tr("游客记录不会自动归入账户；导入后原记录仍保留，重复导入会跳过相同记录。"))
                                     .font(.caption)
                                     .foregroundStyle(GoldTheme.textFaint)
                                     .lineSpacing(3)
@@ -171,21 +174,21 @@ struct AccountSettingsView: View {
     private func crossDeviceLoginSection(scope: AppleEmailLinkScope) -> some View {
         let linked = session.user?.email != nil
         return VStack(alignment: .leading, spacing: 8) {
-            AccountSectionHeader(title: "跨设备登录")
+            AccountSectionHeader(title: L10n.tr("跨设备登录"))
 
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
                     AccountRowIconBadge(systemName: "envelope.fill")
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Apple 账户绑定邮箱")
+                        Text(L10n.tr("Apple 账户绑定邮箱"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(GoldTheme.text)
-                        Text("支持在 Android 等其他设备登录")
+                        Text(L10n.tr("支持在 Android 等其他设备登录"))
                             .font(.caption)
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
                     Spacer(minLength: 6)
-                    Text(linked ? "已绑定" : "未绑定")
+                    Text(linked ? L10n.tr("已绑定") : L10n.tr("未绑定"))
                         .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                         .foregroundStyle(linked ? GoldTheme.down : GoldTheme.textSecondary)
                         .padding(.horizontal, 9)
@@ -207,7 +210,7 @@ struct AccountSettingsView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.footnote)
                             .foregroundStyle(GoldTheme.down)
-                        Text("已绑定邮箱 \(session.user?.maskedIdentifier ?? "")")
+                        Text(L10n.fmt("已绑定邮箱 %@", session.user?.maskedIdentifier ?? ""))
                             .font(.footnote.monospaced())
                             .foregroundStyle(GoldTheme.text)
                     }
@@ -220,7 +223,7 @@ struct AccountSettingsView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "link")
                                 .font(.footnote.weight(.semibold))
-                            Text("绑定邮箱登录")
+                            Text(L10n.tr("绑定邮箱登录"))
                                 .font(.subheadline.weight(.semibold))
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -236,7 +239,7 @@ struct AccountSettingsView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("settings.appleEmailLink")
 
-                    Text("在 Android 使用绑定的邮箱，即可打开此账户的持仓和账本。")
+                    Text(L10n.tr("在 Android 使用绑定的邮箱，即可打开此账户的持仓和账本。"))
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
@@ -248,11 +251,52 @@ struct AccountSettingsView: View {
         }
     }
 
-    // MARK: - 3. 存储与缓存
+    // MARK: - 3. 语言 / Language
+
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AccountSectionHeader(title: languageStore.isChinese ? "语言 / Language" : L10n.tr("语言"))
+
+            NavigationLink {
+                LanguageSelectionView(languageStore: languageStore)
+                    .goldTabBarContentSafeArea()
+            } label: {
+                HStack(spacing: 12) {
+                    AccountRowIconBadge(systemName: "globe")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.tr("应用语言"))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(GoldTheme.text)
+                        Text(languageStore.isChinese ? "Language" : L10n.tr("语言设置"))
+                            .font(.caption)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    Text(languageStore.selected.nativeDisplayName)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(GoldTheme.goldSoft)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(GoldTheme.textFaint)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.language")
+            .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+            .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+        }
+    }
+
+    // MARK: - 4. 存储与缓存
 
     private var storageCacheSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            AccountSectionHeader(title: "存储与缓存")
+            AccountSectionHeader(title: L10n.tr("存储与缓存"))
 
             VStack(alignment: .leading, spacing: 12) {
                 Button {
@@ -261,19 +305,19 @@ struct AccountSettingsView: View {
                         defer { clearingCache = false }
                         do {
                             try await MarketHistoryCache.shared.clear()
-                            cacheNotice = "行情缓存已清除，下次查看时重新下载。"
+                            cacheNotice = L10n.tr("行情缓存已清除，下次查看时重新下载。")
                         } catch {
-                            cacheNotice = "清除失败，请重试。"
+                            cacheNotice = L10n.tr("清除失败，请重试。")
                         }
                     }
                 } label: {
                     HStack(spacing: 12) {
                         AccountRowIconBadge(systemName: "trash.fill")
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("清除行情缓存")
+                            Text(L10n.tr("清除行情缓存"))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(GoldTheme.text)
-                            Text("仅清理本地行情历史")
+                            Text(L10n.tr("仅清理本地行情历史"))
                                 .font(.caption)
                                 .foregroundStyle(GoldTheme.textSecondary)
                                 .lineLimit(1)
@@ -283,7 +327,7 @@ struct AccountSettingsView: View {
                             ProgressView()
                                 .tint(GoldTheme.gold)
                         } else {
-                            Text("清除")
+                            Text(L10n.tr("清除"))
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                                 .foregroundStyle(GoldTheme.goldSoft)
                                 .padding(.horizontal, 12)
@@ -298,7 +342,7 @@ struct AccountSettingsView: View {
                 .disabled(clearingCache)
                 .accessibilityIdentifier("settings.clearMarketCache")
 
-                Text(cacheNotice ?? "清除已下载的行情数据，保留持仓记录和登录状态。")
+                Text(cacheNotice ?? L10n.tr("清除已下载的行情数据，保留持仓记录和登录状态。"))
                     .font(.caption)
                     .foregroundStyle(cacheNotice == nil ? GoldTheme.textFaint : GoldTheme.goldSoft)
             }
@@ -309,7 +353,7 @@ struct AccountSettingsView: View {
         }
     }
 
-    // MARK: - 4. 意见与反馈
+    // MARK: - 5. 意见与反馈
 
     private var feedbackSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -347,16 +391,16 @@ struct AccountSettingsView: View {
         }
     }
 
-    // MARK: - 5. 关于与备案
+    // MARK: - 6. 关于与备案
 
     private var aboutAndComplianceSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            AccountSectionHeader(title: "关于与备案")
+            AccountSectionHeader(title: L10n.tr("关于与备案"))
 
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     AccountRowIconBadge(systemName: "info.circle.fill")
-                    Text("应用版本")
+                    Text(L10n.tr("应用版本"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(GoldTheme.text)
                     Spacer()
@@ -392,7 +436,7 @@ struct AccountSettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("打开工信部备案查询系统")
+                .accessibilityHint(L10n.tr("打开工信部备案查询系统"))
             }
             .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
             .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))

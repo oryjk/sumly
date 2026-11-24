@@ -14,7 +14,7 @@ extension AuthSession {
             switch state {
             case .revoked, .notFound, .transferred:
                 clearLocal()
-                notice = "Apple 授权已失效，请重新登录。"
+                notice = AuthL10n.tr("Apple 授权已失效，请重新登录。")
             case .authorized, .unknown: break
             }
         } catch {

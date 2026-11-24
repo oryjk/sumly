@@ -13,15 +13,15 @@ enum GoldWidgetBasis: String, Codable, Sendable, CaseIterable, Hashable, Identif
 
     var displayName: String {
         switch self {
-        case .domestic: "国内 Au99.99"
-        case .international: "国际伦敦金"
+        case .domestic: L10n.tr("国内 Au99.99")
+        case .international: L10n.tr("国际伦敦金")
         }
     }
 
     var compactTitle: String {
         switch self {
-        case .domestic: "国内金价"
-        case .international: "伦敦金"
+        case .domestic: L10n.tr("国内金价")
+        case .international: L10n.tr("伦敦金")
         }
     }
 
@@ -71,11 +71,11 @@ enum GoldWidgetTemperatureLevel: String, Codable, Sendable, CaseIterable, Hashab
     /// 短标签（用于小号/中号/锁屏小组件徽章）。
     var shortLabel: String {
         switch self {
-        case .freezing: "极冷"
-        case .cool: "偏冷"
-        case .neutral: "中性"
-        case .warm: "偏热"
-        case .hot: "过热"
+        case .freezing: L10n.tr("极冷")
+        case .cool: L10n.tr("偏冷")
+        case .neutral: L10n.tr("中性")
+        case .warm: L10n.tr("偏热")
+        case .hot: L10n.tr("过热")
         }
     }
 }
@@ -97,9 +97,9 @@ enum GoldWidgetMacroRegime: String, Codable, Sendable, CaseIterable, Hashable {
     /// 纯客观宏观状态标签（与主 App `MacroRegimeKind.defaultLabel` 一致）。
     var shortLabel: String {
         switch self {
-        case .tailwind: "支撑偏强"
-        case .neutral: "背景中性"
-        case .headwind: "支撑偏弱"
+        case .tailwind: L10n.tr("支撑偏强")
+        case .neutral: L10n.tr("背景中性")
+        case .headwind: L10n.tr("支撑偏弱")
         }
     }
 }
@@ -303,7 +303,7 @@ enum GoldWidgetFormatting {
         let changeText = formatSignedChangeCNY(changeCNY)
         let pctText = formatSignedPercent(changePercent)
         if changeText == "--" && pctText == "--" {
-            return "暂无涨跌"
+            return L10n.tr("暂无涨跌")
         }
         return "\(changeText) (\(pctText))"
     }

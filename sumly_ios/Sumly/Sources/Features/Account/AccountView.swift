@@ -11,7 +11,8 @@ struct AccountView: View {
     var onOpenOnboarding: (() -> Void)? = nil
 
     @AppStorage("holdings.hideAmounts") private var hideAmounts = false
-    @AppStorage("market.basis") private var marketBasisRaw = GoldMarketBasis.domestic.rawValue
+    @AppStorage(GoldMarketBasis.storageKey) private var marketBasisRaw = GoldMarketBasis.initialDefault().rawValue
+    private let languageStore = AppLanguageStore.shared
     @State private var showSettings = false
     @State private var showFeedback = false
     @State private var showLogin = false
@@ -28,18 +29,19 @@ struct AccountView: View {
     }
 
     var body: some View {
+        let _ = languageStore.revision
         NavigationStack {
             accountContent
                 .goldTabBarContentSafeArea()
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(isPresented: $showSettings) {
-                    AccountSettingsView(session: session, cloud: cloud)
+                    AccountSettingsView(session: session, cloud: cloud, languageStore: languageStore)
                         .goldTabBarContentSafeArea()
                 }
                 .navigationDestination(isPresented: $showFeedback) {
                     FeedbackCenterView(
                         session: session,
-                        marketBasis: GoldMarketBasis(rawValue: marketBasisRaw) ?? .domestic
+                        marketBasis: GoldMarketBasis(rawValue: marketBasisRaw) ?? GoldMarketBasis.initialDefault()
                     )
                     .goldTabBarContentSafeArea()
                 }
@@ -87,20 +89,20 @@ struct AccountView: View {
             deletionConfirmation = nil
             confirmDelete = false
         }
-        .confirmationDialog("退出当前账户？", isPresented: $confirmLogout, titleVisibility: .visible) {
-            Button("退出登录", role: .destructive) { Task { await session.logout() } }
+        .confirmationDialog(L10n.tr("退出当前账户？"), isPresented: $confirmLogout, titleVisibility: .visible) {
+            Button(L10n.tr("退出登录"), role: .destructive) { Task { await session.logout() } }
         } message: {
-            Text("未同步更改保留在此账户的设备缓存，重新登录可继续同步。退出后显示此设备的游客记录。")
+            Text(L10n.tr("未同步更改保留在此账户的设备缓存，重新登录可继续同步。退出后显示此设备的游客记录。"))
         }
-        .confirmationDialog("永久注销此账户？", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("永久注销账户", role: .destructive) {
+        .confirmationDialog(L10n.tr("永久注销此账户？"), isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button(L10n.tr("永久注销账户"), role: .destructive) {
                 if let intent = deletionConfirmation {
                     Task { await deleteAccount(confirming: intent) }
                 }
             }
         } message: {
             if let intent = deletionConfirmation {
-                Text("待注销账户：\(intent.provider.title) · \(intent.maskedIdentifier)\n\n账户身份、云端持仓与账本、服务端登录会话将永久删除，无法恢复。需要最近 5 分钟内重新登录。此账户在本机的缓存也会清除；独立的游客记录保留。")
+                Text(L10n.fmt("待注销账户：%@ · %@\n\n账户身份、云端持仓与账本、服务端登录会话将永久删除，无法恢复。需要最近 5 分钟内重新登录。此账户在本机的缓存也会清除；独立的游客记录保留。", intent.provider.title, intent.maskedIdentifier))
             }
         }
     }
@@ -144,7 +146,7 @@ struct AccountView: View {
                 .contentShape(GoldTheme.circleShape)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("设置")
+            .accessibilityLabel(L10n.tr("设置"))
             .accessibilityIdentifier("account.settings")
         }
     }
@@ -444,7 +446,7 @@ struct AccountView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("打开工信部备案查询系统")
+                .accessibilityHint(L10n.tr("打开工信部备案查询系统"))
             }
             .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
             .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
@@ -551,7 +553,7 @@ struct AccountView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(GoldTheme.up.opacity(0.1), in: GoldTheme.subCardShape)
             .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.up.opacity(0.32), lineWidth: 1))
-            .accessibilityLabel("错误：" + error)
+            .accessibilityLabel(L10n.fmt("错误：%@", error))
         }
     }
 
@@ -579,7 +581,7 @@ struct AccountView: View {
 
     private func membershipRowContent(isMemberActive: Bool) -> some View {
         let subtitle = membership?.entitlement.statusSummary() ?? AccountProfileCopy.membershipSubtitle
-        let priceBadge = membership?.entryPriceBadgeText ?? "\(MembershipPlan.yearly.fallbackDisplayPrice)/年起"
+        let priceBadge = membership?.entryPriceBadgeText ?? L10n.fmt("%@/年起", MembershipPlan.yearly.fallbackDisplayPrice)
         return HStack(spacing: 12) {
             AccountRowIconBadge(systemName: "crown.fill", style: .gold)
             VStack(alignment: .leading, spacing: 2) {
@@ -739,7 +741,7 @@ struct AccountView: View {
         do {
             try await session.deleteAccount(confirming: intent)
             do { try cloud?.eraseDeletedAccountCache() }
-            catch { session.notice = "账户与云端数据已删除，清除设备缓存失败：" + error.localizedDescription }
+            catch { session.notice = L10n.fmt("账户与云端数据已删除，清除设备缓存失败：%@", error.localizedDescription) }
         } catch AuthError.reauthenticate {
             error = AuthError.reauthenticate.localizedDescription
             reauthentication = intent
@@ -808,7 +810,7 @@ struct AccountSignedInHeroHeader: View {
     let onTapCloudIcon: () -> Void
 
     var body: some View {
-        let displayName = user.nickname.isEmpty ? "记金用户" : user.nickname
+        let displayName = user.nickname.isEmpty ? L10n.tr("记金用户") : user.nickname
         HStack(alignment: .center, spacing: 14) {
             ZStack {
                 GoldTheme.circleShape
@@ -1039,7 +1041,7 @@ struct AccountGuestImportCallout: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                 Spacer(minLength: 4)
-                Text("去导入")
+                Text(L10n.tr("去导入"))
                     .font(.caption2.bold())
                     .foregroundStyle(GoldTheme.gold)
                 Image(systemName: "chevron.right")

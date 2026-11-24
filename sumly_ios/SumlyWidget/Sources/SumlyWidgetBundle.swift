@@ -51,8 +51,8 @@ struct SumlyGoldWidget: Widget {
         ) { entry in
             SumlyGoldWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("记金 · 实时金价")
-        .description("桌面与锁屏实时查看国内 Au99.99 / 国际伦敦金克价、近一月走势与黄金温度。")
+        .configurationDisplayName(L10n.tr("记金 · 实时金价"))
+        .description(L10n.tr("桌面与锁屏实时查看国内 Au99.99 / 国际伦敦金克价、近一月走势与黄金温度。"))
         .supportedFamilies([
             .systemSmall,
             .systemMedium,
