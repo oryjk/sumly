@@ -421,7 +421,7 @@ enum MembershipCopy {
     static var restoreNotFoundNotice: String { L10n.tr("未找到可恢复的有效订阅，请确认当前设备已登录购买时使用的 Apple ID。") }
     static var purchaseSucceededNotice: String { L10n.tr("订阅已生效，欢迎成为记金会员。") }
 
-    static let privacyPolicyURL = URL(string: "https://oryjk.cn/sumly/privacy")!
+    static let privacyPolicyURL = SumlyProductionEndpoints.privacyPolicyURL
     static let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     static let manageSubscriptionsFallbackURL = URL(string: "https://apps.apple.com/account/subscriptions")!
 

@@ -64,6 +64,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.oryjk.sumly.core.network.ApiClient
 import com.oryjk.sumly.R
 import com.oryjk.sumly.design.GoldColors
 import kotlinx.coroutines.delay
@@ -138,10 +139,10 @@ fun AccountScreen(
                     }
                     AccountSettingRow("隐私政策", Icons.Outlined.PrivacyTip) {
                         linkError = try {
-                            uriHandler.openUri("https://oryjk.cn/sumly/privacy")
+                            uriHandler.openUri(ApiClient.DefaultPrivacyPolicyUrl)
                             null
                         } catch (_: IllegalArgumentException) {
-                            "无法打开浏览器，请访问 oryjk.cn/sumly/privacy。"
+                            "无法打开浏览器，请访问 ${ApiClient.DefaultPrivacyPolicyUrl}。"
                         }
                     }
                     AccountSettingRow("联系支持", Icons.Outlined.Email) {

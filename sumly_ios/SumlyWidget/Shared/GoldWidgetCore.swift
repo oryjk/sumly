@@ -384,7 +384,7 @@ enum GoldWidgetSparkline {
 // MARK: - 网络层（独立直连线上只读 API，纯 Sendable）
 
 struct GoldWidgetAPIClient: Sendable {
-    static let defaultBaseURL = URL(string: "https://oryjk.cn/sumly/api/v1")!
+    static let defaultBaseURL = SumlyProductionEndpoints.apiBaseURL
     static let gramsPerTroyOunce = 31.1034768
 
     let baseURL: URL

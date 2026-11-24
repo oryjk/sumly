@@ -512,7 +512,7 @@ private final class MockAccountRenderStore: CredentialStoring {
     }
 
     // Apple 3.1.2 必填审核链接与自动续期说明校验
-    #expect(MembershipCopy.privacyPolicyURL.absoluteString == "https://oryjk.cn/sumly/privacy")
+    #expect(MembershipCopy.privacyPolicyURL.absoluteString == "https://oryjk.cn:82/sumly/privacy")
     #expect(MembershipCopy.termsOfUseURL.absoluteString == "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
     #expect(MembershipCopy.autoRenewalDisclosure.contains("24 小时"))
     #expect(MembershipCopy.autoRenewalDisclosure.contains("Apple ID"))

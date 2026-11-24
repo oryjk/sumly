@@ -2,6 +2,12 @@ import Testing
 import Foundation
 @testable import Sumly
 
+@Test func productionAppAndWidgetUsePublicSumlyPort() {
+    let expected = "https://oryjk.cn:82/sumly/api/v1"
+    #expect(BackendGoldPriceService.defaultBaseURL.absoluteString == expected)
+    #expect(GoldWidgetAPIClient.defaultBaseURL.absoluteString == expected)
+}
+
 @Test func decodesQuoteEnvelope() throws {
     // envelope 外层 {code,message,data} 在 get() 中剥开，这里测 data 部分
     let json = """

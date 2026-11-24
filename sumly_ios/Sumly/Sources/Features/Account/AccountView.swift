@@ -411,7 +411,7 @@ struct AccountView: View {
 
                 rowDivider
 
-                Link(destination: URL(string: "https://oryjk.cn/sumly/privacy")!) {
+                Link(destination: SumlyProductionEndpoints.privacyPolicyURL) {
                     actionRowContent(
                         icon: "hand.raised.fill",
                         title: AccountProfileCopy.privacyPolicyTitle,

@@ -3,7 +3,7 @@ import Foundation
 /// sumly_go 后端行情接口适配（`/api/v1/app/market/gold/*`）。
 /// 行情抓取与缓存由后端负责；这里只消费 `{ code, message, data }` envelope。
 struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntradayServicing, GoldRealtimeServicing, GoldHistoryServicing {
-    /// 默认走线上 nginx 反代（`https://oryjk.cn/sumly/`，jd 部署）；
+    /// 默认走公网 Sumly 入口；
     /// 本地联调可在 Info.plist 用 SUMLY_API_BASE_URL 覆盖（如 http://127.0.0.1:18090/api/v1）。
     static let defaultBaseURL: URL = {
         #if DEBUG
@@ -17,7 +17,7 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
             return url
         }
         #endif
-        return URL(string: "https://oryjk.cn/sumly/api/v1")!
+        return SumlyProductionEndpoints.apiBaseURL
     }()
 
     var instrumentID: String? = nil
