@@ -17,8 +17,9 @@ enum AppLanguage: String, CaseIterable, Identifiable, Codable, Sendable {
     static let storageKey = "app.language"
     static let supportedCodes: [String] = ["zh-Hans", "en", "es", "fr", "pt", "ja"]
 
-    /// 仅用于单元测试覆盖当前语种（不污染 `UserDefaults.standard`）。
+    /// 仅用于单元测试覆盖当前语种（推荐使用 `@TaskLocal taskOverrideForTesting` 避免并发测试互相干扰）。
     nonisolated(unsafe) static var overrideForTesting: AppLanguage? = nil
+    @TaskLocal static var taskOverrideForTesting: AppLanguage? = nil
 
     var id: String { rawValue }
 
@@ -84,7 +85,7 @@ enum AppLanguage: String, CaseIterable, Identifiable, Codable, Sendable {
 
     /// 解析当前实际生效的 `.lproj` 语言代码（必为 6 种支持语言之一）。
     static var resolvedLanguageCode: String {
-        if let override = overrideForTesting {
+        if let override = taskOverrideForTesting ?? overrideForTesting {
             if override == .system {
                 return resolveSystemLanguage(preferredLanguages: Locale.preferredLanguages)
             }
@@ -207,10 +208,12 @@ enum L10n {
 final class AppLanguageStore {
     static let shared = AppLanguageStore()
 
+    @ObservationIgnored private let defaults: UserDefaults
+
     var selected: AppLanguage {
         didSet {
             guard selected != oldValue else { return }
-            AppLanguage.current = selected
+            defaults.set(selected.rawValue, forKey: AppLanguage.storageKey)
             revision &+= 1
             Self.reloadWidgetsIfMainApp()
         }
@@ -221,20 +224,36 @@ final class AppLanguageStore {
 
     var effectiveLocale: Locale {
         _ = revision
-        return AppLanguage.currentLocale
+        return Locale(identifier: resolvedLanguageCode)
     }
 
     var resolvedLanguageCode: String {
         _ = revision
-        return AppLanguage.resolvedLanguageCode
+        if defaults === UserDefaults.standard {
+            return AppLanguage.resolvedLanguageCode
+        }
+        if selected != .system {
+            return selected.rawValue
+        }
+        return AppLanguage.isRunningUnitTests
+            ? AppLanguage.zhHans.rawValue
+            : AppLanguage.resolveSystemLanguage(preferredLanguages: Locale.preferredLanguages)
     }
 
     var isChinese: Bool {
         resolvedLanguageCode == AppLanguage.zhHans.rawValue
     }
 
-    init(initial: AppLanguage = AppLanguage.current) {
-        self.selected = initial
+    init(initial: AppLanguage? = nil, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let initial {
+            self.selected = initial
+        } else if let raw = defaults.string(forKey: AppLanguage.storageKey),
+                  let parsed = AppLanguage(rawValue: raw) {
+            self.selected = parsed
+        } else {
+            self.selected = .system
+        }
     }
 
     func select(_ language: AppLanguage) {
@@ -243,7 +262,13 @@ final class AppLanguageStore {
 
     /// 同步外部对 `UserDefaults` 的更改（主要用于单测或系统语言变化后刷新）。
     func syncFromStorage() {
-        let latest = AppLanguage.current
+        let latest: AppLanguage
+        if let raw = defaults.string(forKey: AppLanguage.storageKey),
+           let parsed = AppLanguage(rawValue: raw) {
+            latest = parsed
+        } else {
+            latest = .system
+        }
         if selected != latest {
             selected = latest
         } else {

@@ -828,6 +828,87 @@ private struct MockMacroService: MacroServicing {
     #expect(model.treasury != nil)
 }
 
+private final class CountingMacroService: MacroServicing, @unchecked Sendable {
+    var temperatureCalls = 0
+    var historyCalls = 0
+    var treasuryCalls = 0
+    var catalogCalls = 0
+    var cotCalls = 0
+
+    func fetchTemperature() async throws -> MacroTemperatureReport {
+        temperatureCalls += 1
+        return MacroFixtureData.sampleTemperature
+    }
+
+    func fetchTemperatureHistory(range: MacroHistoryRange) async throws -> MacroTemperatureHistory {
+        historyCalls += 1
+        let baseDate = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let points: [MacroTemperatureHistoryPoint] = (0..<757).map { offset in
+            let date = Calendar(identifier: .gregorian).date(byAdding: .day, value: offset, to: baseDate)!
+            let score = 45.0 + sin(Double(offset) * 0.05) * 30.0
+            let goldPrice = 2200.0 + Double(offset) * 1.5
+            return MacroTemperatureHistoryPoint(
+                dateString: formatter.string(from: date),
+                date: date,
+                score: score,
+                level: .neutral,
+                goldPriceUSD: goldPrice
+            )
+        }
+        return MacroTemperatureHistory(range: range.rawValue, modelVersion: "v1", points: points)
+    }
+
+    func fetchTreasury(range: MacroExtendedRange) async throws -> MacroTreasuryReport {
+        treasuryCalls += 1
+        return MacroFixtureData.sampleTreasury
+    }
+
+    func fetchIndicators(section: String?) async throws -> MacroIndicatorsCatalog {
+        catalogCalls += 1
+        return MacroFixtureData.sampleCatalog
+    }
+
+    func fetchIndicatorDetail(seriesID: String, range: MacroExtendedRange) async throws -> MacroIndicatorDetail {
+        MacroFixtureData.sampleDetail(seriesID: seriesID, range: range)
+    }
+
+    func fetchGoldCot(range: MacroHistoryRange) async throws -> MacroCotReport {
+        cotCalls += 1
+        return MacroCotReport(seriesID: "GOLD_COT", range: range.rawValue, latest: nil, points: [])
+    }
+}
+
+@MainActor @Test func dashboardLoadActiveTabFetchesOnlySelectedTabDependenciesAndDownsamples() async {
+    let spy = CountingMacroService()
+    let model = MacroDashboardViewModel(service: spy)
+    model.selectedTab = .temperature
+
+    await model.loadActiveTab(deferAfterTransition: false)
+    #expect(spy.temperatureCalls == 1)
+    #expect(spy.historyCalls == 1)
+    #expect(spy.treasuryCalls == 0)
+    #expect(spy.catalogCalls == 0)
+    #expect(spy.cotCalls == 0)
+    #expect(model.temperatureHistory?.points.count == 757)
+    #expect(model.displayTemperatureHistoryPoints.count <= 180)
+    #expect(model.displayTemperatureHistoryPoints.count >= 90)
+
+    // 切换到美债 Tab 才按需拉取美债接口
+    model.selectedTab = .treasury
+    await model.loadActiveTab(deferAfterTransition: false)
+    #expect(spy.treasuryCalls == 1)
+    #expect(spy.catalogCalls == 0)
+    #expect(spy.cotCalls == 0)
+
+    // 切换到宏观全景 Tab 才按需拉取目录与 COT 接口
+    model.selectedTab = .panorama
+    await model.loadActiveTab(deferAfterTransition: false)
+    #expect(spy.catalogCalls == 1)
+    #expect(spy.cotCalls == 1)
+}
+
 private actor SuspendedDetailService: MacroServicing {
     private var pending: [MacroExtendedRange: CheckedContinuation<MacroIndicatorDetail, Error>] = [:]
     private var waiters: [MacroExtendedRange: CheckedContinuation<Void, Never>] = [:]
