@@ -177,7 +177,7 @@ class ApiClient(baseUrl: String = DefaultBaseUrl) {
     }
 
     companion object {
-        private const val DefaultSiteUrl = "https://oryjk.cn:82/sumly/"
+        private const val DefaultSiteUrl = "https://oryjk.cn:18443/sumly/"
         const val DefaultBaseUrl = "${DefaultSiteUrl}api/v1/"
         const val DefaultPrivacyPolicyUrl = "${DefaultSiteUrl}privacy"
         private val loopbackHosts = setOf("localhost", "127.0.0.1", "::1")

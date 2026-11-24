@@ -3,7 +3,7 @@ import Foundation
 @testable import Sumly
 
 @Test func productionAppAndWidgetUsePublicSumlyPort() {
-    let expected = "https://oryjk.cn:82/sumly/api/v1"
+    let expected = "https://oryjk.cn:18443/sumly/api/v1"
     #expect(BackendGoldPriceService.defaultBaseURL.absoluteString == expected)
     #expect(GoldWidgetAPIClient.defaultBaseURL.absoluteString == expected)
 }
