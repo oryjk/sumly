@@ -69,3 +69,13 @@
   - 原文：`Your developer name does not match MIIT's records.`
 - 原因分析：本次首次通过 API 修改了 `appInfo`（及 `zh-Hans` 名称/新增 5 个海外语种本地化），触发了 Apple 针对中国大陆工信部 ICP 备案号（`蜀ICP备2020035100号-3A`）的重新核验；Apple 公开 REST API 不暴露 `/v1/appIcpNumberDetails` 确认接口，需开发者登录 App Store Connect 网页端在「App 信息 → 中国大陆 ICP 备案」查看并确认/重新保存备案核验状态后，再点击「添加以供审核」（或通知再次运行 `prepare_asc_106.py --submit` 完成提审）。
 - 线上在售版本 `1.0.5 (60)`（`848679c8-144b-43dd-a2fc-ea039e681dc1`）保持 `READY_FOR_SALE`，完全不受影响。
+
+## 2026-11-24 全区暂时下架记录（因域名过期需重新备案）
+
+- 时间：2026-11-24 21:31（北京时间）。
+- 原因：主域名 `oryjk.cn` 过期需要重新备案，按用户要求通过 App Store Connect `v1/territoryAvailabilities` 将 App（ID `6813884595`）在全部 175 个国家/地区暂时下架。
+- 核实结果：
+  - `availableInNewTerritories`：`false`
+  - 全部 175 个国家/地区均已置为 `available: false`（当前在售地区数：`0 / 175`，0 报错）
+  - 中国大陆（`CHN`，`eyJzIjoiNjgxMzg4NDU5NSIsInQiOiJDSE4ifQ`）：`available=false`，`contentStatuses=["CANNOT_SELL"]`
+  - `1.0.6 (61)` 草稿（`8a52f4ba-749a-4d27-a469-23507217cf3c`）及全部 6 语种元数据、12 张新版截图、TestFlight 内部测试构建 `61` 均完整保留，待新域名与重新备案完成后可随时重新上架并提审。
