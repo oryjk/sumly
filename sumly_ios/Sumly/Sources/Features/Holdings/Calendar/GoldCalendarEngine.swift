@@ -8,6 +8,13 @@ enum GoldCalendarViewTab: String, CaseIterable, Identifiable, Sendable {
     case stats = "统计"
 
     var id: String { rawValue }
+    var localizedTitle: String {
+        switch self {
+        case .month: L10n.tr("月历")
+        case .year: L10n.tr("年览")
+        case .stats: L10n.tr("统计")
+        }
+    }
 }
 
 enum GoldCalendarLayer: String, CaseIterable, Identifiable, Sendable {
@@ -16,11 +23,18 @@ enum GoldCalendarLayer: String, CaseIterable, Identifiable, Sendable {
     case temperature = "温度"
 
     var id: String { rawValue }
+    var localizedTitle: String {
+        switch self {
+        case .pnl: L10n.tr("盈亏")
+        case .market: L10n.tr("大盘")
+        case .temperature: L10n.tr("温度")
+        }
+    }
 
     var unitHint: String {
         switch self {
-        case .pnl: "元(估算)"
-        case .market: "日涨跌%"
+        case .pnl: L10n.tr("元(估算)")
+        case .market: L10n.tr("日涨跌%")
         case .temperature: "0~100°"
         }
     }
@@ -31,6 +45,12 @@ enum GoldCalendarYearHeatmapMode: String, CaseIterable, Identifiable, Sendable {
     case footprint = "攒金足迹"
 
     var id: String { rawValue }
+    var localizedTitle: String {
+        switch self {
+        case .pnl: L10n.tr("盈亏热力")
+        case .footprint: L10n.tr("攒金足迹")
+        }
+    }
 }
 
 enum GoldCalendarDayStatus: Equatable, Sendable {
@@ -231,7 +251,10 @@ struct CalendarHoldingItem: Identifiable, Equatable, Sendable {
         let trimmedBrand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedBrand.isEmpty { return trimmedBrand }
         let trimmedType = assetType.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedType.isEmpty || trimmedType == "其他" ? "黄金记录" : trimmedType
+        if trimmedType.isEmpty || trimmedType == "其他" {
+            return L10n.tr("黄金记录")
+        }
+        return GoldAssetType(rawValue: trimmedType)?.displayName ?? trimmedType
     }
 
     var resolvedAssetType: GoldAssetType {
@@ -1413,7 +1436,7 @@ enum GoldCalendarFormat {
         if absVal < 100_000 {
             return "\(sign)\(String(format: "%.1f", absVal / 1_000))k"
         }
-        return "\(sign)\(String(format: "%.1f", absVal / 10_000))万"
+        return L10n.fmt("%@%@万", sign, String(format: "%.1f", absVal / 10_000))
     }
 
     /// 月历格内大盘日涨跌幅（公开市场数据，不受 hideAmounts 隐藏）。
@@ -1453,8 +1476,8 @@ enum GoldCalendarFormat {
     }
 
     static func headerCompanionBadge(companionDays: Int, hasRecords: Bool) -> String {
-        guard hasRecords, companionDays > 0 else { return "大盘观察中" }
-        return "陪伴第 \(companionDays) 天"
+        guard hasRecords, companionDays > 0 else { return L10n.tr("大盘观察中") }
+        return L10n.fmt("陪伴第 %lld 天", Int64(companionDays))
     }
 
     /// 月度战报卡底部单行客观陪伴彩蛋（100% 纯客观、零焦虑、零投顾词）。
@@ -1465,19 +1488,19 @@ enum GoldCalendarFormat {
     ) -> String? {
         guard companion.hasAnyRecords else { return nil }
         if hideAmounts {
-            return "隐私模式已开启 · 已隐藏金额与克重"
+            return L10n.tr("隐私模式已开启 · 已隐藏金额与克重")
         }
         if let milestone = monthSummary.unlockedMilestones.last {
-            return "本月点亮「\(milestone.title)」"
+            return L10n.fmt("本月点亮「%@」", milestone.title)
         }
         if companion.consecutiveActiveMonths >= 2 {
-            return "已连续 \(companion.consecutiveActiveMonths) 个月保持记录"
+            return L10n.fmt("已连续 %lld 个月保持记录", Int64(companion.consecutiveActiveMonths))
         }
         if companion.currentHoldingGrams > 1e-9 {
             if let next = companion.milestoneProgress.next {
-                return "距「\(next.title)」还差 \(GoldVaultSummary.formatGrams(companion.milestoneProgress.remainingToNext))g"
+                return L10n.fmt("距「%@」还差 %@g", next.title, GoldVaultSummary.formatGrams(companion.milestoneProgress.remainingToNext))
             }
-            return "已点亮全部 6 档里程碑"
+            return L10n.tr("已点亮全部 6 档里程碑")
         }
         return nil
     }
@@ -1486,27 +1509,30 @@ enum GoldCalendarFormat {
     static func emptyDayJournalNote(snapshot: GoldCalendarDaySnapshot, hideAmounts: Bool) -> String {
         if snapshot.endOfDayHoldingGrams > 1e-9 {
             if hideAmounts {
-                return "当天静静持有 •••• g，当日无新增记录"
+                return L10n.tr("当天静静持有 •••• g，当日无新增记录")
             }
-            return "当天静静持有 \(GoldVaultSummary.formatGrams(snapshot.endOfDayHoldingGrams))g，当日无新增记录"
+            return L10n.fmt("当天静静持有 %@g，当日无新增记录", GoldVaultSummary.formatGrams(snapshot.endOfDayHoldingGrams))
         }
-        return "当天暂无记金记录，可随时补记历史黄金"
+        return L10n.tr("当天暂无记金记录，可随时补记历史黄金")
     }
 
     static func basisFootnote(basis: GoldMarketBasis) -> String {
         switch basis {
         case .domestic:
-            "预估盈亏按当日与前交易日参考收盘价测算，仅作客观记录参考。"
+            L10n.tr("预估盈亏按当日与前交易日参考收盘价测算，仅作客观记录参考。")
         case .international:
-            "国际口径历史单价按当前汇率折算参考，预估盈亏仅作客观记录。"
+            L10n.tr("国际口径历史单价按当前汇率折算参考，预估盈亏仅作客观记录。")
         }
     }
 
     static func fullChineseDateHeader(_ date: Date, calendar: Calendar = .current) -> String {
         let c = calendar.dateComponents([.year, .month, .day, .weekday], from: date)
-        let weekdays = ["", "周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+        let weekdays = ["", L10n.tr("周日"), L10n.tr("周一"), L10n.tr("周二"), L10n.tr("周三"), L10n.tr("周四"), L10n.tr("周五"), L10n.tr("周六")]
         let weekday = (c.weekday ?? 1) >= 1 && (c.weekday ?? 1) <= 7 ? weekdays[c.weekday ?? 1] : ""
         let lunar = HoldingCalendarLogic.lunar(date)
-        return "\(c.year ?? 0)年\(c.month ?? 0)月\(c.day ?? 0)日 · \(weekday) · 农历\(lunar)"
+        if !lunar.isEmpty {
+            return L10n.fmt("%@年%lld月%lld日 · %@ · 农历%@", String(c.year ?? 0), Int64(c.month ?? 0), Int64(c.day ?? 0), weekday, lunar)
+        }
+        return L10n.fmt("%@年%lld月%lld日 · %@", String(c.year ?? 0), Int64(c.month ?? 0), Int64(c.day ?? 0), weekday)
     }
 }

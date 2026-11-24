@@ -13,20 +13,23 @@ struct GoldProfitBreakdownCard: View {
         hidden ? GoldTheme.text : (amount > 0 ? GoldTheme.up : amount < 0 ? GoldTheme.down : GoldTheme.textSecondary)
     }
     private var narrative: String {
-        guard let breakdown else { return "获取参考金价后，显示各项来源与盈亏。" }
-        if hidden { return "金额已隐藏，显示金额后可查看盈亏明细。" }
-        if actual { return "根据已记录的实际到手与总投入计算。" }
+        guard let breakdown else { return L10n.tr("获取参考金价后，显示各项来源与盈亏。") }
+        if hidden { return L10n.tr("金额已隐藏，显示金额后可查看盈亏明细。") }
+        if actual { return L10n.tr("根据已记录的实际到手与总投入计算。") }
         let largest = breakdown.components.max { $0.cents.magnitude < $1.cents.magnitude }
-        guard let largest, largest.cents != 0 else { return "当前估算刚好保本。" }
+        guard let largest, largest.cents != 0 else { return L10n.tr("当前估算刚好保本。") }
         let cents = Decimal(largest.cents)
-        return "影响最大的是\(largest.kind.title)，\(largest.cents > 0 ? "带来收益" : "使收益减少了") \(GoldReturnPresentation.centsMoney(cents < 0 ? -cents : cents, signed: false))。"
+        let formatted = GoldReturnPresentation.centsMoney(cents < 0 ? -cents : cents, signed: false)
+        return largest.cents > 0
+            ? L10n.fmt("影响最大的是%@，带来收益 %@。", largest.kind.title, formatted)
+            : L10n.fmt("影响最大的是%@，使收益减少了 %@。", largest.kind.title, formatted)
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label("盈亏来源", systemImage: "list.bullet.rectangle").font(.headline)
+                Label(L10n.tr("盈亏来源"), systemImage: "list.bullet.rectangle").font(.headline)
                 Spacer()
-                Text(actual ? "实际卖出" : "预计卖出").font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                Text(actual ? L10n.tr("实际卖出") : L10n.tr("预计卖出")).font(.caption).foregroundStyle(GoldTheme.textSecondary)
             }
             if showTotal {
                 Text(GoldReturnPresentation.centsMoney(breakdown.map { Decimal($0.profitCents) }, hidden: hidden))
@@ -35,14 +38,14 @@ struct GoldProfitBreakdownCard: View {
             }
             Text(narrative).font(.subheadline).foregroundStyle(GoldTheme.textSecondary).fixedSize(horizontal: false, vertical: true)
             if breakdown?.hasUnconfiguredRecovery == true || (breakdown == nil && unconfiguredRecovery) {
-                Label("尚未计入回收费用", systemImage: "info.circle")
+                Label(L10n.tr("尚未计入回收费用"), systemImage: "info.circle")
                     .font(.subheadline.weight(.medium)).foregroundStyle(GoldTheme.gold)
             }
             if let breakdown {
                 if hidden || actual {
                     sourceList(breakdown.components)
                 } else {
-                    Text("每项金额代表它对收益的影响，点选可查看逐笔明细")
+                    Text(L10n.tr("每项金额代表它对收益的影响，点选可查看逐笔明细"))
                         .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                     VStack(alignment: .leading, spacing: 22) {
                         ForEach(breakdown.groups) { group in
@@ -53,24 +56,24 @@ struct GoldProfitBreakdownCard: View {
                         }
                     }
                 }
-                Text("各项影响相加，即为上方盈亏。")
+                Text(L10n.tr("各项影响相加，即为上方盈亏。"))
                     .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 HStack(alignment: .top, spacing: 16) {
-                    referenceMetric("总投入", amount: breakdown.totalCost)
-                    referenceMetric(actual ? "实际到手" : "预计到手", amount: breakdown.proceeds)
+                    referenceMetric(L10n.tr("总投入"), amount: breakdown.totalCost)
+                    referenceMetric(actual ? L10n.tr("实际到手") : L10n.tr("预计到手"), amount: breakdown.proceeds)
                 }
-                Text(actual ? "实际到手 − 总投入 = 实际盈亏" : "预计到手 − 总投入 = 预计盈亏")
+                Text(actual ? L10n.tr("实际到手 − 总投入 = 实际盈亏") : L10n.tr("预计到手 − 总投入 = 预计盈亏"))
                     .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 if breakdown.hasUnconfiguredRecovery {
-                    Text("部分持仓尚未设置回收费用，这些记录未计入扣费；其余按已设规则估算。实际到手可能更低。")
+                    Text(L10n.tr("部分持仓尚未设置回收费用，这些记录未计入扣费；其余按已设规则估算。实际到手可能更低。"))
                         .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 }
                 if breakdown.hasUnitemizedCost && !actual {
-                    Text("仅录总价的持仓合并展示差额，无法判断其中的金价、工费等具体影响。")
+                    Text(L10n.tr("仅录总价的持仓合并展示差额，无法判断其中的金价、工费等具体影响。"))
                         .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 }
                 if !actual {
-                    Text("当前为估算，成交以实际渠道报价为准。")
+                    Text(L10n.tr("当前为估算，成交以实际渠道报价为准。"))
                         .font(.caption2).foregroundStyle(GoldTheme.textSecondary)
                 }
             }
@@ -102,7 +105,7 @@ struct GoldProfitBreakdownCard: View {
         }.font(.subheadline.weight(.semibold)).foregroundStyle(tone)
             .padding(.bottom, 6)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(group.direction.title + "合计，" + amount)
+            .accessibilityLabel(L10n.fmt("%@合计，%@", group.direction.title, amount))
     }
 
     private func sourceList(_ components: [GoldProfitBreakdown.Component]) -> some View {
@@ -128,8 +131,8 @@ struct GoldProfitBreakdownCard: View {
                         }.font(.subheadline).frame(maxWidth: .infinity, alignment: .leading)
                             .frame(minHeight: 52).contentShape(Rectangle())
                     }.buttonStyle(.plain)
-                        .accessibilityLabel(item.kind.title + "，" + GoldReturnPresentation.centsMoney(Decimal(item.cents), hidden: hidden))
-                        .accessibilityHint("展开或收起逐笔明细与来源说明")
+                        .accessibilityLabel(L10n.fmt("%@，%@", item.kind.title, GoldReturnPresentation.centsMoney(Decimal(item.cents), hidden: hidden)))
+                        .accessibilityHint(L10n.tr("展开或收起逐笔明细与来源说明"))
                     if selected == item.kind {
                         GoldProfitSourceDetails(component: item, records: records, hidden: hidden)
                             .padding(.bottom, 12)
@@ -163,7 +166,7 @@ struct GoldProfitSourceDetails: View {
             Text(component.kind.explanation).font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if !component.contributions.isEmpty && !records.isEmpty {
-                Text("逐笔明细 · 对本项的影响").font(.caption.weight(.semibold)).foregroundStyle(GoldTheme.gold)
+                Text(L10n.tr("逐笔明细 · 对本项的影响")).font(.caption.weight(.semibold)).foregroundStyle(GoldTheme.gold)
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(component.contributions) { contribution in
                         if records.indices.contains(contribution.recordIndex) {
@@ -194,11 +197,11 @@ struct GoldProfitSourceDetails: View {
                     Text(amount).monospacedDigit().foregroundStyle(tone)
                 }
             }.font(.subheadline.weight(.medium))
-            Text("第\(contribution.recordIndex + 1)笔 · \(HoldingsSelection.dateText(record.timestamp)) 购入 · \(hidden ? "••••" : record.grams.moneyText) g")
+            Text(L10n.fmt("第%lld笔 · %@ 购入 · %@ g", Int64(contribution.recordIndex + 1), HoldingsSelection.dateText(record.timestamp), hidden ? "••••" : record.grams.moneyText))
                 .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if record.purchaseTotalOverride != nil && component.kind == .unitemized {
-                Text("按录入总价计算").font(.caption2).foregroundStyle(GoldTheme.textSecondary)
+                Text(L10n.tr("按录入总价计算")).font(.caption2).foregroundStyle(GoldTheme.textSecondary)
             }
         }.foregroundStyle(GoldTheme.text).accessibilityElement(children: .combine)
     }
@@ -217,17 +220,17 @@ struct GoldProfitBreakdownSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("看清收益从哪里来，又被哪些因素拉低。")
+                    Text(L10n.tr("看清收益从哪里来，又被哪些因素拉低。"))
                         .font(.subheadline).foregroundStyle(GoldTheme.textSecondary)
                     GoldProfitBreakdownCard(breakdown: GoldProfitBreakdown.estimate(holdingRecords.map(\.returnInput), referencePrice: quote?.cnyPerGram), records: holdingRecords, hidden: hidden, unconfiguredRecovery: holdingRecords.contains { $0.returnInput.rule.isDefault })
                     Text(GoldReturnPresentation.quoteStatus(quote, basis: basis, failed: quoteFailed))
                         .font(.caption).foregroundStyle(GoldTheme.textSecondary)
-                    Button("查看计算参数与公式", systemImage: "info.circle") { calculation = true }
+                    Button(L10n.tr("查看计算参数与公式"), systemImage: "info.circle") { calculation = true }
                         .font(.subheadline).foregroundStyle(GoldTheme.gold).frame(minHeight: 44)
                 }.padding(16)
             }.background(GoldTheme.background)
-                .navigationTitle("盈亏来源").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+                .navigationTitle(L10n.tr("盈亏来源")).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L10n.tr("完成")) { dismiss() } } }
         }.presentationBackground(GoldTheme.background).presentationDragIndicator(.visible)
             .sheet(isPresented: $calculation) { GoldCalculationSheet(records: records, quote: quote, basis: basis, hideAmounts: hidden, quoteFailed: quoteFailed) }
     }

@@ -1,6 +1,16 @@
 import Foundation
 
-enum HoldingCalendarPeriod: String, CaseIterable { case day = "日", month = "月", year = "年", all = "全部" }
+enum HoldingCalendarPeriod: String, CaseIterable {
+    case day = "日", month = "月", year = "年", all = "全部"
+    var localizedTitle: String {
+        switch self {
+        case .day: L10n.tr("日")
+        case .month: L10n.tr("月")
+        case .year: L10n.tr("年")
+        case .all: L10n.tr("全部")
+        }
+    }
+}
 struct HoldingCalendarFilter: Equatable {
     var keyword = ""
     var kind = "all"
@@ -67,7 +77,7 @@ enum HoldingCalendarLogic {
             let keyword = filter.keyword.trimmingCharacters(in: .whitespacesAndNewlines)
             guard keyword.isEmpty || [r.brand, r.note, r.purchaseChannel, r.counterparty].contains(where: { $0.localizedCaseInsensitiveContains(keyword) }) else { continue }
             let purchase = r.purchaseID ?? r.id
-            let title = r.brand.isEmpty ? "未知" : r.brand
+            let title = r.brand.isEmpty ? L10n.tr("未知") : r.brand
             if filter.kind == "all" || (filter.kind == "holding" && r.disposition == "holding") {
                 result.append(.init(id: "buy-\(r.id)", purchaseID: purchase, date: r.timestamp, kind: "buy", grams: r.grams, cost: r.totalPurchaseCost, fees: r.extraFee + r.laborFee, proceeds: 0, title: title))
             }
@@ -111,6 +121,7 @@ enum HoldingCalendarLogic {
                      value: value, profit: profit, profitPercent: percent)
     }
     static func lunar(_ date: Date) -> String {
+        guard AppLanguage.resolvedLanguageCode == AppLanguage.zhHans.rawValue else { return "" }
         let calendar = Calendar(identifier: .chinese)
         let day = calendar.component(.day, from: date)
         if day == 1 {

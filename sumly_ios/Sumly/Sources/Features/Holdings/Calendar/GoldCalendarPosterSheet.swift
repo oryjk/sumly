@@ -9,6 +9,18 @@ enum GoldCalendarPosterMode: String, CaseIterable, Identifiable, Sendable {
     case yearly = "年度热力"
 
     var id: String { rawValue }
+    var localizedTitle: String {
+        switch self {
+        case .monthly: L10n.tr("月度日历")
+        case .yearly: L10n.tr("年度热力")
+        }
+    }
+    var posterTabTitle: String {
+        switch self {
+        case .monthly: L10n.tr("月度日历海报")
+        case .yearly: L10n.tr("年度热力海报")
+        }
+    }
 }
 
 struct GoldCalendarPosterSnapshot: Equatable, Sendable {
@@ -31,12 +43,12 @@ struct GoldCalendarPosterSnapshot: Equatable, Sendable {
 
     var monthlyBuySubtitle: String? {
         guard isPnLView, !maskSensitiveAmounts, monthSummary.newBuyGrams > 1e-9 else { return nil }
-        return "本月新攒 +\(GoldVaultSummary.formatGrams(monthSummary.newBuyGrams))g"
+        return L10n.fmt("本月新攒 +%@g", GoldVaultSummary.formatGrams(monthSummary.newBuyGrams))
     }
 
     var yearlyBuySubtitle: String? {
         guard hasHoldings, !maskSensitiveAmounts, yearSnapshot.totalBuyGrams > 1e-9 else { return nil }
-        return "新攒 +\(GoldVaultSummary.formatGrams(yearSnapshot.totalBuyGrams))g · \(yearSnapshot.totalBuyCount)笔"
+        return L10n.fmt("新攒 +%@g · %lld笔", GoldVaultSummary.formatGrams(yearSnapshot.totalBuyGrams), Int64(yearSnapshot.totalBuyCount))
     }
 }
 
@@ -131,7 +143,7 @@ struct GoldCalendarPosterCardView: View {
                 Image(systemName: "sparkles")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(GoldTheme.gold)
-                Text("记金 · 攒金陪伴日历")
+                Text(L10n.tr("记金 · 攒金陪伴日历"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.goldSoft)
             }
@@ -165,12 +177,12 @@ struct GoldCalendarPosterCardView: View {
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("\(String(snapshot.year))年\(snapshot.month)月 战报")
+                Text(L10n.fmt("%@年%lld月 战报", String(snapshot.year), Int64(snapshot.month)))
                     .font(.system(.headline, design: .rounded).bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
                 if hideAmounts && isPnL {
-                    Text("隐私脱敏版")
+                    Text(L10n.tr("隐私脱敏版"))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(GoldTheme.goldSoft)
                         .padding(.horizontal, 7)
@@ -183,14 +195,14 @@ struct GoldCalendarPosterCardView: View {
                 // 隐私开启时：以红绿天数战绩作为核心视觉，大方高级不堆砌遮罩符。
                 HStack(alignment: .lastTextBaseline, spacing: 10) {
                     HStack(spacing: 3) {
-                        Text("红")
+                        Text(L10n.tr("红"))
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(GoldTheme.textSecondary)
                         Text("\(redDays)")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.up)
-                        Text("天")
+                        Text(L10n.tr("天"))
                             .font(.caption)
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
@@ -200,14 +212,14 @@ struct GoldCalendarPosterCardView: View {
                         .foregroundStyle(GoldTheme.textFaint)
 
                     HStack(spacing: 3) {
-                        Text("绿")
+                        Text(L10n.tr("绿"))
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(GoldTheme.textSecondary)
                         Text("\(greenDays)")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.down)
-                        Text("天")
+                        Text(L10n.tr("天"))
                             .font(.caption)
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
@@ -217,7 +229,7 @@ struct GoldCalendarPosterCardView: View {
             } else {
                 HStack(alignment: .lastTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(isPnL ? "本月预估盈亏" : "本月金价涨跌")
+                        Text(isPnL ? L10n.tr("本月预估盈亏") : L10n.tr("本月金价涨跌"))
                             .font(.caption2)
                             .foregroundStyle(GoldTheme.textSecondary)
                         let dir = isPnL
@@ -240,9 +252,9 @@ struct GoldCalendarPosterCardView: View {
 
                     VStack(alignment: .trailing, spacing: 3) {
                         HStack(spacing: 5) {
-                            Text("红 \(redDays)天").foregroundStyle(GoldTheme.up).fontWeight(.bold)
+                            Text(L10n.fmt("红 %lld天", Int64(redDays))).foregroundStyle(GoldTheme.up).fontWeight(.bold)
                             Text("·").foregroundStyle(GoldTheme.textFaint)
-                            Text("绿 \(greenDays)天").foregroundStyle(GoldTheme.down).fontWeight(.bold)
+                            Text(L10n.fmt("绿 %lld天", Int64(greenDays))).foregroundStyle(GoldTheme.down).fontWeight(.bold)
                         }
                         .font(.system(size: 11.5, design: .rounded))
                         .monospacedDigit()
@@ -279,7 +291,7 @@ struct GoldCalendarPosterCardView: View {
 
         return VStack(spacing: 6) {
             HStack(spacing: 4) {
-                ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { label in
+                ForEach(Array([L10n.tr("日"), L10n.tr("一"), L10n.tr("二"), L10n.tr("三"), L10n.tr("四"), L10n.tr("五"), L10n.tr("六")].enumerated()), id: \.offset) { _, label in
                     Text(label)
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(GoldTheme.textFaint)
@@ -387,12 +399,12 @@ struct GoldCalendarPosterCardView: View {
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("\(String(y.year))年 攒金足迹")
+                Text(L10n.fmt("%@年 攒金足迹", String(y.year)))
                     .font(.system(.headline, design: .rounded).bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
                 if hideAmounts && isPnL {
-                    Text("隐私脱敏版")
+                    Text(L10n.tr("隐私脱敏版"))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(GoldTheme.goldSoft)
                         .padding(.horizontal, 7)
@@ -403,13 +415,13 @@ struct GoldCalendarPosterCardView: View {
 
             if isPnL && hideAmounts {
                 HStack(alignment: .lastTextBaseline, spacing: 10) {
-                    Text("红 \(redDays)天")
+                    Text(L10n.fmt("红 %lld天", Int64(redDays)))
                         .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundStyle(GoldTheme.up)
                     Text("·")
                         .font(.title3.bold())
                         .foregroundStyle(GoldTheme.textFaint)
-                    Text("绿 \(greenDays)天")
+                    Text(L10n.fmt("绿 %lld天", Int64(greenDays)))
                         .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundStyle(GoldTheme.down)
                     Spacer()
@@ -418,7 +430,7 @@ struct GoldCalendarPosterCardView: View {
             } else {
                 HStack(alignment: .lastTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(isPnL ? "年度预估盈亏" : "年度金价涨跌")
+                        Text(isPnL ? L10n.tr("年度预估盈亏") : L10n.tr("年度金价涨跌"))
                             .font(.caption2)
                             .foregroundStyle(GoldTheme.textSecondary)
                         let dir = isPnL
@@ -438,7 +450,7 @@ struct GoldCalendarPosterCardView: View {
                     }
                     Spacer(minLength: 6)
                     VStack(alignment: .trailing, spacing: 3) {
-                        Text("红 \(redDays)天 · 绿 \(greenDays)天")
+                        Text(L10n.fmt("红 %lld天 · 绿 %lld天", Int64(redDays), Int64(greenDays)))
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.textSecondary)
@@ -462,7 +474,7 @@ struct GoldCalendarPosterCardView: View {
     private var yearlyCompactHeatmap: some View {
         let weeks = snapshot.yearSnapshot.weeks
         return VStack(alignment: .leading, spacing: 8) {
-            Text("52 周红绿热力足迹")
+            Text(L10n.tr("52 周红绿热力足迹"))
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(GoldTheme.textSecondary)
 
@@ -488,7 +500,7 @@ struct GoldCalendarPosterCardView: View {
                     let dotColor: Color = dir == .up ? GoldTheme.up : dir == .down ? GoldTheme.down : GoldTheme.textFaint
                     HStack(spacing: 3) {
                         GoldTheme.circleShape.fill(dotColor).frame(width: 5, height: 5)
-                        Text("\(m.month)月")
+                        Text(L10n.fmt("%lld月", Int64(m.month)))
                             .font(.system(size: 9.5, weight: .medium, design: .rounded))
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
@@ -545,7 +557,7 @@ struct GoldCalendarPosterCardView: View {
 
     private var posterFooter: some View {
         HStack {
-            Text(snapshot.basis == .international ? "慢慢攒金，稳稳发光 · 国际口径按当前汇率折算参考" : "慢慢攒金，稳稳发光 · 预估盈亏仅作客观记录参考")
+            Text(snapshot.basis == .international ? L10n.tr("慢慢攒金，稳稳发光 · 国际口径按当前汇率折算参考") : L10n.tr("慢慢攒金，稳稳发光 · 预估盈亏仅作客观记录参考"))
                 .font(.system(size: 8.5))
                 .foregroundStyle(GoldTheme.textFaint)
                 .lineLimit(1)
@@ -593,7 +605,7 @@ struct GoldCalendarPosterSheet: View {
     }
 
     private var renderTaskID: String {
-        "\(mode.rawValue)-\(maskSensitiveAmounts)-\(baseSnapshot.year)-\(baseSnapshot.month)"
+        "\(mode.rawValue)-\(maskSensitiveAmounts)-\(baseSnapshot.year)-\(baseSnapshot.month)-\(AppLanguage.resolvedLanguageCode)"
     }
 
     var body: some View {
@@ -607,7 +619,7 @@ struct GoldCalendarPosterSheet: View {
                             Button {
                                 mode = item
                             } label: {
-                                Text(item.rawValue + "海报")
+                                Text(item.posterTabTitle)
                                     .font(.system(.subheadline, design: .rounded).weight(selected ? .bold : .medium))
                                     .foregroundStyle(selected ? GoldTheme.onGold : GoldTheme.textSecondary)
                                     .frame(maxWidth: .infinity)
@@ -624,10 +636,10 @@ struct GoldCalendarPosterSheet: View {
                     // 默认开启的隐私脱敏开关
                     Toggle(isOn: $maskSensitiveAmounts) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("隐藏具体金额与克重")
+                            Text(L10n.tr("隐藏具体金额与克重"))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(GoldTheme.text)
-                            Text("仅晒红绿战绩、热力分布与陪伴天数")
+                            Text(L10n.tr("仅晒红绿战绩、热力分布与陪伴天数"))
                                 .font(.caption2)
                                 .foregroundStyle(GoldTheme.textSecondary)
                         }
@@ -646,7 +658,7 @@ struct GoldCalendarPosterSheet: View {
                 .padding(.vertical, 14)
             }
             .background(GoldTheme.background)
-            .navigationTitle("日历战报海报")
+            .navigationTitle(L10n.tr("日历战报海报"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -655,7 +667,7 @@ struct GoldCalendarPosterSheet: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
-                    .accessibilityLabel("关闭")
+                    .accessibilityLabel(L10n.tr("关闭"))
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -664,13 +676,15 @@ struct GoldCalendarPosterSheet: View {
                         ShareLink(
                             item: shareItem,
                             preview: SharePreview(
-                                "记金 · \(String(baseSnapshot.year))年\(mode == .monthly ? "\(baseSnapshot.month)月" : "")攒金日历",
+                                mode == .monthly
+                                    ? L10n.fmt("记金 · %@年%lld月攒金日历", String(baseSnapshot.year), Int64(baseSnapshot.month))
+                                    : L10n.fmt("记金 · %@年攒金日历", String(baseSnapshot.year)),
                                 image: Image(uiImage: previewImage)
                             )
                         ) {
                             HStack(spacing: 8) {
                                 Image(systemName: "square.and.arrow.up")
-                                Text("分享 / 保存高清海报")
+                                Text(L10n.tr("分享 / 保存高清海报"))
                             }
                             .font(.system(.subheadline, design: .rounded).weight(.bold))
                             .foregroundStyle(GoldTheme.onGold)
@@ -680,7 +694,7 @@ struct GoldCalendarPosterSheet: View {
                         }
                         .simultaneousGesture(TapGesture().onEnded { sharePulse += 1 })
                     } else {
-                        ProgressView("正在生成海报…")
+                        ProgressView(L10n.tr("正在生成海报…"))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
                             .background(GoldTheme.card, in: GoldTheme.capsuleShape)

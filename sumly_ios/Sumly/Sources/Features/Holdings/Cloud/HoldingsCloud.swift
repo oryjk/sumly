@@ -44,13 +44,13 @@ import SwiftData
         }
     }
     var status: String {
-        if userID == nil { return "游客记录仅保存在此设备，登录后可导入账户。" }
-        if isSyncing { return "正在同步云端…" }
-        if conflictCount > 0 { return "\(conflictCount) 条记录在两台设备上都有更改，请选择保留哪一份。" }
+        if userID == nil { return L10n.tr("游客记录仅保存在此设备，登录后可导入账户。") }
+        if isSyncing { return L10n.tr("正在同步云端…") }
+        if conflictCount > 0 { return L10n.fmt("%lld 条记录在两台设备上都有更改，请选择保留哪一份。", Int64(conflictCount)) }
         if let notice { return notice }
-        if (try? document()) != base.document { return "有更改等待同步，记录已保存在本机。" }
-        if let lastSyncedAt { return "已同步 · \(lastSyncedAt.formatted(date: .omitted, time: .shortened))" }
-        return "已开启云同步，本机缓存支持离线记录。"
+        if (try? document()) != base.document { return L10n.tr("有更改等待同步，记录已保存在本机。") }
+        if let lastSyncedAt { return L10n.fmt("已同步 · %@", lastSyncedAt.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(AppLanguage.currentLocale))) }
+        return L10n.tr("已开启云同步，本机缓存支持离线记录。")
     }
     var guestRecordCount: Int { (try? guestContainer.mainContext.fetchCount(FetchDescriptor<HoldingRecord>())) ?? 0 }
     func document() throws -> HoldingDocument {
@@ -150,7 +150,7 @@ import SwiftData
             throw HoldingCloudError.conflict
         } catch AuthError.stale { /* Old workspace requests never mutate another account. */ }
         catch is CancellationError { }
-        catch { notice = "\(error.localizedDescription) 更改保留在本机，稍后重试。"; retryAfter = .now.addingTimeInterval(60) }
+        catch { notice = L10n.fmt("%@ 更改保留在本机，稍后重试。", error.localizedDescription); retryAfter = .now.addingTimeInterval(60) }
     }
     func run() async {
         guard userID != nil else { return }

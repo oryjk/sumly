@@ -41,21 +41,21 @@ struct HoldingsInsightsSection: View {
                 allocationCard
             }
         }
-        .alert("设定攒金目标", isPresented: $showingGoalEditor) {
-            TextField("目标克数（例如 100）", text: $goalInputText)
+        .alert(L10n.tr("设定攒金目标"), isPresented: $showingGoalEditor) {
+            TextField(L10n.tr("目标克数（例如 100）"), text: $goalInputText)
                 .keyboardType(.decimalPad)
-            Button("取消", role: .cancel) {}
+            Button(L10n.tr("取消"), role: .cancel) {}
             if goalGrams > 0 {
-                Button("清除目标", role: .destructive) { goalGrams = 0 }
+                Button(L10n.tr("清除目标"), role: .destructive) { goalGrams = 0 }
             }
-            Button("保存") {
+            Button(L10n.tr("保存")) {
                 if let parsed = Double(goalInputText.trimmingCharacters(in: .whitespacesAndNewlines)),
                    parsed.isFinite, parsed > 0, parsed <= 1_000_000 {
                     goalGrams = parsed
                 }
             }
         } message: {
-            Text("设定你想积累的黄金目标克重，随时查看达成进度。")
+            Text(L10n.tr("设定你想积累的黄金目标克重，随时查看达成进度。"))
         }
         .sensoryFeedback(.selection, trigger: grouping)
     }
@@ -67,7 +67,7 @@ struct HoldingsInsightsSection: View {
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("攒金目标", systemImage: "flag.fill")
+                    Label(L10n.tr("攒金目标"), systemImage: "flag.fill")
                         .font(.subheadline.bold())
                         .foregroundStyle(GoldTheme.gold)
                     Spacer()
@@ -77,7 +77,7 @@ struct HoldingsInsightsSection: View {
                             .monospacedDigit()
                             .foregroundStyle(progress.isAchieved ? GoldTheme.down : GoldTheme.goldSoft)
                     } else {
-                        Text("去设定")
+                        Text(L10n.tr("去设定"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(GoldTheme.goldSoft)
                     }
@@ -101,23 +101,23 @@ struct HoldingsInsightsSection: View {
 
                     HStack {
                         Text(hideAmounts
-                             ? "已攒 •••• g / 目标 •••• g"
-                             : "已攒 \(progress.currentGrams.moneyText) g / 目标 \(progress.targetGrams.moneyText) g")
+                             ? L10n.tr("已攒 •••• g / 目标 •••• g")
+                             : L10n.fmt("已攒 %@ g / 目标 %@ g", progress.currentGrams.moneyText, progress.targetGrams.moneyText))
                         Spacer()
                         if progress.isAchieved {
-                            Text("已达成目标")
+                            Text(L10n.tr("已达成目标"))
                                 .foregroundStyle(GoldTheme.down)
                         } else if let budget = progress.estimatedRemainingCost {
-                            Text(hideAmounts ? "还差 •••• g" : "还差 \(progress.remainingGrams.moneyText) g ≈ ¥\(budget.moneyText)")
+                            Text(hideAmounts ? L10n.tr("还差 •••• g") : L10n.fmt("还差 %@ g ≈ ¥%@", progress.remainingGrams.moneyText, budget.moneyText))
                         } else {
-                            Text(hideAmounts ? "还差 •••• g" : "还差 \(progress.remainingGrams.moneyText) g")
+                            Text(hideAmounts ? L10n.tr("还差 •••• g") : L10n.fmt("还差 %@ g", progress.remainingGrams.moneyText))
                         }
                     }
                     .font(.caption2)
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.textSecondary)
                 } else {
-                    Text("定个克重目标（如 50g / 100g），追踪攒金进度")
+                    Text(L10n.tr("定个克重目标（如 50g / 100g），追踪攒金进度"))
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                         .lineLimit(1)
@@ -141,7 +141,7 @@ struct HoldingsInsightsSection: View {
                     withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
                 } label: {
                     HStack(spacing: 6) {
-                        Label("持仓结构", systemImage: "chart.pie.fill")
+                        Label(L10n.tr("持仓结构"), systemImage: "chart.pie.fill")
                             .font(.subheadline.bold())
                             .foregroundStyle(GoldTheme.text)
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
@@ -161,7 +161,7 @@ struct HoldingsInsightsSection: View {
                             Button {
                                 withAnimation(.easeInOut(duration: 0.18)) { grouping = mode }
                             } label: {
-                                Text(mode.rawValue)
+                                Text(mode.localizedTitle)
                                     .font(.caption2.weight(.semibold))
                                     .foregroundStyle(grouping == mode ? GoldTheme.onGold : GoldTheme.textSecondary)
                                     .padding(.horizontal, 9)
@@ -178,7 +178,7 @@ struct HoldingsInsightsSection: View {
                 HStack(alignment: .center, spacing: 16) {
                     Chart(Array(slices.enumerated()), id: \.element.id) { index, slice in
                         SectorMark(
-                            angle: .value("克重", slice.grams),
+                            angle: .value(L10n.tr("克重"), slice.grams),
                             innerRadius: .ratio(0.62),
                             angularInset: 1.5
                         )
@@ -188,7 +188,7 @@ struct HoldingsInsightsSection: View {
                     .frame(width: 96, height: 96)
                     .overlay {
                         VStack(spacing: 2) {
-                            Text("\(slices.count)类")
+                            Text(L10n.fmt("%lld类", Int64(slices.count)))
                                 .font(.caption2.bold())
                                 .foregroundStyle(GoldTheme.text)
                             Text(hideAmounts ? "••g" : "\(currentGrams.formatted(.number.precision(.fractionLength(0...1))))g")

@@ -54,9 +54,9 @@ struct HoldingReceiptSnapshot: Identifiable, Equatable, Sendable {
 
     var milestoneCaption: String {
         if let next = milestone.next {
-            return "距「\(next.title)」还差 \(GoldVaultSummary.formatGrams(milestone.remainingToNext)) g"
+            return L10n.fmt("距「%@」还差 %@ g", next.title, GoldVaultSummary.formatGrams(milestone.remainingToNext))
         }
-        return "已点亮全部 6 档攒金里程碑"
+        return L10n.tr("已点亮全部 6 档攒金里程碑")
     }
 }
 
@@ -108,12 +108,12 @@ struct HoldingReceiptCardView: View {
                     Image(systemName: "sparkles")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(GoldTheme.gold)
-                    Text("记金 · 入库纪念卡")
+                    Text(L10n.tr("记金 · 入库纪念卡"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(GoldTheme.goldSoft)
                 }
                 Spacer(minLength: 8)
-                Text("第 \(snapshot.purchaseSequence) 次攒金")
+                Text(L10n.fmt("第 %lld 次攒金", Int64(snapshot.purchaseSequence)))
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.onGold)
@@ -174,7 +174,7 @@ struct HoldingReceiptCardView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
 
-                Text("\(snapshot.assetType.rawValue) · \(HoldingsSelection.dateText(snapshot.timestamp)) · \(snapshot.bookName)")
+                Text("\(snapshot.assetType.displayName) · \(HoldingsSelection.dateText(snapshot.timestamp)) · \(HoldingRecord.localizedBookName(snapshot.bookName))")
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .lineLimit(1)
@@ -184,7 +184,7 @@ struct HoldingReceiptCardView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "crown.fill")
                             .font(.caption2)
-                        Text("新解锁里程碑 · \(unlocked.title)")
+                        Text(L10n.fmt("新解锁里程碑 · %@", unlocked.title))
                             .font(.caption.weight(.bold))
                     }
                     .foregroundStyle(GoldTheme.goldSoft)
@@ -208,8 +208,8 @@ struct HoldingReceiptCardView: View {
 
             // 累计持有与本次投入双栏指标
             HStack(spacing: 12) {
-                receiptMetric(title: "累计持有克重", value: snapshot.totalBookGramsText, highlight: true)
-                receiptMetric(title: "本次入库投入", value: "¥\(snapshot.totalCost.moneyText)", highlight: false)
+                receiptMetric(title: L10n.tr("累计持有克重"), value: snapshot.totalBookGramsText, highlight: true)
+                receiptMetric(title: L10n.tr("本次入库投入"), value: "¥\(snapshot.totalCost.moneyText)", highlight: false)
             }
 
             // 下一里程碑进度条
@@ -249,7 +249,7 @@ struct HoldingReceiptCardView: View {
 
             // 底部纪念铭文
             HStack {
-                Text("慢慢攒金，稳稳发光")
+                Text(L10n.tr("慢慢攒金，稳稳发光"))
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textFaint)
                 Spacer()
@@ -313,10 +313,10 @@ struct HoldingReceiptSheet: View {
             ScrollView {
                 VStack(spacing: 20) {
                     VStack(spacing: 4) {
-                        Text("入库成功")
+                        Text(L10n.tr("入库成功"))
                             .font(.title3.bold())
                             .foregroundStyle(GoldTheme.text)
-                        Text("这笔黄金已稳稳存入你的攒金盒")
+                        Text(L10n.tr("这笔黄金已稳稳存入你的攒金盒"))
                             .font(.caption)
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
@@ -335,13 +335,13 @@ struct HoldingReceiptSheet: View {
                         ShareLink(
                             item: shareItem,
                             preview: SharePreview(
-                                "记金入库纪念卡 · \(snapshot.addedGramsText)",
+                                L10n.fmt("记金入库纪念卡 · %@", snapshot.addedGramsText),
                                 image: Image(uiImage: previewUIImage)
                             )
                         ) {
                             HStack(spacing: 7) {
                                 Image(systemName: "square.and.arrow.up")
-                                Text("分享 / 保存纪念卡")
+                                Text(L10n.tr("分享 / 保存纪念卡"))
                             }
                             .font(.system(.subheadline, design: .rounded).weight(.semibold))
                             .foregroundStyle(GoldTheme.gold)
@@ -353,7 +353,7 @@ struct HoldingReceiptSheet: View {
                         .simultaneousGesture(TapGesture().onEnded { shareTapCount += 1 })
                     }
 
-                    Button("完成", action: onDone)
+                    Button(L10n.tr("完成"), action: onDone)
                         .buttonStyle(GoldPrimaryButtonStyle())
                 }
                 .padding(.horizontal, 18)
@@ -367,14 +367,14 @@ struct HoldingReceiptSheet: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
-                    .accessibilityLabel("关闭")
+                    .accessibilityLabel(L10n.tr("关闭"))
                 }
             }
         }
         .presentationBackground(GoldTheme.background)
         .presentationDragIndicator(.visible)
         .sensoryFeedback(.impact(weight: .light), trigger: shareTapCount)
-        .task(id: snapshot.id) {
+        .task(id: "\(snapshot.id)-\(AppLanguage.resolvedLanguageCode)") {
             let rendered = HoldingReceiptRenderer.renderImage(snapshot: snapshot)
             previewUIImage = rendered
             if let data = rendered?.pngData() {

@@ -7,28 +7,28 @@ struct GoldProfitBreakdown: Equatable, Sendable {
         case price, purity, labor, other, unitemized, deduction, discount, fixed, sale
         var title: String {
             switch self {
-            case .price: "金价变化"
-            case .purity: "纯度折算"
-            case .labor: "购入工费"
-            case .other: "其他购入成本"
-            case .unitemized: "金值与总投入差额"
-            case .deduction: "每克回收扣减"
-            case .discount: "回收比例折价"
-            case .fixed: "固定卖出费用"
-            case .sale: "实际到手与总投入差额"
+            case .price: L10n.tr("金价变化")
+            case .purity: L10n.tr("纯度折算")
+            case .labor: L10n.tr("购入工费")
+            case .other: L10n.tr("其他购入成本")
+            case .unitemized: L10n.tr("金值与总投入差额")
+            case .deduction: L10n.tr("每克回收扣减")
+            case .discount: L10n.tr("回收比例折价")
+            case .fixed: L10n.tr("固定卖出费用")
+            case .sale: L10n.tr("实际到手与总投入差额")
             }
         }
         var explanation: String {
             switch self {
-            case .price: "当前参考金价与录入的裸金单价之差，按购入克重计算；不代表今天一天的涨跌。"
-            case .purity: "按录入纯度折算有效含金量。它是估值调整，不是一笔额外收费。"
-            case .labor: "购入时支付的工费已计入总投入，回收估值不包含这部分工费。"
-            case .other: "购入时录入的其他成本已计入总投入。"
-            case .unitemized: "这部分记录以手动总价为准。只比较当前含金价值与总投入，不推断其中的裸金价格、工费或其他成本。"
-            case .deduction: "按有效克重扣减，扣减后的金价最低为零。"
-            case .discount: "先扣除每克回收扣减，再按录入比例折价。"
-            case .fixed: "从折价后的金额扣除固定费用；预计到手最低为零，因此此处显示实际影响金额。组合按每笔独立卖出估算。"
-            case .sale: "仅用已记录的实际卖出到手金额减去总投入。未记录成交明细，不能拆分金价与回收费用的贡献。"
+            case .price: L10n.tr("当前参考金价与录入的裸金单价之差，按购入克重计算；不代表今天一天的涨跌。")
+            case .purity: L10n.tr("按录入纯度折算有效含金量。它是估值调整，不是一笔额外收费。")
+            case .labor: L10n.tr("购入时支付的工费已计入总投入，回收估值不包含这部分工费。")
+            case .other: L10n.tr("购入时录入的其他成本已计入总投入。")
+            case .unitemized: L10n.tr("这部分记录以手动总价为准。只比较当前含金价值与总投入，不推断其中的裸金价格、工费或其他成本。")
+            case .deduction: L10n.tr("按有效克重扣减，扣减后的金价最低为零。")
+            case .discount: L10n.tr("先扣除每克回收扣减，再按录入比例折价。")
+            case .fixed: L10n.tr("从折价后的金额扣除固定费用；预计到手最低为零，因此此处显示实际影响金额。组合按每笔独立卖出估算。")
+            case .sale: L10n.tr("仅用已记录的实际卖出到手金额减去总投入。未记录成交明细，不能拆分金价与回收费用的贡献。")
             }
         }
     }
@@ -49,9 +49,9 @@ struct GoldProfitBreakdown: Equatable, Sendable {
         case increase, decrease, unchanged
         var title: String {
             switch self {
-            case .increase: "收益从哪里来"
-            case .decrease: "哪些因素拉低收益"
-            case .unchanged: "无盈亏影响"
+            case .increase: L10n.tr("收益从哪里来")
+            case .decrease: L10n.tr("哪些因素拉低收益")
+            case .unchanged: L10n.tr("无盈亏影响")
             }
         }
     }

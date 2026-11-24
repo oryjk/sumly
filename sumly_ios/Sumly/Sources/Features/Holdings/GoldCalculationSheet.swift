@@ -128,9 +128,9 @@ struct GoldCalculationBreakdown: Equatable, Sendable {
 
         var title: String {
             switch self {
-            case .rawGold: "裸金成本"
-            case .fees: "工费与其他"
-            case .manualTotal: "手动总投入"
+            case .rawGold: L10n.tr("裸金成本")
+            case .fees: L10n.tr("工费与其他")
+            case .manualTotal: L10n.tr("手动总投入")
             }
         }
     }
@@ -224,13 +224,13 @@ struct GoldCalculationBreakdown: Equatable, Sendable {
             if items.count == 1, let only = items.first {
                 return make(inputs: [only.input], title: only.title, referencePrice: referencePrice, isSummary: false)
             }
-            return make(inputs: items.map(\.input), title: "全部汇总", referencePrice: referencePrice, isSummary: true)
+            return make(inputs: items.map(\.input), title: L10n.tr("全部汇总"), referencePrice: referencePrice, isSummary: true)
         case .item(let targetID):
             guard let matched = items.first(where: { $0.id == targetID }) else {
                 if items.count == 1, let only = items.first {
                     return make(inputs: [only.input], title: only.title, referencePrice: referencePrice, isSummary: false)
                 }
-                return make(inputs: items.map(\.input), title: "全部汇总", referencePrice: referencePrice, isSummary: true)
+                return make(inputs: items.map(\.input), title: L10n.tr("全部汇总"), referencePrice: referencePrice, isSummary: true)
             }
             return make(inputs: [matched.input], title: matched.title, referencePrice: referencePrice, isSummary: false)
         }
@@ -238,7 +238,7 @@ struct GoldCalculationBreakdown: Equatable, Sendable {
 
     static func make(
         inputs: [GoldReturnInput],
-        title: String = "全部汇总",
+        title: String = L10n.tr("全部汇总"),
         referencePrice: Double?,
         isSummary: Bool? = nil
     ) -> GoldCalculationBreakdown? {
@@ -382,12 +382,12 @@ struct GoldCalculationBreakdown: Equatable, Sendable {
         let dilutionLabel: String
         if hasManual {
             baseUnitPrice = totalCost / totalGrams
-            baseUnitPriceLabel = allManual ? "买入均价（手动总价）" : "综合买入均价"
-            dilutionLabel = "纯度/回收摊薄"
+            baseUnitPriceLabel = allManual ? L10n.tr("买入均价（手动总价）") : L10n.tr("综合买入均价")
+            dilutionLabel = L10n.tr("纯度/回收摊薄")
         } else {
             baseUnitPrice = rawGoldCost / totalGrams
-            baseUnitPriceLabel = "裸金均价"
-            dilutionLabel = "工费/纯度/回收摊薄"
+            baseUnitPriceLabel = L10n.tr("裸金均价")
+            dilutionLabel = L10n.tr("工费/纯度/回收摊薄")
         }
 
         let breakEvenDilution = max(0, breakEvenPrice - baseUnitPrice)
@@ -458,7 +458,7 @@ struct GoldCalculationBreakdown: Equatable, Sendable {
         if let proceeds {
             entries.append(.init(
                 kind: .proceeds,
-                title: "预计到手",
+                title: L10n.tr("预计到手"),
                 amountText: GoldCalculationFormatter.currency(proceeds, hidden: hidden),
                 shareText: nil
             ))
@@ -466,7 +466,7 @@ struct GoldCalculationBreakdown: Equatable, Sendable {
         if hasVisibleLoss, let totalLoss {
             entries.append(.init(
                 kind: .loss,
-                title: "纯度与回收损耗",
+                title: L10n.tr("纯度与回收损耗"),
                 amountText: GoldCalculationFormatter.currency(-totalLoss, hidden: hidden),
                 shareText: nil
             ))
@@ -476,14 +476,14 @@ struct GoldCalculationBreakdown: Equatable, Sendable {
             case .profit:
                 entries.append(.init(
                     kind: .profitGain,
-                    title: hidden ? "真实盈亏" : "浮盈",
+                    title: hidden ? L10n.tr("真实盈亏") : L10n.tr("浮盈"),
                     amountText: GoldCalculationFormatter.currency(profit, signed: true, hidden: hidden),
                     shareText: nil
                 ))
             case .loss:
                 entries.append(.init(
                     kind: .profitLoss,
-                    title: hidden ? "真实盈亏" : "浮亏",
+                    title: hidden ? L10n.tr("真实盈亏") : L10n.tr("浮亏"),
                     amountText: GoldCalculationFormatter.currency(profit, signed: true, hidden: hidden),
                     shareText: nil
                 ))
@@ -498,80 +498,80 @@ struct GoldCalculationBreakdown: Equatable, Sendable {
         if hidden { return "••••" }
         switch profitState {
         case .noQuote:
-            return "待获取金价"
+            return L10n.tr("待获取金价")
         case .profit:
-            return "浮盈 " + GoldCalculationFormatter.currency(profit, signed: true)
+            return L10n.fmt("浮盈 %@", GoldCalculationFormatter.currency(profit, signed: true))
         case .loss:
-            return "浮亏 " + GoldCalculationFormatter.currency(profit, signed: true)
+            return L10n.fmt("浮亏 %@", GoldCalculationFormatter.currency(profit, signed: true))
         case .breakEven:
-            return "刚好保本"
+            return L10n.tr("刚好保本")
         }
     }
 
     func barSummaryText(hidden: Bool) -> String {
         if hidden {
-            return "金额已隐藏，关闭隐私遮罩后可查看总投入、预计到手与真实盈亏明细。"
+            return L10n.tr("金额已隐藏，关闭隐私遮罩后可查看总投入、预计到手与真实盈亏明细。")
         }
         let costText = GoldCalculationFormatter.currency(totalCost)
         let costDetail: String
         if isManualTotalOnly {
-            costDetail = "（手动总价）"
+            costDetail = L10n.tr("（手动总价）")
         } else if feesCost > Self.zeroAmountThreshold {
-            costDetail = "（含工费与其他 \(GoldCalculationFormatter.currency(feesCost))）"
+            costDetail = L10n.fmt("（含工费与其他 %@）", GoldCalculationFormatter.currency(feesCost))
         } else {
             costDetail = ""
         }
 
         guard let referencePrice, let proceeds, let profit else {
-            return "共投入 \(costText)\(costDetail)，真实保本金价为 \(GoldCalculationFormatter.unitPrice(breakEvenPrice))；获取参考金价后即可对比预计到手与盈亏。"
+            return L10n.fmt("共投入 %@%@，真实保本金价为 %@；获取参考金价后即可对比预计到手与盈亏。", costText, costDetail, GoldCalculationFormatter.unitPrice(breakEvenPrice))
         }
 
         let priceText = GoldCalculationFormatter.unitPrice(referencePrice)
         let proceedsText = GoldCalculationFormatter.currency(proceeds)
         let profitText = GoldCalculationFormatter.currency(profit, signed: true)
         if profitState == .breakEven {
-            return "共投入 \(costText)\(costDetail)，按当前 \(priceText) 卖出预计到手 \(proceedsText)，当前估算刚好保本。"
+            return L10n.fmt("共投入 %@%@，按当前 %@ 卖出预计到手 %@，当前估算刚好保本。", costText, costDetail, priceText, proceedsText)
         }
-        return "共投入 \(costText)\(costDetail)，按当前 \(priceText) 卖出预计到手 \(proceedsText)，两者差额即真实盈亏 \(profitText)。"
+        return L10n.fmt("共投入 %@%@，按当前 %@ 卖出预计到手 %@，两者差额即真实盈亏 %@。", costText, costDetail, priceText, proceedsText, profitText)
     }
 
     func breakEvenDistanceBadgeText(hidden: Bool) -> String {
         if hidden { return "••••" }
         guard let distance = distanceFromBreakEven else {
-            return "获取参考金价后显示"
+            return L10n.tr("获取参考金价后显示")
         }
         if distance <= -Self.zeroAmountThreshold {
-            return "还需涨 \(GoldCalculationFormatter.unitPrice(-distance)) 回本"
+            return L10n.fmt("还需涨 %@ 回本", GoldCalculationFormatter.unitPrice(-distance))
         }
         if distance >= Self.zeroAmountThreshold {
-            return "已超保本线 \(GoldCalculationFormatter.unitPrice(distance))"
+            return L10n.fmt("已超保本线 %@", GoldCalculationFormatter.unitPrice(distance))
         }
-        return "已达到真实保本线"
+        return L10n.tr("已达到真实保本线")
     }
 
     func breakEvenExplanationText(hidden: Bool) -> String {
         if hidden {
-            return "买入工费、纯度折算与回收规则都会摊薄到每克有效含金量上，因此真实保本金价通常高于裸金买入价。"
+            return L10n.tr("买入工费、纯度折算与回收规则都会摊薄到每克有效含金量上，因此真实保本金价通常高于裸金买入价。")
         }
         if breakEvenDilution < Self.zeroAmountThreshold {
-            return "当前无额外工费、纯度折算或回收扣费，真实保本金价与\(baseUnitPriceLabel)一致。"
+            return L10n.fmt("当前无额外工费、纯度折算或回收扣费，真实保本金价与%@一致。", baseUnitPriceLabel)
         }
         var factors: [String] = []
         if !hasManualTotalCost && feesCost > Self.zeroAmountThreshold {
-            factors.append("工费与其他成本（\(GoldCalculationFormatter.currency(feesCost))）")
+            factors.append(L10n.fmt("工费与其他成本（%@）", GoldCalculationFormatter.currency(feesCost)))
         }
         if hasPurityDiscount {
-            factors.append("纯度折算")
+            factors.append(L10n.tr("纯度折算"))
         }
         if someCustomRecoveryRules {
-            factors.append("回收扣费规则")
+            factors.append(L10n.tr("回收扣费规则"))
         }
         if factors.isEmpty {
-            factors.append("有效含金量折算与持仓规则")
+            factors.append(L10n.tr("有效含金量折算与持仓规则"))
         }
-        let joined = factors.joined(separator: "、")
+        let joined = factors.joined(separator: L10n.tr("、"))
         let spread = GoldCalculationFormatter.unitPrice(breakEvenDilution)
-        return "\(joined)都会摊到每克有效含金量上，因此真实保本金价需要比\(baseUnitPriceLabel)高出 \(spread)。"
+        return L10n.fmt("%@都会摊到每克有效含金量上，因此真实保本金价需要比%@高出 %@。", joined, baseUnitPriceLabel, spread)
     }
 }
 
@@ -632,11 +632,11 @@ struct GoldCalculationSheet: View {
                 .foregroundStyle(GoldTheme.text)
             }
             .background(GoldTheme.background)
-            .navigationTitle("怎么算的？")
+            .navigationTitle(L10n.tr("怎么算的？"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
+                    Button(L10n.tr("完成")) { dismiss() }
                         .foregroundStyle(GoldTheme.gold)
                 }
             }
@@ -651,7 +651,7 @@ struct GoldCalculationSheet: View {
         let nameCounts = Dictionary(grouping: items, by: \.title).mapValues(\.count)
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Button("全部汇总") {
+                Button(L10n.tr("全部汇总")) {
                     withAnimation(.snappy(duration: 0.24)) {
                         selectedScope = .summary
                     }
@@ -660,7 +660,7 @@ struct GoldCalculationSheet: View {
 
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     let duplicate = (nameCounts[item.title] ?? 0) > 1
-                    let label = duplicate ? "\(item.title) · 第\(index + 1)笔" : item.title
+                    let label = duplicate ? L10n.fmt("%@ · 第%lld笔", item.title, Int64(index + 1)) : item.title
                     Button(label) {
                         withAnimation(.snappy(duration: 0.24)) {
                             selectedScope = .item(item.id)
@@ -677,16 +677,16 @@ struct GoldCalculationSheet: View {
 
     private var referencePriceHeaderCard: some View {
         let validPrice = GoldReturnCalculator.validPrice(quote?.cnyPerGram)
-        let basisBadge = basis == .domestic ? "国内 Au99.99" : "国际伦敦金折算"
+        let basisBadge = basis == .domestic ? L10n.tr("国内 Au99.99") : L10n.tr("国际伦敦金折算")
         let basisDetail = basis == .domestic
-            ? "上海黄金交易所 Au99.99 国内参考价"
-            : "国际伦敦金按行情汇率折算人民币/克，非品牌零售价"
+            ? L10n.tr("上海黄金交易所 Au99.99 国内参考价")
+            : L10n.tr("国际伦敦金按行情汇率折算人民币/克，非品牌零售价")
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text("当前参考金价")
+                        Text(L10n.tr("当前参考金价"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(GoldTheme.textSecondary)
                         Text(basisBadge)
@@ -721,7 +721,7 @@ struct GoldCalculationSheet: View {
                                 .foregroundStyle(GoldTheme.goldSoft)
                         }
                     } else {
-                        Text("暂不可用")
+                        Text(L10n.tr("暂不可用"))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(GoldTheme.textSecondary)
                     }
@@ -758,11 +758,11 @@ struct GoldCalculationSheet: View {
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("总投入 vs 预计到手")
+                    Text(L10n.tr("总投入 vs 预计到手"))
                         .font(.headline)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
-                    Text(breakdown.isSummary ? "全部 \(breakdown.recordCount) 笔汇总对比" : breakdown.title)
+                    Text(breakdown.isSummary ? L10n.fmt("全部 %lld 笔汇总对比", Int64(breakdown.recordCount)) : breakdown.title)
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
@@ -900,9 +900,9 @@ struct GoldCalculationSheet: View {
 
         return VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("每克保本价构成尺")
+                Text(L10n.tr("每克保本价构成尺"))
                     .font(.headline)
-                Text("同一克价比例尺对比，看清保本线为什么高于买价")
+                Text(L10n.tr("同一克价比例尺对比，看清保本线为什么高于买价"))
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
             }
@@ -913,7 +913,7 @@ struct GoldCalculationSheet: View {
             HStack(spacing: 8) {
                 priceNodeCell(
                     dotColor: GoldTheme.goldSoft,
-                    label: "当前参考价",
+                    label: L10n.tr("当前参考价"),
                     value: GoldCalculationFormatter.unitPrice(breakdown.referencePrice, hidden: hideAmounts)
                 )
                 priceNodeCell(
@@ -923,7 +923,7 @@ struct GoldCalculationSheet: View {
                 )
                 priceNodeCell(
                     dotColor: GoldTheme.chartTertiary,
-                    label: "真实保本价",
+                    label: L10n.tr("真实保本价"),
                     value: GoldCalculationFormatter.unitPrice(breakdown.breakEvenPrice, hidden: hideAmounts),
                     emphasized: true
                 )
@@ -931,8 +931,8 @@ struct GoldCalculationSheet: View {
 
             // 两段关键差额卡片
             let distanceTitle = hideAmounts
-                ? "与保本线距离"
-                : (breakdown.profitState == .profit ? "盈亏安全垫" : "距离回本还差")
+                ? L10n.tr("与保本线距离")
+                : (breakdown.profitState == .profit ? L10n.tr("盈亏安全垫") : L10n.tr("距离回本还差"))
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) {
                     spreadCalloutCell(
@@ -1029,75 +1029,75 @@ struct GoldCalculationSheet: View {
                 Divider().overlay(GoldTheme.cardStroke)
 
                 // 1. 买入成本
-                parameterSection(title: "买入成本") {
+                parameterSection(title: L10n.tr("买入成本")) {
                     if let single = breakdown.singleInput {
                         let purityText = hideAmounts
                             ? "••••"
                             : "\(GoldCalculationFormatter.grams(single.grams)) · \(GoldCalculationFormatter.percent(single.purity * 100))"
-                        parameterRow("克重 / 纯度", value: purityText)
+                        parameterRow(L10n.tr("克重 / 纯度"), value: purityText)
                         parameterRow(
-                            "有效克重",
+                            L10n.tr("有效克重"),
                             value: GoldCalculationFormatter.grams(single.effectiveGrams, maxFractionDigits: 4, hidden: hideAmounts)
                         )
                         if single.totalCostOverride == nil {
-                            parameterRow("裸金单价", value: GoldCalculationFormatter.unitPrice(single.unitPrice, hidden: hideAmounts))
-                            parameterRow("裸金成本", value: GoldCalculationFormatter.currency(breakdown.rawGoldCost, hidden: hideAmounts))
+                            parameterRow(L10n.tr("裸金单价"), value: GoldCalculationFormatter.unitPrice(single.unitPrice, hidden: hideAmounts))
+                            parameterRow(L10n.tr("裸金成本"), value: GoldCalculationFormatter.currency(breakdown.rawGoldCost, hidden: hideAmounts))
                             if single.laborFee > 0 || single.otherCost > 0 {
                                 if single.laborFee > 0 {
-                                    parameterRow("购入工费", value: GoldCalculationFormatter.currency(single.laborFee, hidden: hideAmounts))
+                                    parameterRow(L10n.tr("购入工费"), value: GoldCalculationFormatter.currency(single.laborFee, hidden: hideAmounts))
                                 }
                                 if single.otherCost > 0 {
-                                    parameterRow("其他成本", value: GoldCalculationFormatter.currency(single.otherCost, hidden: hideAmounts))
+                                    parameterRow(L10n.tr("其他成本"), value: GoldCalculationFormatter.currency(single.otherCost, hidden: hideAmounts))
                                 }
                             } else {
-                                parameterRow("工费 / 其他成本", value: GoldCalculationFormatter.currency(0, hidden: hideAmounts))
+                                parameterRow(L10n.tr("工费 / 其他成本"), value: GoldCalculationFormatter.currency(0, hidden: hideAmounts))
                             }
-                            parameterRow("总投入", value: GoldCalculationFormatter.currency(breakdown.totalCost, hidden: hideAmounts), emphasized: true)
+                            parameterRow(L10n.tr("总投入"), value: GoldCalculationFormatter.currency(breakdown.totalCost, hidden: hideAmounts), emphasized: true)
                         } else {
-                            parameterRow("总投入（手动）", value: GoldCalculationFormatter.currency(breakdown.totalCost, hidden: hideAmounts), emphasized: true)
-                            Text("手动总价为最终现金支出，不再额外叠加工费与其他成本。")
+                            parameterRow(L10n.tr("总投入（手动）"), value: GoldCalculationFormatter.currency(breakdown.totalCost, hidden: hideAmounts), emphasized: true)
+                            Text(L10n.tr("手动总价为最终现金支出，不再额外叠加工费与其他成本。"))
                                 .font(.caption2)
                                 .foregroundStyle(GoldTheme.textSecondary)
                         }
                     } else {
-                        parameterRow("持仓笔数", value: "\(breakdown.recordCount) 笔")
+                        parameterRow(L10n.tr("持仓笔数"), value: L10n.fmt("%lld 笔", Int64(breakdown.recordCount)))
                         parameterRow(
-                            "总克重 / 有效克重",
+                            L10n.tr("总克重 / 有效克重"),
                             value: hideAmounts
                                 ? "••••"
                                 : "\(GoldCalculationFormatter.grams(breakdown.totalGrams)) / \(GoldCalculationFormatter.grams(breakdown.effectiveGrams, maxFractionDigits: 4))"
                         )
                         if breakdown.rawGoldCost > 0.005 {
-                            parameterRow("裸金成本合计", value: GoldCalculationFormatter.currency(breakdown.rawGoldCost, hidden: hideAmounts))
+                            parameterRow(L10n.tr("裸金成本合计"), value: GoldCalculationFormatter.currency(breakdown.rawGoldCost, hidden: hideAmounts))
                         }
                         if breakdown.feesCost > 0.005 {
-                            parameterRow("工费与其他合计", value: GoldCalculationFormatter.currency(breakdown.feesCost, hidden: hideAmounts))
+                            parameterRow(L10n.tr("工费与其他合计"), value: GoldCalculationFormatter.currency(breakdown.feesCost, hidden: hideAmounts))
                         }
                         if breakdown.manualTotalCost > 0.005 {
-                            parameterRow("手动总投入合计", value: GoldCalculationFormatter.currency(breakdown.manualTotalCost, hidden: hideAmounts))
+                            parameterRow(L10n.tr("手动总投入合计"), value: GoldCalculationFormatter.currency(breakdown.manualTotalCost, hidden: hideAmounts))
                         }
-                        parameterRow("总投入合计", value: GoldCalculationFormatter.currency(breakdown.totalCost, hidden: hideAmounts), emphasized: true)
+                        parameterRow(L10n.tr("总投入合计"), value: GoldCalculationFormatter.currency(breakdown.totalCost, hidden: hideAmounts), emphasized: true)
                     }
                 }
 
                 Divider().overlay(GoldTheme.cardStroke)
 
                 // 2. 回收规则（默认全 0 时合并为单行去噪）
-                parameterSection(title: "回收规则") {
+                parameterSection(title: L10n.tr("回收规则")) {
                     if let single = breakdown.singleInput {
                         if single.rule.isDefault {
                             HStack(spacing: 6) {
                                 Image(systemName: "info.circle")
                                     .font(.caption)
                                     .foregroundStyle(GoldTheme.gold)
-                                Text("尚未计入回收费用")
+                                Text(L10n.tr("尚未计入回收费用"))
                                     .font(.caption)
                                     .foregroundStyle(GoldTheme.gold)
                             }
                         } else {
-                            parameterRow("每克回收扣减", value: GoldCalculationFormatter.unitPrice(single.rule.perGramDeduction, hidden: hideAmounts))
-                            parameterRow("比例折价", value: GoldCalculationFormatter.percent(single.rule.discountRate * 100, hidden: hideAmounts))
-                            parameterRow("固定卖出费用", value: GoldCalculationFormatter.currency(single.rule.fixedFee, hidden: hideAmounts))
+                            parameterRow(L10n.tr("每克回收扣减"), value: GoldCalculationFormatter.unitPrice(single.rule.perGramDeduction, hidden: hideAmounts))
+                            parameterRow(L10n.tr("比例折价"), value: GoldCalculationFormatter.percent(single.rule.discountRate * 100, hidden: hideAmounts))
+                            parameterRow(L10n.tr("固定卖出费用"), value: GoldCalculationFormatter.currency(single.rule.fixedFee, hidden: hideAmounts))
                         }
                     } else {
                         if breakdown.allDefaultRecoveryRules {
@@ -1105,16 +1105,16 @@ struct GoldCalculationSheet: View {
                                 Image(systemName: "info.circle")
                                     .font(.caption)
                                     .foregroundStyle(GoldTheme.gold)
-                                Text("尚未计入回收费用")
+                                Text(L10n.tr("尚未计入回收费用"))
                                     .font(.caption)
                                     .foregroundStyle(GoldTheme.gold)
                             }
                         } else {
-                            Text("组合内各笔按各自回收规则分别计算；未配置回收费用的持仓不计扣费。")
+                            Text(L10n.tr("组合内各笔按各自回收规则分别计算；未配置回收费用的持仓不计扣费。"))
                                 .font(.caption)
                                 .foregroundStyle(GoldTheme.textSecondary)
                             if let recoveryLoss = breakdown.recoveryLoss, recoveryLoss > 0.01 {
-                                parameterRow("回收扣减估算合计", value: GoldCalculationFormatter.currency(-recoveryLoss, hidden: hideAmounts))
+                                parameterRow(L10n.tr("回收扣减估算合计"), value: GoldCalculationFormatter.currency(-recoveryLoss, hidden: hideAmounts))
                             }
                         }
                     }
@@ -1123,31 +1123,31 @@ struct GoldCalculationSheet: View {
                 Divider().overlay(GoldTheme.cardStroke)
 
                 // 3. 计算结果
-                parameterSection(title: "计算结果") {
+                parameterSection(title: L10n.tr("计算结果")) {
                     if breakdown.referencePrice != nil {
                         parameterRow(
-                            breakdown.isSummary ? "加权预计回收单价" : "预计回收单价",
+                            breakdown.isSummary ? L10n.tr("加权预计回收单价") : L10n.tr("预计回收单价"),
                             value: GoldCalculationFormatter.unitPrice(breakdown.recoveryUnitPrice, hidden: hideAmounts)
                         )
-                        parameterRow("现在卖预计到手", value: GoldCalculationFormatter.currency(breakdown.proceeds, hidden: hideAmounts))
+                        parameterRow(L10n.tr("现在卖预计到手"), value: GoldCalculationFormatter.currency(breakdown.proceeds, hidden: hideAmounts))
                         if breakdown.hasVisibleLoss, let totalLoss = breakdown.totalLoss {
-                            parameterRow("纯度与回收损耗", value: GoldCalculationFormatter.currency(-totalLoss, hidden: hideAmounts))
+                            parameterRow(L10n.tr("纯度与回收损耗"), value: GoldCalculationFormatter.currency(-totalLoss, hidden: hideAmounts))
                         }
                         parameterRow(
-                            "真实盈亏",
+                            L10n.tr("真实盈亏"),
                             value: GoldCalculationFormatter.currency(breakdown.profit, signed: true, hidden: hideAmounts),
                             valueColor: profitTextColor(breakdown)
                         )
                         parameterRow(
-                            "真实收益率",
+                            L10n.tr("真实收益率"),
                             value: GoldCalculationFormatter.percent(breakdown.profitPercent, signed: true, hidden: hideAmounts),
                             valueColor: profitTextColor(breakdown)
                         )
                     } else {
-                        parameterRow("预计到手 / 真实盈亏", value: "待获取参考金价")
+                        parameterRow(L10n.tr("预计到手 / 真实盈亏"), value: L10n.tr("待获取参考金价"))
                     }
                     parameterRow(
-                        "真实保本金价",
+                        L10n.tr("真实保本金价"),
                         value: GoldCalculationFormatter.unitPrice(breakdown.breakEvenPrice, hidden: hideAmounts),
                         valueColor: GoldTheme.gold
                     )
@@ -1156,23 +1156,15 @@ struct GoldCalculationSheet: View {
                 Divider().overlay(GoldTheme.cardStroke)
 
                 // 4. 计算公式
-                parameterSection(title: "计算公式") {
-                    Text(
-                        "有效克重 = 克重 × 纯度\n" +
-                        "总投入 = 裸金单价 × 克重 + 工费 + 其他成本（手动总价优先）\n" +
-                        "预计回收单价 = max(参考金价 − 每克扣减, 0) × (1 − 比例折价)\n" +
-                        "预计到手 = max(预计回收单价 × 有效克重 − 固定费用, 0)\n" +
-                        "真实盈亏 = 预计到手 − 总投入\n" +
-                        "真实收益率 = 真实盈亏 ÷ 总投入\n" +
-                        "真实保本价 = (总投入 + 固定费用) ÷ [有效克重 × (1 − 折价)] + 每克扣减"
-                    )
+                parameterSection(title: L10n.tr("计算公式")) {
+                    Text(L10n.tr("有效克重 = 克重 × 纯度\n总投入 = 裸金单价 × 克重 + 工费 + 其他成本（手动总价优先）\n预计回收单价 = max(参考金价 − 每克扣减, 0) × (1 − 比例折价)\n预计到手 = max(预计回收单价 × 有效克重 − 固定费用, 0)\n真实盈亏 = 预计到手 − 总投入\n真实收益率 = 真实盈亏 ÷ 总投入\n真实保本价 = (总投入 + 固定费用) ÷ [有效克重 × (1 − 折价)] + 每克扣减"))
                     .font(.caption)
                     .lineSpacing(5)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                     if breakdown.isSummary {
-                        Text("组合金额逐笔求和；组合保本价按各笔独立规则反推，并非单笔保本价的简单平均。固定费用按每笔独立卖出估算。")
+                        Text(L10n.tr("组合金额逐笔求和；组合保本价按各笔独立规则反推，并非单笔保本价的简单平均。固定费用按每笔独立卖出估算。"))
                             .font(.caption2)
                             .foregroundStyle(GoldTheme.textFaint)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1188,10 +1180,10 @@ struct GoldCalculationSheet: View {
                     .frame(width: 28, height: 28)
                     .background(GoldTheme.gold.opacity(0.14), in: GoldTheme.badgeShape)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("查看完整参数与计算公式")
+                    Text(L10n.tr("查看完整参数与计算公式"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(GoldTheme.text)
-                    Text("买入成本 · 回收规则 · 计算结果 · 公式")
+                    Text(L10n.tr("买入成本 · 回收规则 · 计算结果 · 公式"))
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
@@ -1246,9 +1238,9 @@ struct GoldCalculationSheet: View {
 
     private var emptyStateCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("暂无可拆解的持仓记录")
+            Text(L10n.tr("暂无可拆解的持仓记录"))
                 .font(.subheadline.weight(.semibold))
-            Text("录入黄金持仓后，可在此查看总投入与预计到手的直观对比及每克保本价构成。")
+            Text(L10n.tr("录入黄金持仓后，可在此查看总投入与预计到手的直观对比及每克保本价构成。"))
                 .font(.caption)
                 .foregroundStyle(GoldTheme.textSecondary)
         }
@@ -1262,7 +1254,7 @@ struct GoldCalculationSheet: View {
                 .font(.caption)
                 .foregroundStyle(GoldTheme.gold)
                 .padding(.top, 1)
-            Text("当前结果仅为估算参考，真实成交价可能因渠道、纯度检测与手续费变化，不构成任何投资或买卖建议。")
+            Text(L10n.tr("当前结果仅为估算参考，真实成交价可能因渠道、纯度检测与手续费变化，不构成任何投资或买卖建议。"))
                 .font(.caption2)
                 .foregroundStyle(GoldTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1330,11 +1322,11 @@ private struct GoldComparisonStackedChart: View {
 
             // X 轴柱名
             HStack(spacing: 24) {
-                Text("总投入")
+                Text(L10n.tr("总投入"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.text)
                     .frame(maxWidth: .infinity)
-                Text("现在卖预计到手")
+                Text(L10n.tr("现在卖预计到手"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.text)
                     .frame(maxWidth: .infinity)
@@ -1428,14 +1420,14 @@ private struct GoldComparisonStackedChart: View {
             VStack(spacing: 6) {
                 VStack(spacing: 2) {
                     if breakdown.profitState == .loss && (leftHeight - proceedsHeight) < 38 {
-                        Text("浮亏 \(GoldCalculationFormatter.currency(breakdown.profit, signed: true))")
+                        Text(L10n.fmt("浮亏 %@", GoldCalculationFormatter.currency(breakdown.profit, signed: true)))
                             .font(.system(.caption2, design: .rounded).weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.down)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     } else if breakdown.profitState == .profit && (proceedsHeight - leftHeight) < 34 {
-                        Text("浮盈 \(GoldCalculationFormatter.currency(breakdown.profit, signed: true))")
+                        Text(L10n.fmt("浮盈 %@", GoldCalculationFormatter.currency(breakdown.profit, signed: true)))
                             .font(.system(.caption2, design: .rounded).weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.up)
@@ -1499,7 +1491,7 @@ private struct GoldComparisonStackedChart: View {
                                 .overlay {
                                     if deficitHeight >= 38 {
                                         VStack(spacing: 2) {
-                                            Text("浮亏")
+                                            Text(L10n.tr("浮亏"))
                                                 .font(.caption2.weight(.semibold))
                                                 .foregroundStyle(GoldTheme.down)
                                             Text(GoldCalculationFormatter.currency(breakdown.profit, signed: true))
@@ -1536,7 +1528,7 @@ private struct GoldComparisonStackedChart: View {
                                     Rectangle().fill(GoldTheme.up)
                                     if profitHeight >= 34 {
                                         VStack(spacing: 1) {
-                                            Text("浮盈")
+                                            Text(L10n.tr("浮盈"))
                                                 .font(.caption2.weight(.semibold))
                                                 .foregroundStyle(GoldTheme.text)
                                             Text(GoldCalculationFormatter.currency(breakdown.profit, signed: true))
@@ -1605,7 +1597,7 @@ private struct GoldComparisonStackedChart: View {
                             Image(systemName: "chart.bar.xaxis")
                                 .font(.subheadline)
                                 .foregroundStyle(GoldTheme.textSecondary)
-                            Text("获取参考金价后\n显示预计到手对比")
+                            Text(L10n.tr("获取参考金价后\n显示预计到手对比"))
                                 .font(.caption2)
                                 .foregroundStyle(GoldTheme.textSecondary)
                                 .multilineTextAlignment(.center)
@@ -1645,7 +1637,7 @@ private struct GoldBreakEvenRulerView: View {
             // Track 1: 真实保本金价构成 = 裸金均价 + 摊薄
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text("保本价构成")
+                    Text(L10n.tr("保本价构成"))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(GoldTheme.textSecondary)
                     Spacer()
@@ -1697,14 +1689,14 @@ private struct GoldBreakEvenRulerView: View {
             // Track 2: 当前参考金价与保本线对比
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text("当前金价对比")
+                    Text(L10n.tr("当前金价对比"))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(GoldTheme.textSecondary)
                     Spacer()
                     Text(
                         breakdown.referencePrice != nil
                             ? GoldCalculationFormatter.unitPrice(breakdown.referencePrice, hidden: hidden)
-                            : (hidden ? "••••" : "暂不可用")
+                            : (hidden ? "••••" : L10n.tr("暂不可用"))
                     )
                     .font(.system(.caption2, design: .rounded).weight(.semibold))
                     .monospacedDigit()

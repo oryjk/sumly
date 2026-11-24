@@ -14,12 +14,12 @@ struct GoldCompanionView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("金伴").font(.largeTitle.bold()).foregroundStyle(GoldTheme.text)
+                        Text(L10n.tr("金伴")).font(.largeTitle.bold()).foregroundStyle(GoldTheme.text)
                             .padding(.bottom, 8)
                         NavigationLink {
                             holdings
                         } label: {
-                            toolRow("记金", detail: "记录黄金、管理账本与持仓", symbol: "book.closed")
+                            toolRow(L10n.tr("记金"), detail: L10n.tr("记录黄金、管理账本与持仓"), symbol: "book.closed")
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("companion.holdings")
@@ -28,7 +28,7 @@ struct GoldCompanionView: View {
                                 if session.user == nil { showLogin = true }
                                 else { showChanlun = true }
                             } label: {
-                                toolRow("禅观", detail: "查看行情走势与复盘", symbol: "chart.line.uptrend.xyaxis")
+                                toolRow(L10n.tr("禅观"), detail: L10n.tr("查看行情走势与复盘"), symbol: "chart.line.uptrend.xyaxis")
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("companion.chanlun")
@@ -53,7 +53,7 @@ struct GoldCompanionView: View {
     private var holdings: some View {
         HoldingsView(marketBasis: marketBasis, cloud: cloud)
             .id(marketBasis.rawValue)
-            .navigationTitle("记金")
+            .navigationTitle(L10n.tr("记金"))
             .navigationBarTitleDisplayMode(.inline)
     }
 

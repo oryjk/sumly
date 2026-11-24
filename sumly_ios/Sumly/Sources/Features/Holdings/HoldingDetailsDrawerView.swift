@@ -84,10 +84,10 @@ struct HoldingDetailsDrawerView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text("补充细节")
+                        Text(L10n.tr("补充细节"))
                             .font(.subheadline.bold())
                             .foregroundStyle(GoldTheme.text)
-                        Text(draft.assetType.rawValue)
+                        Text(draft.assetType.displayName)
                             .font(.system(size: 10, weight: .semibold, design: .rounded))
                             .foregroundStyle(GoldTheme.goldSoft)
                             .padding(.horizontal, 7)
@@ -121,9 +121,9 @@ struct HoldingDetailsDrawerView: View {
     private var subPresetSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(
-                title: "场景快捷微调",
+                title: L10n.tr("场景快捷微调"),
                 symbol: "wand.and.stars",
-                badge: "\(draft.assetType.rawValue)专属"
+                badge: L10n.fmt("%@专属", draft.assetType.displayName)
             )
 
             HStack(spacing: 10) {
@@ -194,7 +194,7 @@ struct HoldingDetailsDrawerView: View {
             if profile.showsPurity {
                 VStack(alignment: .leading, spacing: 8) {
                     GoldFormNumberField(
-                        title: "黄金纯度",
+                        title: L10n.tr("黄金纯度"),
                         unit: "%",
                         placeholder: "99.99",
                         text: $draft.purityText
@@ -247,13 +247,13 @@ struct HoldingDetailsDrawerView: View {
                 HStack(spacing: 10) {
                     GoldFormNumberField(
                         title: draft.laborPerGram ? profile.laborPerGramFieldTitle : profile.laborTotalFieldTitle,
-                        unit: draft.laborPerGram ? "元/克" : "元",
+                        unit: draft.laborPerGram ? L10n.tr("元/克") : L10n.tr("元"),
                         placeholder: "0",
                         text: $draft.laborText
                     )
                     GoldFormNumberField(
                         title: profile.otherCostFieldTitle,
-                        unit: "元",
+                        unit: L10n.tr("元"),
                         placeholder: "0",
                         text: $draft.otherText
                     )
@@ -261,7 +261,7 @@ struct HoldingDetailsDrawerView: View {
             } else if profile.showsOtherCost {
                 GoldFormInlineNumberField(
                     title: profile.otherCostFieldTitle,
-                    unit: "元",
+                    unit: L10n.tr("元"),
                     placeholder: "0",
                     text: $draft.otherText
                 )
@@ -324,14 +324,14 @@ struct HoldingDetailsDrawerView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(GoldTheme.goldSoft)
                         .frame(width: 16)
-                    Text("购买日期")
+                    Text(L10n.tr("购买日期"))
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(GoldTheme.text)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                     Spacer(minLength: 4)
                     DatePicker(
-                        "购买日期",
+                        L10n.tr("购买日期"),
                         selection: Binding(
                             get: { timestamp },
                             set: { newDate in
@@ -343,7 +343,7 @@ struct HoldingDetailsDrawerView: View {
                         displayedComponents: [.date, .hourAndMinute]
                     )
                     .labelsHidden()
-                    .environment(\.locale, Locale(identifier: "zh_CN"))
+                    .environment(\.locale, AppLanguage.currentLocale)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
@@ -357,7 +357,7 @@ struct HoldingDetailsDrawerView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(GoldTheme.goldSoft)
                         .frame(width: 16)
-                    Text("归属账本")
+                    Text(L10n.tr("归属账本"))
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(GoldTheme.text)
                         .lineLimit(1)
@@ -368,12 +368,12 @@ struct HoldingDetailsDrawerView: View {
                             Button {
                                 selectedBook = name
                             } label: {
-                                Label(name, systemImage: name == selectedBook ? "checkmark" : "book.closed")
+                                Label(HoldingRecord.localizedBookName(name), systemImage: name == selectedBook ? "checkmark" : "book.closed")
                             }
                         }
                     } label: {
                         HStack(spacing: 5) {
-                            Text(selectedBook)
+                            Text(HoldingRecord.localizedBookName(selectedBook))
                                 .font(.caption.weight(.semibold))
                             Image(systemName: "chevron.up.chevron.down")
                                 .font(.system(size: 10, weight: .semibold))
@@ -400,7 +400,7 @@ struct HoldingDetailsDrawerView: View {
             sectionHeader(
                 title: profile.recoverySectionTitle,
                 symbol: "arrow.triangle.2.circlepath",
-                badge: hasCustomRecovery ? "已自定义" : "默认 0 费用",
+                badge: hasCustomRecovery ? L10n.tr("已自定义") : L10n.tr("默认 0 费用"),
                 badgeHighlighted: hasCustomRecovery
             )
 
@@ -408,7 +408,7 @@ struct HoldingDetailsDrawerView: View {
                 HStack(spacing: 10) {
                     GoldFormNumberField(
                         title: profile.deductionFieldTitle,
-                        unit: "元/克",
+                        unit: L10n.tr("元/克"),
                         placeholder: "0",
                         text: $draft.deductionText
                     )
@@ -422,7 +422,7 @@ struct HoldingDetailsDrawerView: View {
 
                 GoldFormInlineNumberField(
                     title: profile.fixedFeeFieldTitle,
-                    unit: "元/次",
+                    unit: L10n.tr("元/次"),
                     placeholder: "0",
                     text: $draft.fixedFeeText
                 )
@@ -436,7 +436,7 @@ struct HoldingDetailsDrawerView: View {
                     )
                     GoldFormNumberField(
                         title: profile.fixedFeeFieldTitle,
-                        unit: "元/次",
+                        unit: L10n.tr("元/次"),
                         placeholder: "0",
                         text: $draft.fixedFeeText
                     )
@@ -454,7 +454,7 @@ struct HoldingDetailsDrawerView: View {
 
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(title: "备注", symbol: "note.text")
+            sectionHeader(title: L10n.tr("备注"), symbol: "note.text")
 
             TextField(
                 "",
@@ -658,7 +658,7 @@ struct GoldFormTextField: View {
                             .foregroundStyle(GoldTheme.textFaint)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("清除\(title)")
+                    .accessibilityLabel(L10n.fmt("清除%@", title))
                 }
             }
         }

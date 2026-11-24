@@ -8,6 +8,15 @@ enum GoldAssetType: String, CaseIterable, Identifiable, Codable, Hashable, Senda
     case other = "其他"
 
     var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .bean: L10n.tr("金豆")
+        case .bar: L10n.tr("金条")
+        case .jewelry: L10n.tr("金饰")
+        case .accumulation: L10n.tr("积存金")
+        case .other: L10n.tr("其他")
+        }
+    }
 
     /// 3 秒极简入库首屏展示的 4 大核心黄金形态。
     static let primaryQuickTypes: [GoldAssetType] = [.bean, .bar, .jewelry, .accumulation]
@@ -37,22 +46,31 @@ enum GoldAssetType: String, CaseIterable, Identifiable, Codable, Hashable, Senda
         case .bean: "99.99%"
         case .bar: "99.99%"
         case .jewelry: "99.9%"
-        case .accumulation: "0工费"
-        case .other: "自定义"
+        case .accumulation: L10n.tr("0工费")
+        case .other: L10n.tr("自定义")
         }
     }
 
     /// 攒金盒陈列计数单位。
     var displayUnit: String {
         switch self {
-        case .bean: "颗"
-        case .bar: "根"
-        case .jewelry: "件"
-        case .accumulation, .other: "笔"
+        case .bean: L10n.tr("颗")
+        case .bar: L10n.tr("根")
+        case .jewelry: L10n.tr("件")
+        case .accumulation, .other: L10n.tr("笔")
         }
     }
 }
-enum HoldingCostMode: String, CaseIterable, Identifiable, Sendable { case total = "购买总价", unit = "购买单价"; var id: String { rawValue } }
+enum HoldingCostMode: String, CaseIterable, Identifiable, Sendable {
+    case total = "购买总价", unit = "购买单价"
+    var id: String { rawValue }
+    var localizedTitle: String {
+        switch self {
+        case .total: L10n.tr("购买总价")
+        case .unit: L10n.tr("购买单价")
+        }
+    }
+}
 
 /// 新增、编辑、买前计算共享表单草稿；非法中间输入不参与计算。
 struct HoldingDraft: Sendable {
@@ -159,12 +177,14 @@ struct HoldingDraft: Sendable {
         if laborValue <= 0 {
             let discountValue = number(discountText, optional: true) ?? 0
             if assetType == .accumulation && discountValue > 0 {
-                return "\(purityLabel) · 赎回\(Self.formatGrams(discountValue))%"
+                return L10n.fmt("%@ · 赎回%@%%", purityLabel, Self.formatGrams(discountValue))
             }
-            return "\(purityLabel) · 0工费"
+            return L10n.fmt("%@ · 0工费", purityLabel)
         }
         let formattedLabor = Self.formatGrams(laborValue)
-        return laborPerGram ? "\(purityLabel) · 工费¥\(formattedLabor)/g" : "\(purityLabel) · 工费¥\(formattedLabor)"
+        return laborPerGram
+            ? L10n.fmt("%@ · 工费¥%@/g", purityLabel, formattedLabor)
+            : L10n.fmt("%@ · 工费¥%@", purityLabel, formattedLabor)
     }
 
     static func formatGrams(_ value: Double) -> String {

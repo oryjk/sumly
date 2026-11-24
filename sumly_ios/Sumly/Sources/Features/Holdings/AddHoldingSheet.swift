@@ -134,15 +134,15 @@ struct AddHoldingSheet: View {
             .goldKeyboardDismissable(showToolbar: false)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 GoldKeyboardActionBar {
-                    Button(editing == nil ? "确认入库" : "保存修改") { save() }
+                    Button(editing == nil ? L10n.tr("确认入库") : L10n.tr("保存修改")) { save() }
                         .buttonStyle(GoldPrimaryButtonStyle())
                 }
             }
-            .navigationTitle(editing == nil ? "记一笔黄金" : "编辑持仓")
+            .navigationTitle(editing == nil ? L10n.tr("记一笔黄金") : L10n.tr("编辑持仓"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(L10n.tr("取消")) { dismiss() }
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
             }
@@ -186,7 +186,7 @@ struct AddHoldingSheet: View {
     private var assetTypeSelector: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("选择形态")
+                Text(L10n.tr("选择形态"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.textSecondary)
                 Spacer()
@@ -197,7 +197,7 @@ struct AddHoldingSheet: View {
                     HStack(spacing: 4) {
                         Image(systemName: "square.grid.2x2")
                             .font(.system(size: 10, weight: .semibold))
-                        Text(GoldAssetType.other.rawValue)
+                        Text(GoldAssetType.other.displayName)
                             .font(.caption2.weight(isOtherSelected ? .bold : .semibold))
                     }
                     .foregroundStyle(isOtherSelected ? GoldTheme.onGold : GoldTheme.textSecondary)
@@ -215,7 +215,7 @@ struct AddHoldingSheet: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("切换其他黄金形态")
+                .accessibilityLabel(L10n.tr("切换其他黄金形态"))
                 .accessibilityAddTraits(isOtherSelected ? .isSelected : [])
             }
 
@@ -227,7 +227,7 @@ struct AddHoldingSheet: View {
                     } label: {
                         VStack(spacing: 7) {
                             GoldAssetGlyph(type: type, size: 38, emphasized: isSelected)
-                            Text(type.rawValue)
+                            Text(type.displayName)
                                 .font(.system(size: 13, weight: isSelected ? .bold : .medium, design: .rounded))
                                 .foregroundStyle(isSelected ? GoldTheme.goldSoft : GoldTheme.text)
                                 .lineLimit(1)
@@ -277,7 +277,7 @@ struct AddHoldingSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             // 克重标题与当前默认参数标签
             HStack(alignment: .center) {
-                Text("购入克重")
+                Text(L10n.tr("购入克重"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.textSecondary)
                 Spacer(minLength: 6)
@@ -297,7 +297,7 @@ struct AddHoldingSheet: View {
                     .overlay(GoldTheme.capsuleShape.strokeBorder(GoldTheme.gold.opacity(0.28), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("展开并定位到纯度与费用细节")
+                .accessibilityLabel(L10n.tr("展开并定位到纯度与费用细节"))
             }
 
             // 大号克重输入框
@@ -315,7 +315,7 @@ struct AddHoldingSheet: View {
                 .monospacedDigit()
                 .foregroundStyle(GoldTheme.gold)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("购入克重")
+                .accessibilityLabel(L10n.tr("购入克重"))
 
                 Text("g")
                     .font(.system(size: 20, weight: .semibold, design: .rounded))
@@ -366,10 +366,10 @@ struct AddHoldingSheet: View {
             // 单价 / 总价实时联动输入区
             HStack(spacing: 10) {
                 linkedPriceBox(
-                    title: "单价（元/克）",
-                    badge: draft.costMode == .unit ? (purchasePrice.isManual ? "手动" : "参考价") : "参考基准",
+                    title: L10n.tr("单价（元/克）"),
+                    badge: draft.costMode == .unit ? (purchasePrice.isManual ? L10n.tr("手动") : L10n.tr("参考价")) : L10n.tr("参考基准"),
                     badgeHighlighted: draft.costMode == .unit,
-                    placeholder: "元/克",
+                    placeholder: L10n.tr("元/克"),
                     text: Binding(
                         get: { purchasePrice.priceText },
                         set: {
@@ -380,10 +380,10 @@ struct AddHoldingSheet: View {
                 )
 
                 linkedPriceBox(
-                    title: "总价（元）",
-                    badge: draft.costMode == .total ? "实付总价" : "自动估算",
+                    title: L10n.tr("总价（元）"),
+                    badge: draft.costMode == .total ? L10n.tr("实付总价") : L10n.tr("自动估算"),
                     badgeHighlighted: draft.costMode == .total,
-                    placeholder: "自动算出",
+                    placeholder: L10n.tr("自动算出"),
                     text: Binding(
                         get: { draft.totalText },
                         set: { draft.updateTotalPrice($0) }
@@ -397,12 +397,12 @@ struct AddHoldingSheet: View {
             if let result {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("预计真实保本金价")
+                        Text(L10n.tr("预计真实保本金价"))
                             .font(.caption2)
                             .foregroundStyle(GoldTheme.textSecondary)
                         Text(draft.costMode == .total
-                             ? "综合单价 ¥\(result.comprehensiveUnitCost.moneyText) / g · 已含工费"
-                             : "总投入 ¥\(result.totalCost.moneyText) · 按当前参数估算")
+                             ? L10n.fmt("综合单价 ¥%@ / g · 已含工费", result.comprehensiveUnitCost.moneyText)
+                             : L10n.fmt("总投入 ¥%@ · 按当前参数估算", result.totalCost.moneyText))
                             .font(.caption2)
                             .foregroundStyle(GoldTheme.textFaint)
                             .lineLimit(1)
@@ -420,7 +420,7 @@ struct AddHoldingSheet: View {
                 .background(GoldTheme.background, in: GoldTheme.subCardShape)
                 .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.gold.opacity(0.24), lineWidth: 1))
             } else {
-                Text("选好克重并核对单价或总价，即时显示预计真实保本金价。")
+                Text(L10n.tr("选好克重并核对单价或总价，即时显示预计真实保本金价。"))
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
             }
@@ -571,7 +571,7 @@ struct AddHoldingSheet: View {
             if purchasePrice.isLoading {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.mini)
-                    Text("正在获取所选日期参考价…")
+                    Text(L10n.tr("正在获取所选日期参考价…"))
                 }
             }
             if let reference = purchasePrice.reference {
@@ -580,7 +580,7 @@ struct AddHoldingSheet: View {
                         .lineLimit(2)
                     Spacer(minLength: 4)
                     if purchasePrice.isManual || draft.costMode == .total {
-                        Button("恢复参考价") {
+                        Button(L10n.tr("恢复参考价")) {
                             purchasePrice.useReference()
                             draft.updateUnitPrice(purchasePrice.priceText)
                         }
@@ -594,7 +594,7 @@ struct AddHoldingSheet: View {
                     Text(issueDescription(issue))
                     Spacer(minLength: 0)
                     if issue != .missingDay {
-                        Button("重试") { Task { await purchasePrice.load() } }
+                        Button(L10n.tr("重试")) { Task { await purchasePrice.load() } }
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(GoldTheme.gold)
                             .disabled(purchasePrice.isLoading)
@@ -614,33 +614,33 @@ struct AddHoldingSheet: View {
     }
 
     private func referenceDescription(_ reference: HoldingPurchasePriceReference) -> String {
-        if !reference.isHistorical { return "参考 · \(marketBasis.title)实时参考金价 \(reference.price.moneyText) 元/克" }
+        if !reference.isHistorical { return L10n.fmt("参考 · %@实时参考金价 %@ 元/克", marketBasis.title, reference.price.moneyText) }
         let day = HoldingsSelection.dateText(reference.date)
         if let fx = reference.exchangeRate {
-            return "参考 · \(day)国际收盘折算 \(reference.price.moneyText) 元/克（汇率 \(fx.formatted(.number.precision(.fractionLength(2...4))))）"
+            return L10n.fmt("参考 · %@国际收盘折算 %@ 元/克（汇率 %@）", day, reference.price.moneyText, fx.formatted(.number.precision(.fractionLength(2...4))))
         }
-        return "参考 · \(day)国内收盘价 \(reference.price.moneyText) 元/克"
+        return L10n.fmt("参考 · %@国内收盘价 %@ 元/克", day, reference.price.moneyText)
     }
 
     private func issueDescription(_ issue: HoldingPurchasePriceModel.Issue) -> String {
         switch issue {
-        case .missingDay: "当天没有日线报价，请填写实际购入单价"
-        case .missingExchangeRate: "汇率暂不可用，请填写实际购入单价"
-        case .unavailable: "参考价暂未获取成功，可手动填写购入单价"
+        case .missingDay: L10n.tr("当天没有日线报价，请填写实际购入单价")
+        case .missingExchangeRate: L10n.tr("汇率暂不可用，请填写实际购入单价")
+        case .unavailable: L10n.tr("参考价暂未获取成功，可手动填写购入单价")
         }
     }
 
     private func save() {
         guard let input = draft.input, GoldReturnCalculator.calculate(input, referencePrice: nil) != nil else {
-            errorMessage = "请检查克重、价格、纯度和费用，折价应小于100%。"
+            errorMessage = L10n.tr("请检查克重、价格、纯度和费用，折价应小于100%。")
             return
         }
         guard timestamp <= .now else {
-            errorMessage = "购买日期不能晚于当前时间"
+            errorMessage = L10n.tr("购买日期不能晚于当前时间")
             return
         }
         if let editing, editing.disposition != "holding" {
-            errorMessage = "这笔黄金已处置，无法编辑。"
+            errorMessage = L10n.tr("这笔黄金已处置，无法编辑。")
             return
         }
 
@@ -666,7 +666,7 @@ struct AddHoldingSheet: View {
             try modelContext.save()
         } catch {
             modelContext.rollback()
-            errorMessage = "保存失败，请重试。"
+            errorMessage = L10n.tr("保存失败，请重试。")
             return
         }
 

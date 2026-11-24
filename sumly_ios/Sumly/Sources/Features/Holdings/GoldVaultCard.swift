@@ -28,14 +28,16 @@ struct GoldMilestone: Identifiable, Equatable, Hashable, Sendable {
     let shortLabel: String
     let title: String
 
-    static let ladder: [GoldMilestone] = [
-        GoldMilestone(id: "1g", targetGrams: 1, shortLabel: "首克", title: "首克 1g"),
-        GoldMilestone(id: "10g", targetGrams: 10, shortLabel: "10g", title: "10g 初成"),
-        GoldMilestone(id: "50g", targetGrams: 50, shortLabel: "50g", title: "50g 筑底"),
-        GoldMilestone(id: "100g", targetGrams: 100, shortLabel: "100g", title: "100g 小金砖"),
-        GoldMilestone(id: "500g", targetGrams: 500, shortLabel: "500g", title: "500g 金库"),
-        GoldMilestone(id: "1kg", targetGrams: 1000, shortLabel: "1kg", title: "1kg 典藏")
-    ]
+    static var ladder: [GoldMilestone] {
+        [
+            GoldMilestone(id: "1g", targetGrams: 1, shortLabel: L10n.tr("首克"), title: L10n.tr("首克 1g")),
+            GoldMilestone(id: "10g", targetGrams: 10, shortLabel: "10g", title: L10n.tr("10g 初成")),
+            GoldMilestone(id: "50g", targetGrams: 50, shortLabel: "50g", title: L10n.tr("50g 筑底")),
+            GoldMilestone(id: "100g", targetGrams: 100, shortLabel: "100g", title: L10n.tr("100g 小金砖")),
+            GoldMilestone(id: "500g", targetGrams: 500, shortLabel: "500g", title: L10n.tr("500g 金库")),
+            GoldMilestone(id: "1kg", targetGrams: 1000, shortLabel: "1kg", title: L10n.tr("1kg 典藏"))
+        ]
+    }
 }
 
 /// 里程碑解锁状态与进度模型。
@@ -233,12 +235,12 @@ struct GoldVaultSummary: Equatable, Sendable {
 
     func milestoneHeadline(hideAmounts: Bool) -> String {
         if hideAmounts {
-            return "里程碑进度已隐藏"
+            return L10n.tr("里程碑进度已隐藏")
         }
         if let next = milestone.next {
-            return "距「\(next.title)」还差 \(Self.formatGrams(milestone.remainingToNext)) g"
+            return L10n.fmt("距「%@」还差 %@ g", next.title, Self.formatGrams(milestone.remainingToNext))
         }
-        return "已点亮全部 6 档里程碑"
+        return L10n.tr("已点亮全部 6 档里程碑")
     }
 
     func progressPercentText(hideAmounts: Bool) -> String {
@@ -249,23 +251,23 @@ struct GoldVaultSummary: Equatable, Sendable {
     func categoryBadges(hideAmounts: Bool) -> [GoldVaultCategoryBadge] {
         var badges: [GoldVaultCategoryBadge] = []
         if barCount > 0 {
-            let text = hideAmounts ? "金条 ••••" : "金条 \(barCount)根 · \(Self.formatGrams(barGrams))g"
+            let text = hideAmounts ? L10n.tr("金条 ••••") : L10n.fmt("金条 %lld根 · %@g", Int64(barCount), Self.formatGrams(barGrams))
             badges.append(GoldVaultCategoryBadge(type: .bar, text: text))
         }
         if beanCount > 0 {
-            let text = hideAmounts ? "金豆 ••••" : "金豆 \(beanCount)颗 · \(Self.formatGrams(beanGrams))g"
+            let text = hideAmounts ? L10n.tr("金豆 ••••") : L10n.fmt("金豆 %lld颗 · %@g", Int64(beanCount), Self.formatGrams(beanGrams))
             badges.append(GoldVaultCategoryBadge(type: .bean, text: text))
         }
         if jewelryCount > 0 {
-            let text = hideAmounts ? "金饰 ••••" : "金饰 \(jewelryCount)件 · \(Self.formatGrams(jewelryGrams))g"
+            let text = hideAmounts ? L10n.tr("金饰 ••••") : L10n.fmt("金饰 %lld件 · %@g", Int64(jewelryCount), Self.formatGrams(jewelryGrams))
             badges.append(GoldVaultCategoryBadge(type: .jewelry, text: text))
         }
         if accumulationGrams > 0 {
-            let text = hideAmounts ? "积存金 ••••" : "积存金 \(Self.formatGrams(accumulationGrams))g"
+            let text = hideAmounts ? L10n.tr("积存金 ••••") : L10n.fmt("积存金 %@g", Self.formatGrams(accumulationGrams))
             badges.append(GoldVaultCategoryBadge(type: .accumulation, text: text))
         }
         if otherCount > 0 {
-            let text = hideAmounts ? "其他 ••••" : "其他 \(otherCount)笔 · \(Self.formatGrams(otherGrams))g"
+            let text = hideAmounts ? L10n.tr("其他 ••••") : L10n.fmt("其他 %lld笔 · %@g", Int64(otherCount), Self.formatGrams(otherGrams))
             badges.append(GoldVaultCategoryBadge(type: .other, text: text))
         }
         return badges
@@ -323,7 +325,7 @@ struct GoldVaultCard: View {
                 Image(systemName: "shippingbox.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(GoldTheme.gold)
-                Text("我的攒金盒")
+                Text(L10n.tr("我的攒金盒"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
             }
@@ -335,7 +337,7 @@ struct GoldVaultCard: View {
                     .padding(.vertical, 3)
                     .background(GoldTheme.goldSoft, in: GoldTheme.capsuleShape)
             } else if hideAmounts, !summary.isEmpty {
-                Text("隐私保护")
+                Text(L10n.tr("隐私保护"))
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundStyle(GoldTheme.goldSoft)
                     .padding(.horizontal, 8)
@@ -413,14 +415,14 @@ struct GoldVaultCard: View {
                 GoldAssetGlyph(type: .bean, size: 24, emphasized: false).opacity(0.55)
                 GoldAssetGlyph(type: .bar, size: 24, emphasized: false).opacity(0.55)
             }
-            Text("存入第一颗金豆或金条，点亮专属攒金盒")
+            Text(L10n.tr("存入第一颗金豆或金条，点亮专属攒金盒"))
                 .font(.caption)
                 .foregroundStyle(GoldTheme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
             Spacer(minLength: 4)
             if let onAddTap {
-                Button("去入库", action: onAddTap)
+                Button(L10n.tr("去入库"), action: onAddTap)
                     .font(.caption2.bold())
                     .foregroundStyle(GoldTheme.onGold)
                     .padding(.horizontal, 10)
@@ -438,7 +440,7 @@ struct GoldVaultCard: View {
             Image(systemName: "lock.fill")
                 .font(.caption)
                 .foregroundStyle(GoldTheme.goldSoft)
-            Text("隐私模式已开启 · 已隐藏藏品数量与克重")
+            Text(L10n.tr("隐私模式已开启 · 已隐藏藏品数量与克重"))
                 .font(.caption)
                 .foregroundStyle(GoldTheme.textSecondary)
                 .lineLimit(1)

@@ -41,10 +41,15 @@ final class HoldingRecord {
               totalCostOverride: purchaseTotalOverride,
               rule: .init(perGramDeduction: recoveryDeduction, discountRate: recoveryDiscount, fixedFee: recoveryFixedFee))
     }
+    static func localizedBookName(_ stored: String) -> String {
+        stored == "默认账本" ? L10n.tr("默认账本") : stored
+    }
+
     var displayName: String {
         if !brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return brand }
         let type = assetType.trimmingCharacters(in: .whitespacesAndNewlines)
-        return type.isEmpty || type == "其他" ? "黄金记录" : type
+        if type.isEmpty || type == "其他" { return L10n.tr("黄金记录") }
+        return GoldAssetType(rawValue: type)?.displayName ?? type
     }
 
     init(

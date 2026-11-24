@@ -68,7 +68,7 @@ import UserNotifications
                         guard !Task.isCancelled, record.modelContext === context, record.disposition == "holding", record.alerts == originals, record.returnInput == originalInput else { return }
                         let id = "holding-\(record.id)-\(updated[i].id)"
                         do {
-                            try await notifications.send(id: id, title: "记金 · 持仓提醒",
+                            try await notifications.send(id: id, title: L10n.tr("记金 · 持仓提醒"),
                                                          body: message(record: record, alert: updated[i]))
                             guard !Task.isCancelled, record.modelContext === context, record.disposition == "holding", record.alerts == originals, record.returnInput == originalInput else {
                                 await notifications.remove(id: id)
@@ -79,14 +79,14 @@ import UserNotifications
                             await notifications.remove(id: id)
                             guard !Task.isCancelled else { return }
                             updated[i] = originals[i]
-                            issue = "持仓提醒暂未送达，请检查通知权限。"
+                            issue = L10n.tr("持仓提醒暂未送达，请检查通知权限。")
                         }
                     }
                 }
                 guard !Task.isCancelled, record.modelContext === context, record.disposition == "holding", record.alerts == originals, record.returnInput == originalInput else { continue }
                 if updated != originals {
                     do { try record.setAlerts(updated); try context.save() }
-                    catch { context.rollback(); issue = "未能保存提醒状态，请重试。" }
+                    catch { context.rollback(); issue = L10n.tr("未能保存提醒状态，请重试。") }
                 }
             }
         }
@@ -94,10 +94,10 @@ import UserNotifications
     private func message(record: HoldingRecord, alert: HoldingAlert) -> String {
         let name = record.displayName
         switch alert.kind {
-        case .breakEven: return "你的\(name)已达到预计真实保本线。结果为估算。"
-        case .returnPercent: return "你的\(name)预计真实收益率已达到\(alert.threshold.moneyText)%。"
-        case .profitAmount: return "你的\(name)现在回收预计盈利已达到 ¥\(alert.threshold.moneyText)。"
-        case .price: return "\(alert.basis.title)参考金价已达到 ¥\(alert.threshold.moneyText) / g。"
+        case .breakEven: return L10n.fmt("你的%@已达到预计真实保本线。结果为估算。", name)
+        case .returnPercent: return L10n.fmt("你的%@预计真实收益率已达到%@%%。", name, alert.threshold.moneyText)
+        case .profitAmount: return L10n.fmt("你的%@现在回收预计盈利已达到 ¥%@。", name, alert.threshold.moneyText)
+        case .price: return L10n.fmt("%@参考金价已达到 ¥%@ / g。", alert.basis.title, alert.threshold.moneyText)
         }
     }
 }

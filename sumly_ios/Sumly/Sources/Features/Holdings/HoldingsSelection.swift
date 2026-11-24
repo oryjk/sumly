@@ -1,7 +1,26 @@
 import Foundation
 
-enum HoldingFilter: String, CaseIterable { case all = "全部", profit = "盈利", loss = "亏损" }
-enum HoldingSort: String, CaseIterable { case newest = "时间从新到旧", oldest = "时间从旧到新", heaviest = "重量从多到少", costliest = "购入总价从高到低" }
+enum HoldingFilter: String, CaseIterable {
+    case all = "全部", profit = "盈利", loss = "亏损"
+    var localizedTitle: String {
+        switch self {
+        case .all: L10n.tr("全部")
+        case .profit: L10n.tr("盈利")
+        case .loss: L10n.tr("亏损")
+        }
+    }
+}
+enum HoldingSort: String, CaseIterable {
+    case newest = "时间从新到旧", oldest = "时间从旧到新", heaviest = "重量从多到少", costliest = "购入总价从高到低"
+    var localizedTitle: String {
+        switch self {
+        case .newest: L10n.tr("时间从新到旧")
+        case .oldest: L10n.tr("时间从旧到新")
+        case .heaviest: L10n.tr("重量从多到少")
+        case .costliest: L10n.tr("购入总价从高到低")
+        }
+    }
+}
 
 enum HoldingsSelection {
     static func dateText(_ date: Date) -> String {
@@ -12,7 +31,7 @@ enum HoldingsSelection {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         return records.filter { record in
             guard record.bookName == book, record.disposition == "holding" else { return false }
-            guard query.isEmpty || (record.brand.isEmpty ? "未知" : record.brand).localizedCaseInsensitiveContains(query) || record.note.localizedCaseInsensitiveContains(query) else { return false }
+            guard query.isEmpty || (record.brand.isEmpty ? L10n.tr("未知") : record.brand).localizedCaseInsensitiveContains(query) || record.note.localizedCaseInsensitiveContains(query) else { return false }
             if filter != .all {
                 guard let quote, quote.isFinite, quote > 0 else { return false }
                 guard let profit = GoldReturnCalculator.calculate(record.returnInput, referencePrice: quote)?.profit else { return false }

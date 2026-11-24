@@ -5,10 +5,10 @@ enum HoldingAlertKind: String, CaseIterable, Codable, Identifiable, Sendable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .breakEven: "达到真实保本"
-        case .returnPercent: "真实收益率目标"
-        case .profitAmount: "预计盈利金额目标"
-        case .price: "参考金价目标"
+        case .breakEven: L10n.tr("达到真实保本")
+        case .returnPercent: L10n.tr("真实收益率目标")
+        case .profitAmount: L10n.tr("预计盈利金额目标")
+        case .price: L10n.tr("参考金价目标")
         }
     }
 }

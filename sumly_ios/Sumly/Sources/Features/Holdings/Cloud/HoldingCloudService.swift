@@ -9,9 +9,9 @@ enum HoldingCloudError: Error, LocalizedError {
     case conflict, malformed, tooLarge
     var errorDescription: String? {
         switch self {
-        case .conflict: "云端数据已有更新，请重试同步。"
-        case .malformed: "云同步服务返回异常，本机记录已保留。"
-        case .tooLarge: "记录数量或内容超过云同步限制，本机记录已保留。"
+        case .conflict: L10n.tr("云端数据已有更新，请重试同步。")
+        case .malformed: L10n.tr("云同步服务返回异常，本机记录已保留。")
+        case .tooLarge: L10n.tr("记录数量或内容超过云同步限制，本机记录已保留。")
         }
     }
 }

@@ -13,7 +13,7 @@ struct GoldCalendarHeaderView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text("攒金日历")
+            Text(L10n.tr("攒金日历"))
                 .font(.title3.bold())
                 .foregroundStyle(GoldTheme.text)
                 .lineLimit(1)
@@ -41,7 +41,7 @@ struct GoldCalendarHeaderView: View {
             HStack(spacing: 6) {
                 if showTodayButton {
                     Button(action: onTodayTap) {
-                        Text("今")
+                        Text(L10n.tr("今"))
                             .font(.system(size: 12.5, weight: .bold, design: .rounded))
                             .foregroundStyle(GoldTheme.gold)
                             .frame(width: 32, height: 32)
@@ -49,7 +49,7 @@ struct GoldCalendarHeaderView: View {
                             .overlay(GoldTheme.circleShape.strokeBorder(GoldTheme.gold.opacity(0.45), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("回到今天")
+                    .accessibilityLabel(L10n.tr("回到今天"))
                 }
 
                 Button(action: onShareTap) {
@@ -61,7 +61,7 @@ struct GoldCalendarHeaderView: View {
                         .overlay(GoldTheme.circleShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("分享日历海报")
+                .accessibilityLabel(L10n.tr("分享日历海报"))
 
                 Button(action: onFilterTap) {
                     ZStack(alignment: .topTrailing) {
@@ -85,7 +85,7 @@ struct GoldCalendarHeaderView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("筛选记录")
+                .accessibilityLabel(L10n.tr("筛选记录"))
             }
         }
     }
@@ -101,7 +101,7 @@ struct GoldCalendarSegmentedBar: View {
                 Button {
                     activeTab = tab
                 } label: {
-                    Text(tab.rawValue)
+                    Text(tab.localizedTitle)
                         .font(.system(.subheadline, design: .rounded).weight(selected ? .bold : .medium))
                         .foregroundStyle(selected ? GoldTheme.onGold : GoldTheme.textSecondary)
                         .frame(maxWidth: .infinity)
@@ -162,19 +162,19 @@ struct GoldCalendarMonthReportCard: View {
         if isPnLMode {
             if summary.newBuyGrams > 1e-9 {
                 if hideAmounts {
-                    return "本月新攒 •••• · \(summary.newBuyCount)笔"
+                    return L10n.fmt("本月新攒 •••• · %lld笔", Int64(summary.newBuyCount))
                 }
-                return "本月新攒 +\(GoldVaultSummary.formatGrams(summary.newBuyGrams))g · \(summary.newBuyCount)笔"
+                return L10n.fmt("本月新攒 +%@g · %lld笔", GoldVaultSummary.formatGrams(summary.newBuyGrams), Int64(summary.newBuyCount))
             }
             if hideAmounts {
-                return "在库 •••• · 陪伴第 \(max(1, companion.companionDays)) 天"
+                return L10n.fmt("在库 •••• · 陪伴第 %lld 天", Int64(max(1, companion.companionDays)))
             }
-            return "在库 \(GoldVaultSummary.formatGrams(summary.endOfMonthHoldingGrams))g · 陪伴第 \(max(1, companion.companionDays)) 天"
+            return L10n.fmt("在库 %@g · 陪伴第 %lld 天", GoldVaultSummary.formatGrams(summary.endOfMonthHoldingGrams), Int64(max(1, companion.companionDays)))
         } else {
             if let ref = summary.latestReferencePriceCNY {
-                return "\(basis.title)参考价 ¥\(ref.moneyText)/g"
+                return L10n.fmt("%@参考价 ¥%@/g", basis.title, ref.moneyText)
             }
-            return "\(basis.title)行情加载中"
+            return L10n.fmt("%@行情加载中", basis.title)
         }
     }
 
@@ -190,7 +190,7 @@ struct GoldCalendarMonthReportCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(isPnLMode ? "\(summary.month)月预估盈亏" : "\(summary.month)月金价涨跌")
+                    Text(isPnLMode ? L10n.fmt("%lld月预估盈亏", Int64(summary.month)) : L10n.fmt("%lld月金价涨跌", Int64(summary.month)))
                         .font(.caption.weight(.medium))
                         .foregroundStyle(GoldTheme.textSecondary)
 
@@ -216,18 +216,18 @@ struct GoldCalendarMonthReportCard: View {
                 VStack(alignment: .trailing, spacing: 7) {
                     HStack(spacing: 6) {
                         HStack(spacing: 2) {
-                            Text(isPnLMode ? "红" : "涨")
+                            Text(isPnLMode ? L10n.tr("红") : L10n.tr("涨"))
                                 .foregroundStyle(GoldTheme.textSecondary)
-                            Text("\(redDays)天")
+                            Text(L10n.fmt("%lld天", Int64(redDays)))
                                 .foregroundStyle(GoldTheme.up)
                                 .fontWeight(.bold)
                         }
                         Text("·")
                             .foregroundStyle(GoldTheme.textFaint)
                         HStack(spacing: 2) {
-                            Text(isPnLMode ? "绿" : "跌")
+                            Text(isPnLMode ? L10n.tr("绿") : L10n.tr("跌"))
                                 .foregroundStyle(GoldTheme.textSecondary)
-                            Text("\(greenDays)天")
+                            Text(L10n.fmt("%lld天", Int64(greenDays)))
                                 .foregroundStyle(GoldTheme.down)
                                 .fontWeight(.bold)
                         }
@@ -239,7 +239,7 @@ struct GoldCalendarMonthReportCard: View {
                     GoldCalendarRatioBar(redCount: redDays, greenCount: greenDays)
                         .frame(width: 118, height: 6)
 
-                    Text(isPnLMode ? "持仓红绿战绩" : "大盘收红收绿")
+                    Text(isPnLMode ? L10n.tr("持仓红绿战绩") : L10n.tr("大盘收红收绿"))
                         .font(.system(size: 10))
                         .foregroundStyle(GoldTheme.textFaint)
                 }
@@ -344,13 +344,13 @@ struct GoldCalendarMonthGridCard: View {
                         .background(GoldTheme.background.opacity(0.6), in: GoldTheme.circleShape)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("上一月")
+                .accessibilityLabel(L10n.tr("上一月"))
 
                 Spacer()
 
                 Button(action: onOpenYearMonthPicker) {
                     HStack(spacing: 4) {
-                        Text("\(String(year))年\(month)月")
+                        Text(L10n.fmt("%@年%lld月", String(year), Int64(month)))
                             .font(.system(.headline, design: .rounded).bold())
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.text)
@@ -362,7 +362,7 @@ struct GoldCalendarMonthGridCard: View {
                     .padding(.vertical, 6)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("选择年月")
+                .accessibilityLabel(L10n.tr("选择年月"))
 
                 Spacer()
 
@@ -374,7 +374,7 @@ struct GoldCalendarMonthGridCard: View {
                         .background(GoldTheme.background.opacity(0.6), in: GoldTheme.circleShape)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("下一月")
+                .accessibilityLabel(L10n.tr("下一月"))
             }
 
             // 第 2 行：紧凑图层切换胶囊（28pt 高）+ 口径单位提示
@@ -385,7 +385,7 @@ struct GoldCalendarMonthGridCard: View {
                         Button {
                             onSelectLayer(layer)
                         } label: {
-                            Text(layer.rawValue)
+                            Text(layer.localizedTitle)
                                 .font(.system(size: 11, weight: selected ? .bold : .medium, design: .rounded))
                                 .foregroundStyle(selected ? GoldTheme.onGold : GoldTheme.textSecondary)
                                 .padding(.horizontal, 10)
@@ -411,7 +411,7 @@ struct GoldCalendarMonthGridCard: View {
 
             // 星期抬头
             HStack(spacing: 4) {
-                ForEach(["日", "一", "二", "三", "四", "五", "六"], id: \.self) { label in
+                ForEach(Array([L10n.tr("日"), L10n.tr("一"), L10n.tr("二"), L10n.tr("三"), L10n.tr("四"), L10n.tr("五"), L10n.tr("六")].enumerated()), id: \.offset) { _, label in
                     Text(label)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(GoldTheme.textFaint)
@@ -474,19 +474,19 @@ struct GoldCalendarMonthGridCard: View {
         HStack(spacing: 6) {
             if effectiveLayer == .temperature {
                 HStack(spacing: 3) {
-                    Text("冷")
+                    Text(L10n.tr("冷"))
                         .foregroundStyle(GoldTheme.textFaint)
                     ForEach([GoldTheme.tempFreezing, GoldTheme.tempCool, GoldTheme.tempNeutral, GoldTheme.tempWarm, GoldTheme.tempHot], id: \.self) { color in
                         GoldTheme.rangeShape
                             .fill(color.opacity(0.65))
                             .frame(width: 9, height: 9)
                     }
-                    Text("热")
+                    Text(L10n.tr("热"))
                         .foregroundStyle(GoldTheme.textFaint)
                 }
             } else {
                 HStack(spacing: 3) {
-                    Text("跌")
+                    Text(L10n.tr("跌"))
                         .foregroundStyle(GoldTheme.down)
                     ForEach([0.26, 0.16, 0.08], id: \.self) { alpha in
                         GoldTheme.rangeShape
@@ -498,9 +498,9 @@ struct GoldCalendarMonthGridCard: View {
                             .fill(GoldTheme.up.opacity(alpha))
                             .frame(width: 8, height: 8)
                     }
-                    Text("涨")
+                    Text(L10n.tr("涨"))
                         .foregroundStyle(GoldTheme.up)
-                    Text("· 休市")
+                    Text(L10n.tr("· 休市"))
                         .foregroundStyle(GoldTheme.textFaint)
                 }
             }
@@ -510,13 +510,13 @@ struct GoldCalendarMonthGridCard: View {
             HStack(spacing: 6) {
                 HStack(spacing: 3) {
                     GoldTheme.circleShape.fill(GoldTheme.gold).frame(width: 5, height: 5)
-                    Text("记金")
+                    Text(L10n.tr("记金"))
                 }
                 HStack(spacing: 2) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(GoldTheme.goldSoft)
-                    Text("里程碑")
+                    Text(L10n.tr("里程碑"))
                 }
             }
             .foregroundStyle(GoldTheme.textFaint)
@@ -724,7 +724,7 @@ private struct GoldCalendarDayCellView: View {
                         .fill(GoldTheme.gold)
                         .frame(width: 12, height: 2)
                 } else if inFocusedMonth && status == .closed {
-                    Text("休")
+                    Text(L10n.tr("休"))
                         .font(.system(size: 8, weight: .medium))
                         .foregroundStyle(GoldTheme.textFaint.opacity(0.7))
                         .frame(height: 8)
@@ -786,7 +786,7 @@ struct GoldCalendarDayJournalCard: View {
                         HStack(spacing: 4) {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 10, weight: .bold))
-                            Text("点亮里程碑 · \(snapshot.unlockedMilestones.map(\.title).joined(separator: "、"))")
+                            Text(L10n.fmt("点亮里程碑 · %@", snapshot.unlockedMilestones.map(\.title).joined(separator: L10n.tr("、"))))
                                 .font(.caption2.weight(.semibold))
                         }
                         .foregroundStyle(GoldTheme.goldSoft)
@@ -804,7 +804,7 @@ struct GoldCalendarDayJournalCard: View {
                         HStack(spacing: 3) {
                             Image(systemName: "plus")
                                 .font(.system(size: 10, weight: .bold))
-                            Text("补记这天")
+                            Text(L10n.tr("补记这天"))
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
                         }
                         .foregroundStyle(GoldTheme.onGold)
@@ -837,7 +837,7 @@ struct GoldCalendarDayJournalCard: View {
                         .lineLimit(2)
                     Spacer(minLength: 4)
                     if snapshot.status != .future {
-                        Button("补记一笔", action: onAddForDay)
+                        Button(L10n.tr("补记一笔"), action: onAddForDay)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(GoldTheme.gold)
                             .buttonStyle(.plain)
@@ -874,7 +874,7 @@ struct GoldCalendarDayJournalCard: View {
                     }
                 }()
                 metricTile(
-                    title: "当日预估盈亏",
+                    title: L10n.tr("当日预估盈亏"),
                     value: GoldCalendarFormat.signedCurrency(snapshot.dailyPnL, hideAmounts: hideAmounts),
                     subValue: snapshot.dailyPnLRatePercent.map { GoldCalendarFormat.signedPercent($0, hideAmounts: hideAmounts) } ?? "—",
                     valueColor: pnlColor,
@@ -882,17 +882,17 @@ struct GoldCalendarDayJournalCard: View {
                 )
             case .closed:
                 metricTile(
-                    title: "休市 · 参考估值",
+                    title: L10n.tr("休市 · 参考估值"),
                     value: GoldCalendarFormat.currency(snapshot.endOfDayValuationCNY, hideAmounts: hideAmounts),
-                    subValue: hideAmounts ? "在库 ••••" : "在库 \(GoldVaultSummary.formatGrams(snapshot.endOfDayHoldingGrams))g",
+                    subValue: hideAmounts ? L10n.tr("在库 ••••") : L10n.fmt("在库 %@g", GoldVaultSummary.formatGrams(snapshot.endOfDayHoldingGrams)),
                     valueColor: GoldTheme.text,
                     subColor: GoldTheme.textSecondary
                 )
             case .noMarketData, .future:
                 metricTile(
-                    title: "当日在库克重",
+                    title: L10n.tr("当日在库克重"),
                     value: hideAmounts ? "•••• g" : "\(GoldVaultSummary.formatGrams(snapshot.endOfDayHoldingGrams))g",
-                    subValue: "暂无历史日线",
+                    subValue: L10n.tr("暂无历史日线"),
                     valueColor: GoldTheme.goldSoft,
                     subColor: GoldTheme.textFaint
                 )
@@ -906,11 +906,11 @@ struct GoldCalendarDayJournalCard: View {
                 }
             }()
             metricTile(
-                title: "当日大盘涨跌",
-                value: snapshot.status == .trading ? GoldCalendarFormat.signedPercent(snapshot.marketChangePercent) : "休市",
+                title: L10n.tr("当日大盘涨跌"),
+                value: snapshot.status == .trading ? GoldCalendarFormat.signedPercent(snapshot.marketChangePercent) : L10n.tr("休市"),
                 subValue: snapshot.status == .trading
                     ? (snapshot.marketChangeCNY.map { ($0 >= 0 ? "+" : "-") + "¥\(abs($0).moneyText)" } ?? "—")
-                    : "\(basis.title)口径",
+                    : L10n.fmt("%@口径", basis.title),
                 valueColor: snapshot.status == .trading ? marketColor : GoldTheme.textSecondary,
                 subColor: GoldTheme.textSecondary
             )
@@ -918,7 +918,7 @@ struct GoldCalendarDayJournalCard: View {
     }
 
     private var secondMetricTile: some View {
-        let priceTitle = snapshot.isToday ? "最新参考价" : "当日收盘金价"
+        let priceTitle = snapshot.isToday ? L10n.tr("最新参考价") : L10n.tr("当日收盘金价")
         let displayPrice: String = {
             if let p = snapshot.referencePriceCNY {
                 return "¥\(p.moneyText)"
@@ -933,9 +933,9 @@ struct GoldCalendarDayJournalCard: View {
                 return GoldCalendarFormat.signedPercent(snapshot.marketChangePercent)
             }
             if snapshot.status == .closed {
-                return "休市 · 前收参考"
+                return L10n.tr("休市 · 前收参考")
             }
-            return "\(basis.title) · 元/克"
+            return L10n.fmt("%@ · 元/克", basis.title)
         }()
         let subColor: Color = {
             guard snapshot.status == .trading else { return GoldTheme.textFaint }
@@ -959,7 +959,7 @@ struct GoldCalendarDayJournalCard: View {
         let level = snapshot.temperatureLevel ?? .neutral
         let tempColor = MacroPresentation.temperatureColor(for: level)
         return VStack(alignment: .leading, spacing: 4) {
-            Text("当日黄金温度")
+            Text(L10n.tr("当日黄金温度"))
                 .font(.system(size: 10))
                 .foregroundStyle(GoldTheme.textSecondary)
                 .lineLimit(1)
@@ -1074,10 +1074,10 @@ struct GoldCalendarDayJournalCard: View {
 
     private func eventKindLabel(_ kind: String) -> String {
         switch kind {
-        case "buy": "购入"
-        case "sold": "卖出"
-        case "gift": "赠出"
-        default: "记录"
+        case "buy": L10n.tr("购入")
+        case "sold": L10n.tr("卖出")
+        case "gift": L10n.tr("赠出")
+        default: L10n.tr("记录")
         }
     }
 
@@ -1091,11 +1091,11 @@ struct GoldCalendarDayJournalCard: View {
 
     private func eventDetailText(_ event: GoldCalendarDayEvent) -> String {
         if hideAmounts {
-            return "•••• g · •••• 元"
+            return L10n.tr("•••• g · •••• 元")
         }
-        let amountTitle = event.kind == "sold" ? "实收" : "成本"
+        let amountTitle = event.kind == "sold" ? L10n.tr("实收") : L10n.tr("成本")
         let amount = event.kind == "sold" ? event.proceeds : event.totalCost
-        return "\(GoldVaultSummary.formatGrams(event.grams))g · \(amountTitle) ¥\(amount.moneyText)"
+        return L10n.fmt("%@g · %@ ¥%@", GoldVaultSummary.formatGrams(event.grams), amountTitle, amount.moneyText)
     }
 }
 
@@ -1142,11 +1142,11 @@ struct GoldCalendarYearOverviewView: View {
                         .background(GoldTheme.background.opacity(0.6), in: GoldTheme.circleShape)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("上一年")
+                .accessibilityLabel(L10n.tr("上一年"))
 
                 Spacer()
 
-                Text("\(String(yearSnapshot.year))年 攒金年览")
+                Text(L10n.fmt("%@年 攒金年览", String(yearSnapshot.year)))
                     .font(.system(.headline, design: .rounded).bold())
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.text)
@@ -1161,12 +1161,12 @@ struct GoldCalendarYearOverviewView: View {
                         .background(GoldTheme.background.opacity(0.6), in: GoldTheme.circleShape)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("下一年")
+                .accessibilityLabel(L10n.tr("下一年"))
             }
 
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(isPnLHeadline ? "年度预估盈亏" : "年度金价涨跌")
+                    Text(isPnLHeadline ? L10n.tr("年度预估盈亏") : L10n.tr("年度金价涨跌"))
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
 
@@ -1201,9 +1201,9 @@ struct GoldCalendarYearOverviewView: View {
                     Text(
                         hasHoldings
                             ? (hideAmounts
-                                ? "年度新攒 •••• · \(yearSnapshot.totalBuyCount)笔"
-                                : "年度新攒 +\(GoldVaultSummary.formatGrams(yearSnapshot.totalBuyGrams))g · \(yearSnapshot.totalBuyCount)笔")
-                            : "\(basis.title)口径 · 全年行情复盘"
+                                ? L10n.fmt("年度新攒 •••• · %lld笔", Int64(yearSnapshot.totalBuyCount))
+                                : L10n.fmt("年度新攒 +%@g · %lld笔", GoldVaultSummary.formatGrams(yearSnapshot.totalBuyGrams), Int64(yearSnapshot.totalBuyCount)))
+                            : L10n.fmt("%@口径 · 全年行情复盘", basis.title)
                     )
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textSecondary)
@@ -1213,9 +1213,9 @@ struct GoldCalendarYearOverviewView: View {
 
                 VStack(alignment: .trailing, spacing: 6) {
                     HStack(spacing: 6) {
-                        Text("红 \(redDays)天").foregroundStyle(GoldTheme.up).fontWeight(.bold)
+                        Text(L10n.fmt("红 %lld天", Int64(redDays))).foregroundStyle(GoldTheme.up).fontWeight(.bold)
                         Text("·").foregroundStyle(GoldTheme.textFaint)
-                        Text("绿 \(greenDays)天").foregroundStyle(GoldTheme.down).fontWeight(.bold)
+                        Text(L10n.fmt("绿 %lld天", Int64(greenDays))).foregroundStyle(GoldTheme.down).fontWeight(.bold)
                     }
                     .font(.system(size: 12, design: .rounded))
                     .monospacedDigit()
@@ -1223,7 +1223,7 @@ struct GoldCalendarYearOverviewView: View {
                     GoldCalendarRatioBar(redCount: redDays, greenCount: greenDays)
                         .frame(width: 112, height: 6)
 
-                    Text("全年红绿交易日")
+                    Text(L10n.tr("全年红绿交易日"))
                         .font(.system(size: 10))
                         .foregroundStyle(GoldTheme.textFaint)
                 }
@@ -1253,7 +1253,7 @@ struct GoldCalendarYearOverviewView: View {
     private var yearHeatmapCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text("52 周年度热力图")
+                Text(L10n.tr("52 周年度热力图"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer(minLength: 4)
@@ -1261,8 +1261,8 @@ struct GoldCalendarYearOverviewView: View {
                     ForEach(GoldCalendarYearHeatmapMode.allCases) { mode in
                         let selected = (heatmapMode == mode)
                         let label: String = {
-                            if mode == .pnl && !hasHoldings { return "大盘热力" }
-                            return mode.rawValue
+                            if mode == .pnl && !hasHoldings { return L10n.tr("大盘热力") }
+                            return mode.localizedTitle
                         }()
                         Button {
                             heatmapMode = mode
@@ -1287,7 +1287,7 @@ struct GoldCalendarYearOverviewView: View {
                 VStack(spacing: 3) {
                     Color.clear.frame(width: 12, height: 13)
                     ForEach(0..<7, id: \.self) { row in
-                        Text(row == 1 ? "一" : row == 3 ? "三" : row == 5 ? "五" : "")
+                        Text(row == 1 ? L10n.tr("一") : row == 3 ? L10n.tr("三") : row == 5 ? L10n.tr("五") : "")
                             .font(.system(size: 8.5))
                             .foregroundStyle(GoldTheme.textFaint)
                             .frame(width: 12, height: 10)
@@ -1343,7 +1343,7 @@ struct GoldCalendarYearOverviewView: View {
             }
 
             HStack {
-                Text(heatmapMode == .footprint ? "按当日新攒克重深浅着色 · 轻点色块直达该日" : "按当日收益率幅度着色 · 轻点色块直达该日")
+                Text(heatmapMode == .footprint ? L10n.tr("按当日新攒克重深浅着色 · 轻点色块直达该日") : L10n.tr("按当日收益率幅度着色 · 轻点色块直达该日"))
                     .font(.system(size: 10))
                     .foregroundStyle(GoldTheme.textFaint)
                 Spacer()
@@ -1357,11 +1357,11 @@ struct GoldCalendarYearOverviewView: View {
     private var twelveMonthGridCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("12 个月战报宫格")
+                Text(L10n.tr("12 个月战报宫格"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
-                Text("点击月份进入月历")
+                Text(L10n.tr("点击月份进入月历"))
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textFaint)
             }
@@ -1407,7 +1407,7 @@ struct GoldCalendarYearOverviewView: View {
         let mainText: String = {
             if usePnL {
                 if hideAmounts {
-                    return direction == .up ? "盈利" : direction == .down ? "回调" : "持平"
+                    return direction == .up ? L10n.tr("盈利") : direction == .down ? L10n.tr("回调") : L10n.tr("持平")
                 }
                 return GoldCalendarFormat.compactCellPnL(summary.totalPnL, hideAmounts: false)
             }
@@ -1419,7 +1419,7 @@ struct GoldCalendarYearOverviewView: View {
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
-                Text("\(summary.month)月")
+                Text(L10n.fmt("%lld月", Int64(summary.month)))
                     .font(.system(.caption, design: .rounded).bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer(minLength: 2)
@@ -1443,10 +1443,10 @@ struct GoldCalendarYearOverviewView: View {
 
             HStack(spacing: 3) {
                 if rDays + gDays > 0 {
-                    Text("红\(rDays) 绿\(gDays)")
+                    Text(L10n.fmt("红%lld 绿%lld", Int64(rDays), Int64(gDays)))
                         .foregroundStyle(GoldTheme.textFaint)
                 } else {
-                    Text("暂无交易")
+                    Text(L10n.tr("暂无交易"))
                         .foregroundStyle(GoldTheme.textFaint)
                 }
                 Spacer(minLength: 2)
@@ -1476,7 +1476,7 @@ struct GoldCalendarYearOverviewView: View {
         if let prev = previousWeek?.first(where: { $0.inTargetYear }), prev.dayKey.month == firstInYear.dayKey.month {
             return ""
         }
-        return "\(firstInYear.dayKey.month)月"
+        return L10n.fmt("%lld月", Int64(firstInYear.dayKey.month))
     }
 
     private func heatCellColor(_ cell: GoldCalendarYearHeatCell) -> Color {
@@ -1558,7 +1558,7 @@ struct GoldCalendarYearMonthPickerSheet: View {
 
                     Spacer()
 
-                    Text("\(String(draftYear))年")
+                    Text(L10n.fmt("%@年", String(draftYear)))
                         .font(.title3.bold())
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.text)
@@ -1581,7 +1581,7 @@ struct GoldCalendarYearMonthPickerSheet: View {
                             onSelect(draftYear, m)
                             dismiss()
                         } label: {
-                            Text("\(m)月")
+                            Text(L10n.fmt("%lld月", Int64(m)))
                                 .font(.system(.subheadline, design: .rounded).weight(selected ? .bold : .medium))
                                 .foregroundStyle(selected ? GoldTheme.onGold : GoldTheme.text)
                                 .frame(maxWidth: .infinity)
@@ -1602,11 +1602,11 @@ struct GoldCalendarYearMonthPickerSheet: View {
             }
             .padding(20)
             .background(GoldTheme.card)
-            .navigationTitle("选择年月")
+            .navigationTitle(L10n.tr("选择年月"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
+                    Button(L10n.tr("关闭")) { dismiss() }
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
             }

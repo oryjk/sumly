@@ -107,7 +107,7 @@ struct GoldKeyboardDismissButton: View {
                 .contentShape(GoldTheme.circleShape)
         }
         .buttonStyle(GoldKeyboardDismissButtonStyle())
-        .accessibilityLabel("收起键盘")
+        .accessibilityLabel(L10n.tr("收起键盘"))
         .accessibilityIdentifier("keyboard.dismiss")
     }
 }
@@ -202,7 +202,7 @@ extension View {
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
-                        Button("完成") {
+                        Button(L10n.tr("完成")) {
                             GoldKeyboardDismissHelper.dismiss()
                         }
                         .font(.subheadline.bold())
@@ -233,11 +233,11 @@ struct GoldRecoveryFields: View {
     @Binding var draft: HoldingDraft
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("回收规则 · 当前参考金价为基准").font(.subheadline.bold()).foregroundStyle(GoldTheme.gold)
-            GoldInputField(title: "每克回收扣减（元/有效克）", text: $draft.deductionText)
-            GoldInputField(title: "比例折价（%）", text: $draft.discountText)
-            GoldInputField(title: "固定卖出费用（元/次）", text: $draft.fixedFeeText)
-            Text("留空或全部为 0 时，尚未计入回收费用。请按实际回收渠道填写，这不是渠道报价。")
+            Text(L10n.tr("回收规则 · 当前参考金价为基准")).font(.subheadline.bold()).foregroundStyle(GoldTheme.gold)
+            GoldInputField(title: L10n.tr("每克回收扣减（元/有效克）"), text: $draft.deductionText)
+            GoldInputField(title: L10n.tr("比例折价（%）"), text: $draft.discountText)
+            GoldInputField(title: L10n.tr("固定卖出费用（元/次）"), text: $draft.fixedFeeText)
+            Text(L10n.tr("留空或全部为 0 时，尚未计入回收费用。请按实际回收渠道填写，这不是渠道报价。"))
                 .font(.caption).foregroundStyle(GoldTheme.textSecondary)
         }
     }
@@ -277,16 +277,20 @@ enum GoldReturnPresentation {
         return value.map { $0.signedMoneyText + "%" } ?? "—"
     }
     static func status(price: Double?, breakEven: Double?, hidden: Bool) -> String {
-        guard let price = GoldReturnCalculator.validPrice(price), let breakEven else { return "获取参考金价后显示保本距离" }
-        if hidden { return "保本距离 •••• 元/克" }
+        guard let price = GoldReturnCalculator.validPrice(price), let breakEven else { return L10n.tr("获取参考金价后显示保本距离") }
+        if hidden { return L10n.tr("保本距离 •••• 元/克") }
         let distance = price - breakEven
-        return distance >= 0 ? "已超过真实保本线 ¥\(distance.moneyText) / g" : "距离真实保本还差 ¥\((-distance).moneyText) / g"
+        return distance >= 0
+            ? L10n.fmt("已超过真实保本线 ¥%@ / g", distance.moneyText)
+            : L10n.fmt("距离真实保本还差 ¥%@ / g", (-distance).moneyText)
     }
     static func quoteStatus(_ quote: GoldQuote?, basis: GoldMarketBasis, failed: Bool = false, now: Date = .now) -> String {
-        guard let quote else { return "参考金价暂不可用，仍可录入和查看保本价" }
+        guard let quote else { return L10n.tr("参考金价暂不可用，仍可录入和查看保本价") }
         let stale = failed || now.timeIntervalSince(quote.asOf) > 300 || quote.asOf > now.addingTimeInterval(60)
-        let time = quote.asOf.formatted(date: .abbreviated, time: .standard)
-        return "\(basis.title)参考 · \(stale ? "非实时 · " : "")\(time)"
+        let time = quote.asOf.formatted(Date.FormatStyle(date: .abbreviated, time: .standard).locale(AppLanguage.currentLocale))
+        return stale
+            ? L10n.fmt("%@参考 · 非实时 · %@", basis.title, time)
+            : L10n.fmt("%@参考 · %@", basis.title, time)
     }
 }
 

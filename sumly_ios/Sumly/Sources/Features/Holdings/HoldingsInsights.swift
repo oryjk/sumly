@@ -68,7 +68,8 @@ struct MarketHoldingOverlay: Equatable, Sendable {
             let trimmedBrand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedBrand.isEmpty { return trimmedBrand }
             let trimmedType = assetType.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmedType.isEmpty || trimmedType == "其他" ? "黄金记录" : trimmedType
+            if trimmedType.isEmpty || trimmedType == "其他" { return L10n.tr("黄金记录") }
+            return GoldAssetType(rawValue: trimmedType)?.displayName ?? trimmedType
         }
     }
 
@@ -121,13 +122,21 @@ enum HoldingQuickPreset: String, CaseIterable, Identifiable, Sendable {
     case shuibeiJewelry = "水贝金饰"
 
     var id: String { rawValue }
+    var localizedTitle: String {
+        switch self {
+        case .bankAccumulation: L10n.tr("积存金")
+        case .investmentBar: L10n.tr("投资金条")
+        case .brandJewelry: L10n.tr("品牌金饰")
+        case .shuibeiJewelry: L10n.tr("水贝金饰")
+        }
+    }
 
     var subtitle: String {
         switch self {
-        case .bankAccumulation: "0工费 · 99.99%"
-        case .investmentBar: "低工费 · 99.99%"
-        case .brandJewelry: "按克工费 · 99.9%"
-        case .shuibeiJewelry: "低工费 · 99.99%"
+        case .bankAccumulation: L10n.tr("0工费 · 99.99%")
+        case .investmentBar: L10n.tr("低工费 · 99.99%")
+        case .brandJewelry: L10n.tr("按克工费 · 99.9%")
+        case .shuibeiJewelry: L10n.tr("低工费 · 99.99%")
         }
     }
 
@@ -225,6 +234,12 @@ enum HoldingsInsights {
         case assetType = "按品类"
         case brand = "按品牌"
         var id: String { rawValue }
+        var localizedTitle: String {
+            switch self {
+            case .assetType: L10n.tr("按品类")
+            case .brand: L10n.tr("按品牌")
+            }
+        }
     }
 
     static func allocations(from entries: [Entry], grouping: Grouping) -> [HoldingAllocationSlice] {
@@ -239,10 +254,14 @@ enum HoldingsInsights {
             switch grouping {
             case .assetType:
                 let cleaned = entry.assetType.trimmingCharacters(in: .whitespacesAndNewlines)
-                key = cleaned.isEmpty ? "其他" : cleaned
+                if cleaned.isEmpty {
+                    key = L10n.tr("其他")
+                } else {
+                    key = GoldAssetType(rawValue: cleaned)?.displayName ?? cleaned
+                }
             case .brand:
                 let cleaned = entry.brand.trimmingCharacters(in: .whitespacesAndNewlines)
-                key = cleaned.isEmpty ? "未填品牌" : cleaned
+                key = cleaned.isEmpty ? L10n.tr("未填品牌") : cleaned
             }
             var current = buckets[key] ?? (0, 0, 0)
             current.grams += entry.grams

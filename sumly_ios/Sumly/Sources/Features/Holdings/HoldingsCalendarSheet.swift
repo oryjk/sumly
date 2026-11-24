@@ -124,9 +124,9 @@ struct HoldingsCalendarSheet: View {
 
     private var statsTitle: String {
         switch statsPeriod {
-        case .month: "\(String(calendarVM.focusedYear))年\(calendarVM.focusedMonth)月"
-        case .year: "\(String(calendarVM.focusedYear))年"
-        case .all: "全部记录"
+        case .month: L10n.fmt("%@年%lld月", String(calendarVM.focusedYear), Int64(calendarVM.focusedMonth))
+        case .year: L10n.fmt("%@年", String(calendarVM.focusedYear))
+        case .all: L10n.tr("全部记录")
         }
     }
 
@@ -164,13 +164,13 @@ struct HoldingsCalendarSheet: View {
                 .padding(.bottom, 16)
             }
             .background(GoldTheme.background)
-            .navigationTitle("攒金日历")
+            .navigationTitle(L10n.tr("攒金日历"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(isEmbeddedTab ? .hidden : .visible, for: .navigationBar)
             .toolbar {
                 if !isEmbeddedTab {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("关闭", systemImage: "xmark") { dismiss() }
+                        Button(L10n.tr("关闭"), systemImage: "xmark") { dismiss() }
                             .labelStyle(.iconOnly)
                     }
                 }
@@ -178,7 +178,7 @@ struct HoldingsCalendarSheet: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if !isEmbeddedTab {
                     Button { showingAdd = true } label: {
-                        Label("添加黄金", systemImage: "plus").frame(minHeight: 24)
+                        Label(L10n.tr("添加黄金"), systemImage: "plus").frame(minHeight: 24)
                     }
                     .buttonStyle(GoldPrimaryButtonStyle())
                     .padding(.horizontal, 20)
@@ -378,7 +378,7 @@ struct HoldingsCalendarSheet: View {
                     Button {
                         statsPeriod = scope
                     } label: {
-                        Text(scope.rawValue)
+                        Text(scope.localizedTitle)
                             .font(.system(.caption, design: .rounded).weight(selected ? .bold : .medium))
                             .foregroundStyle(selected ? GoldTheme.onGold : GoldTheme.textSecondary)
                             .padding(.horizontal, 14)
@@ -407,7 +407,7 @@ struct HoldingsCalendarSheet: View {
                                 .background(GoldTheme.card, in: GoldTheme.circleShape)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("上一期间")
+                        .accessibilityLabel(L10n.tr("上一期间"))
 
                         Text(statsTitle)
                             .font(.system(.caption, design: .rounded).bold())
@@ -424,7 +424,7 @@ struct HoldingsCalendarSheet: View {
                                 .background(GoldTheme.card, in: GoldTheme.circleShape)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("下一期间")
+                        .accessibilityLabel(L10n.tr("下一期间"))
                     }
                 }
             }
@@ -438,7 +438,7 @@ struct HoldingsCalendarSheet: View {
                 HStack(spacing: 10) {
                     Image(systemName: "tray")
                         .foregroundStyle(GoldTheme.textFaint)
-                    Text("当前所选范围暂无记录，可切换期间或调整筛选。")
+                    Text(L10n.tr("当前所选范围暂无记录，可切换期间或调整筛选。"))
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                     Spacer()
@@ -447,7 +447,7 @@ struct HoldingsCalendarSheet: View {
                 .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
                 .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
             } else {
-                Text("记录明细 · \(currentEvents.count) 条")
+                Text(L10n.fmt("记录明细 · %lld 条", Int64(currentEvents.count)))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                     .padding(.top, 2)
@@ -463,20 +463,20 @@ struct HoldingsCalendarSheet: View {
 
     private var noRecordsText: String {
         switch statsPeriod {
-        case .month: "当月无记录"
-        case .year: "当年无记录"
-        case .all: "暂无记录"
+        case .month: L10n.tr("当月无记录")
+        case .year: L10n.tr("当年无记录")
+        case .all: L10n.tr("暂无记录")
         }
     }
 
     private var valuationBasis: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let quote = activeQuote, quote.cnyPerGram.isFinite, quote.cnyPerGram > 0 {
-                Text(hideAmounts ? "估值基准 · \(marketBasis.title) · •••• 元/克" : "估值基准 · \(marketBasis.title) · \(quote.cnyPerGram.moneyText) 元/克")
-                Text("最新可用报价 · " + quote.asOf.formatted(date: .abbreviated, time: .standard))
+                Text(hideAmounts ? L10n.fmt("估值基准 · %@ · •••• 元/克", marketBasis.title) : L10n.fmt("估值基准 · %@ · %@ 元/克", marketBasis.title, quote.cnyPerGram.moneyText))
+                Text(L10n.fmt("最新可用报价 · %@", quote.asOf.formatted(Date.FormatStyle(date: .abbreviated, time: .standard).locale(AppLanguage.currentLocale))))
                     .foregroundStyle(GoldTheme.textFaint)
             } else {
-                Text("\(marketBasis.title)报价暂不可用，预估金额与收益率显示为 —")
+                Text(L10n.fmt("%@报价暂不可用，预估金额与收益率显示为 —", marketBasis.title))
             }
         }
         .font(.caption)
@@ -493,7 +493,7 @@ struct HoldingsCalendarSheet: View {
                     Image(systemName: kind.icon).font(.headline).foregroundStyle(GoldTheme.gold)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(kind.title).font(.headline).foregroundStyle(GoldTheme.text)
-                        Text(stats.count == 0 ? noRecordsText : hideAmounts ? "•• 笔记录" : "\(stats.count) 笔 · \(stats.grams.moneyText) 克")
+                        Text(stats.count == 0 ? noRecordsText : hideAmounts ? L10n.tr("•• 笔记录") : L10n.fmt("%lld 笔 · %@ 克", Int64(stats.count), stats.grams.moneyText))
                             .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                     }
                     Spacer(minLength: 8)
@@ -505,13 +505,13 @@ struct HoldingsCalendarSheet: View {
                 .contentShape(GoldTheme.holdingsCardShape)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(kind.title + (stats.count == 0 ? "，" + noRecordsText : ""))
-            .accessibilityValue(expanded ? "已展开" : "已收起")
-            .accessibilityHint("轻点以" + (expanded ? "收起" : "展开") + "统计")
+            .accessibilityLabel(stats.count == 0 ? L10n.fmt("%@，%@", kind.title, noRecordsText) : kind.title)
+            .accessibilityValue(expanded ? L10n.tr("已展开") : L10n.tr("已收起"))
+            .accessibilityHint(expanded ? L10n.tr("轻点以收起统计") : L10n.tr("轻点以展开统计"))
 
             if expanded {
                 if stats.count == 0 {
-                    Text("当前所选范围没有" + kind.recordName + "记录，可切换期间或调整筛选。")
+                    Text(kind.emptyRangeHint)
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                         .padding(.top, 14)
@@ -530,12 +530,12 @@ struct HoldingsCalendarSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 12) {
                 if kind == .sales {
-                    metric("实收金额(元)", stats.proceeds.moneyText, prominent: true)
-                    metric("已实现收益(元)", stats.profit?.signedMoneyText ?? "—", color: profitColor(stats.profit), prominent: true)
+                    metric(L10n.tr("实收金额(元)"), stats.proceeds.moneyText, prominent: true)
+                    metric(L10n.tr("已实现收益(元)"), stats.profit?.signedMoneyText ?? "—", color: profitColor(stats.profit), prominent: true)
                 } else {
-                    metric(kind == .purchases ? "预估价值(元)" : "当前价值(元)", stats.value?.moneyText ?? "—", prominent: true)
+                    metric(kind == .purchases ? L10n.tr("预估价值(元)") : L10n.tr("当前价值(元)"), stats.value?.moneyText ?? "—", prominent: true)
                     metric(
-                        kind == .purchases ? "预估收益(元)" : "购入成本(元)",
+                        kind == .purchases ? L10n.tr("预估收益(元)") : L10n.tr("购入成本(元)"),
                         kind == .purchases ? stats.profit?.signedMoneyText ?? "—" : stats.cost.moneyText,
                         color: kind == .purchases ? profitColor(stats.profit) : GoldTheme.text,
                         prominent: true
@@ -544,7 +544,7 @@ struct HoldingsCalendarSheet: View {
             }
             if kind != .gifts {
                 HStack(spacing: 8) {
-                    Text(kind == .sales ? "已实现收益率" : "预估收益率").foregroundStyle(GoldTheme.textSecondary)
+                    Text(kind == .sales ? L10n.tr("已实现收益率") : L10n.tr("预估收益率")).foregroundStyle(GoldTheme.textSecondary)
                     Text(hideAmounts ? "••••" : stats.profitPercent.map { $0.signedMoneyText + "%" } ?? "—")
                         .fontWeight(.semibold).monospacedDigit().foregroundStyle(profitColor(stats.profitPercent))
                 }
@@ -552,12 +552,12 @@ struct HoldingsCalendarSheet: View {
             }
             GoldTheme.cardStroke.frame(height: 1)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 95), alignment: .leading)], alignment: .leading, spacing: 16) {
-                metric(kind.recordName + "笔数", "\(stats.count)")
-                metric("总重量(克)", stats.grams.moneyText)
-                metric("额外费用(元)", stats.fees.moneyText)
-                metric("购入均价(元/克)", stats.average.moneyText)
-                if kind == .sales { metric("卖出均价(元/克)", stats.saleAverage.moneyText) }
-                if kind != .gifts { metric("购入总价(元)", stats.cost.moneyText) }
+                metric(kind.countLabel, "\(stats.count)")
+                metric(L10n.tr("总重量(克)"), stats.grams.moneyText)
+                metric(L10n.tr("额外费用(元)"), stats.fees.moneyText)
+                metric(L10n.tr("购入均价(元/克)"), stats.average.moneyText)
+                if kind == .sales { metric(L10n.tr("卖出均价(元/克)"), stats.saleAverage.moneyText) }
+                if kind != .gifts { metric(L10n.tr("购入总价(元)"), stats.cost.moneyText) }
             }
             Text(kind.explanation).font(.caption).foregroundStyle(GoldTheme.textSecondary)
         }
@@ -595,12 +595,16 @@ struct HoldingsCalendarSheet: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(GoldTheme.text)
                     Spacer()
-                    Text(event.kind == "buy" ? "购入" : event.kind == "sold" ? "卖出" : "赠出")
+                    Text(event.kind == "buy" ? L10n.tr("购入") : event.kind == "sold" ? L10n.tr("卖出") : L10n.tr("赠出"))
                         .font(.caption.weight(.bold))
                         .foregroundStyle(event.kind == "sold" ? GoldTheme.up : GoldTheme.gold)
                 }
                 HStack {
-                    Text(hideAmounts ? "••••" : "\(event.grams.moneyText) 克 · \(event.kind == "sold" ? "实收" : "购入成本") \((event.kind == "sold" ? event.proceeds : event.cost).moneyText) 元")
+                    Text(hideAmounts
+                        ? "••••"
+                        : (event.kind == "sold"
+                            ? L10n.fmt("%@ 克 · 实收 %@ 元", event.grams.moneyText, event.proceeds.moneyText)
+                            : L10n.fmt("%@ 克 · 购入成本 %@ 元", event.grams.moneyText, event.cost.moneyText)))
                     Spacer()
                     Text(HoldingsSelection.dateText(event.date))
                 }
@@ -682,43 +686,43 @@ struct HoldingCalendarFilterSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("关键词").foregroundStyle(GoldTheme.textSecondary)
-                    TextField("购买渠道／买家／受赠人／品牌", text: $draft.keyword)
+                    Text(L10n.tr("关键词")).foregroundStyle(GoldTheme.textSecondary)
+                    TextField(L10n.tr("购买渠道／买家／受赠人／品牌"), text: $draft.keyword)
                         .padding(16)
                         .background(GoldTheme.background, in: GoldTheme.rangeShape)
-                    Text("类型").foregroundStyle(GoldTheme.textSecondary)
+                    Text(L10n.tr("类型")).foregroundStyle(GoldTheme.textSecondary)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 10) {
-                        option("全部", selected: draft.kind == "all") { draft.kind = "all" }
-                        option("在库", selected: draft.kind == "holding") { draft.kind = "holding" }
-                        option("卖出", selected: draft.kind == "sold") { draft.kind = "sold" }
-                        option("赠出", selected: draft.kind == "gift") { draft.kind = "gift" }
+                        option(L10n.tr("全部"), selected: draft.kind == "all") { draft.kind = "all" }
+                        option(L10n.tr("在库"), selected: draft.kind == "holding") { draft.kind = "holding" }
+                        option(L10n.tr("卖出"), selected: draft.kind == "sold") { draft.kind = "sold" }
+                        option(L10n.tr("赠出"), selected: draft.kind == "gift") { draft.kind = "gift" }
                     }
-                    Text("账本").foregroundStyle(GoldTheme.textSecondary)
+                    Text(L10n.tr("账本")).foregroundStyle(GoldTheme.textSecondary)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 10) {
-                        option("全部账本", selected: draft.book == nil) { draft.book = nil }
+                        option(L10n.tr("全部账本"), selected: draft.book == nil) { draft.book = nil }
                         ForEach(books, id: \.self) { book in
-                            option(book, selected: draft.book == book) { draft.book = book }
+                            option(HoldingRecord.localizedBookName(book), selected: draft.book == book) { draft.book = book }
                         }
                     }
                 }
                 .padding(24)
             }
             .background(GoldTheme.card)
-            .navigationTitle("选择筛选项")
+            .navigationTitle(L10n.tr("选择筛选项"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭", systemImage: "xmark") { dismiss() }
+                    Button(L10n.tr("关闭"), systemImage: "xmark") { dismiss() }
                         .labelStyle(.iconOnly)
                 }
             }
             .safeAreaInset(edge: .bottom) {
                 HStack(spacing: 16) {
-                    Button("取消") { dismiss() }
+                    Button(L10n.tr("取消")) { dismiss() }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(GoldTheme.background, in: GoldTheme.capsuleShape)
-                    Button("确定") { filter = draft; dismiss() }
+                    Button(L10n.tr("确定")) { filter = draft; dismiss() }
                         .buttonStyle(GoldPrimaryButtonStyle())
                 }
                 .padding(20)
@@ -766,6 +770,13 @@ private enum CalendarStatsScope: String, CaseIterable, Identifiable {
     case all = "全部"
 
     var id: String { rawValue }
+    var localizedTitle: String {
+        switch self {
+        case .month: L10n.tr("当月")
+        case .year: L10n.tr("当年")
+        case .all: L10n.tr("全部")
+        }
+    }
 }
 
 private enum CalendarStatisticsKind: Hashable {
@@ -773,17 +784,33 @@ private enum CalendarStatisticsKind: Hashable {
 
     var title: String {
         switch self {
-        case .purchases: "记金统计"
-        case .sales: "卖出统计"
-        case .gifts: "赠送统计"
+        case .purchases: L10n.tr("记金统计")
+        case .sales: L10n.tr("卖出统计")
+        case .gifts: L10n.tr("赠送统计")
         }
     }
 
     var recordName: String {
         switch self {
-        case .purchases: "购入"
-        case .sales: "卖出"
-        case .gifts: "赠送"
+        case .purchases: L10n.tr("购入")
+        case .sales: L10n.tr("卖出")
+        case .gifts: L10n.tr("赠送")
+        }
+    }
+
+    var countLabel: String {
+        switch self {
+        case .purchases: L10n.tr("购入笔数")
+        case .sales: L10n.tr("卖出笔数")
+        case .gifts: L10n.tr("赠送笔数")
+        }
+    }
+
+    var emptyRangeHint: String {
+        switch self {
+        case .purchases: L10n.tr("当前所选范围没有购入记录，可切换期间或调整筛选。")
+        case .sales: L10n.tr("当前所选范围没有卖出记录，可切换期间或调整筛选。")
+        case .gifts: L10n.tr("当前所选范围没有赠送记录，可切换期间或调整筛选。")
         }
     }
 
@@ -797,9 +824,9 @@ private enum CalendarStatisticsKind: Hashable {
 
     var explanation: String {
         switch self {
-        case .purchases: "按所选期间购入黄金和最新可用金价估算，包含已赠卖部分；购入总价包含工费与其他成本，预估收益不代表已实现收益。"
-        case .sales: "按所选期间卖出日期统计。已实现收益 = 实收金额 − 购入成本，购入成本包含分摊的工费与其他成本。"
-        case .gifts: "按所选期间赠送日期统计。购入成本包含工费与其他成本；当前价值按最新可用金价估算，不计作投资收益。"
+        case .purchases: L10n.tr("按所选期间购入黄金和最新可用金价估算，包含已赠卖部分；购入总价包含工费与其他成本，预估收益不代表已实现收益。")
+        case .sales: L10n.tr("按所选期间卖出日期统计。已实现收益 = 实收金额 − 购入成本，购入成本包含分摊的工费与其他成本。")
+        case .gifts: L10n.tr("按所选期间赠送日期统计。购入成本包含工费与其他成本；当前价值按最新可用金价估算，不计作投资收益。")
         }
     }
 }
