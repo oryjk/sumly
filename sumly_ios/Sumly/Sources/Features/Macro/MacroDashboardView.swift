@@ -43,7 +43,7 @@ struct MacroDashboardView: View {
         .scrollIndicators(.hidden)
         .background(GoldTheme.background)
         .foregroundStyle(GoldTheme.text)
-        .navigationTitle("黄金温度与宏观")
+        .navigationTitle(L10n.tr("黄金温度与宏观"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .toolbar {
@@ -61,7 +61,7 @@ struct MacroDashboardView: View {
                             .foregroundStyle(GoldTheme.gold)
                     }
                 }
-                .accessibilityLabel("刷新宏观数据")
+                .accessibilityLabel(L10n.tr("刷新宏观数据"))
             }
         }
         .navigationDestination(item: $selectedIndicator) { summary in
@@ -120,7 +120,7 @@ struct MacroDashboardView: View {
                         model.selectedTab = tab
                     }
                 } label: {
-                    Text(tab.rawValue)
+                    Text(tab.localizedTitle)
                         .font(.system(size: 13.5, weight: isSelected ? .bold : .medium, design: .rounded))
                         .foregroundStyle(isSelected ? GoldTheme.onGold : GoldTheme.textSecondary)
                         .frame(maxWidth: .infinity)
@@ -140,9 +140,9 @@ struct MacroDashboardView: View {
     @ViewBuilder
     private var temperatureTabContent: some View {
         if model.isLoadingTemperature && model.temperature == nil {
-            loadingCard("正在计算黄金温度与市场状态…")
+            loadingCard(L10n.tr("正在计算黄金温度与市场状态…"))
         } else if let error = model.temperatureError, model.temperature == nil {
-            errorCard(title: "黄金温度加载失败", message: error) {
+            errorCard(title: L10n.tr("黄金温度加载失败"), message: error) {
                 Task { await model.loadTemperature() }
             }
         } else if let report = model.temperature {
@@ -163,15 +163,15 @@ struct MacroDashboardView: View {
             } else {
                 emptyCard(
                     icon: "arrow.triangle.2.circlepath.circle",
-                    title: "黄金温度正在初始化同步",
-                    detail: "后端首次同步宏观与黄金历史数据完成后会自动生成 0~100° 温度读数，当前不展示估算假数据。"
+                    title: L10n.tr("黄金温度正在初始化同步"),
+                    detail: L10n.tr("后端首次同步宏观与黄金历史数据完成后会自动生成 0~100° 温度读数，当前不展示估算假数据。")
                 ) {
                     Task { await model.loadTemperature() }
                 }
                 temperatureHistoryCard
             }
         } else {
-            loadingCard("正在准备黄金温度数据…")
+            loadingCard(L10n.tr("正在准备黄金温度数据…"))
         }
     }
 
@@ -181,11 +181,11 @@ struct MacroDashboardView: View {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text("黄金温度计")
+                        Text(L10n.tr("黄金温度计"))
                             .font(.headline)
                             .foregroundStyle(GoldTheme.text)
 
-                        Text("短期 · 交易热度")
+                        Text(L10n.tr("短期 · 交易热度"))
                             .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                             .foregroundStyle(shortTint)
                             .padding(.horizontal, 7)
@@ -204,18 +204,18 @@ struct MacroDashboardView: View {
                                 .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("查看黄金温度计说明")
+                        .accessibilityLabel(L10n.tr("查看黄金温度计说明"))
                         .accessibilityIdentifier("macro.dashboard.guideButton")
                     }
 
-                    Text("截至 \(MacroDateParser.displayDay(report.asOf)) · 模型 \(report.modelVersion)")
+                    Text(L10n.fmt("截至 %@ · 模型 %@", MacroDateParser.displayDay(report.asOf), report.modelVersion))
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
                 Spacer(minLength: 4)
                 if report.degraded {
-                    Label("降级模式", systemImage: "exclamationmark.circle.fill")
+                    Label(L10n.tr("降级模式"), systemImage: "exclamationmark.circle.fill")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(GoldTheme.tempWarm)
                         .padding(.horizontal, 8)
@@ -241,17 +241,17 @@ struct MacroDashboardView: View {
                 .padding(.horizontal, 4)
 
             HStack(spacing: 10) {
-                deltaChip(title: "较前1日", value: report.change1d)
-                deltaChip(title: "较前5日", value: report.change5d)
+                deltaChip(title: L10n.tr("较前1日"), value: report.change1d)
+                deltaChip(title: L10n.tr("较前5日"), value: report.change5d)
             }
 
             if report.degraded && !report.missingFactors.isEmpty {
-                let names = report.missingFactors.map(MacroPresentation.factorDisplayName).joined(separator: "、")
+                let names = report.missingFactors.map(MacroPresentation.factorDisplayName).joined(separator: L10n.tr("、"))
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "info.circle.fill")
                         .font(.caption)
                         .foregroundStyle(GoldTheme.goldSoft)
-                    Text("当前缺失因子：\(names)，已按其余可用维度权重等比归一化计算。")
+                    Text(L10n.fmt("当前缺失因子：%@，已按其余可用维度权重等比归一化计算。", names))
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -286,7 +286,7 @@ struct MacroDashboardView: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(GoldTheme.up)
             VStack(alignment: .leading, spacing: 4) {
-                Text("高波动状态提示")
+                Text(L10n.tr("高波动状态提示"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.up)
                 Text(note)
@@ -307,7 +307,7 @@ struct MacroDashboardView: View {
         let clamped = dual.longTermScore
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("长期 · 宏观背景", systemImage: "globe.americas.fill")
+                Label(L10n.tr("长期 · 宏观背景"), systemImage: "globe.americas.fill")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
                 Spacer()
@@ -324,11 +324,11 @@ struct MacroDashboardView: View {
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.text)
-                Text("/ 100分")
+                Text(L10n.tr("/ 100分"))
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
                 Spacer()
-                Text("美债/财政压力/央行购金/实际利率")
+                Text(L10n.tr("美债/财政压力/央行购金/实际利率"))
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textFaint)
                     .lineLimit(1)
@@ -361,7 +361,7 @@ struct MacroDashboardView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 6) {
-                Label("短长周期状态对照", systemImage: "safari.fill")
+                Label(L10n.tr("短长周期状态对照"), systemImage: "safari.fill")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
 
@@ -380,7 +380,7 @@ struct MacroDashboardView: View {
                     Circle()
                         .fill(shortTint)
                         .frame(width: 7, height: 7)
-                    Text("短期 \(String(format: "%.1f°", dual.shortTermScore)) · \(dual.shortTermState)")
+                    Text(L10n.fmt("短期 %@ · %@", String(format: "%.1f°", dual.shortTermScore), dual.shortTermState))
                         .font(.caption.weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.text)
@@ -397,7 +397,7 @@ struct MacroDashboardView: View {
                     Circle()
                         .fill(longTint)
                         .frame(width: 7, height: 7)
-                    Text("长期 \(dual.longTermScoreText) · \(dual.longTermState)")
+                    Text(L10n.fmt("长期 %@ · %@", dual.longTermScoreText, dual.longTermState))
                         .font(.caption.weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.text)
@@ -419,13 +419,13 @@ struct MacroDashboardView: View {
 
             HStack(spacing: 10) {
                 cushionTile(
-                    title: "200日均线偏离",
+                    title: L10n.tr("200日均线偏离"),
                     value: MacroPresentation.formatPercent(guide.ma200DeviationPct, signed: true),
                     note: MacroPresentation.objectiveMa200Note(for: guide),
                     tint: MacroPresentation.changeColor(for: guide.ma200DeviationPct)
                 )
                 cushionTile(
-                    title: "上海金溢价",
+                    title: L10n.tr("上海金溢价"),
                     value: MacroPresentation.formatPercent(guide.domesticPremiumPct, signed: true),
                     note: MacroPresentation.objectiveDomesticPremiumNote(for: guide),
                     tint: MacroPresentation.changeColor(for: guide.domesticPremiumPct)
@@ -444,7 +444,7 @@ struct MacroDashboardView: View {
                 .font(.system(.headline, design: .rounded).bold())
                 .monospacedDigit()
                 .foregroundStyle(tint)
-            Text(note.isEmpty ? "暂无补充说明" : note)
+            Text(note.isEmpty ? L10n.tr("暂无补充说明") : note)
                 .font(.caption2)
                 .foregroundStyle(GoldTheme.textSecondary)
                 .lineLimit(3)
@@ -466,7 +466,7 @@ struct MacroDashboardView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("金价 vs 黄金温度")
+                Text(L10n.tr("金价 vs 黄金温度"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
@@ -485,8 +485,8 @@ struct MacroDashboardView: View {
                     .monospacedDigit()
                 } else {
                     HStack(spacing: 10) {
-                        legendDot(color: GoldTheme.gold, label: "国际金价")
-                        legendDot(color: GoldTheme.chartSecondary, label: "温度")
+                        legendDot(color: GoldTheme.gold, label: L10n.tr("国际金价"))
+                        legendDot(color: GoldTheme.chartSecondary, label: L10n.tr("温度"))
                     }
                 }
             }
@@ -499,7 +499,7 @@ struct MacroDashboardView: View {
             if model.isLoadingHistory && points.isEmpty {
                 HStack(spacing: 10) {
                     ProgressView().tint(GoldTheme.gold)
-                    Text("正在加载历史温度曲线…")
+                    Text(L10n.tr("正在加载历史温度曲线…"))
                         .font(.footnote)
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
@@ -509,7 +509,7 @@ struct MacroDashboardView: View {
                     Task { await model.loadTemperatureHistory() }
                 }
             } else if points.isEmpty {
-                Text("暂无历史温度曲线数据，待首次历史回算完成后展示。")
+                Text(L10n.tr("暂无历史温度曲线数据，待首次历史回算完成后展示。"))
                     .font(.footnote)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
@@ -523,7 +523,7 @@ struct MacroDashboardView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         MacroChartScaleBar(
                             context: goldContext,
-                            leadingLabel: "国际金价（USD/oz）",
+                            leadingLabel: L10n.tr("国际金价（USD/oz）"),
                             accessibilityPrefix: "macro.temperature.gold"
                         ) { chosen in
                             withAnimation(.easeInOut(duration: 0.18)) {
@@ -535,8 +535,8 @@ struct MacroDashboardView: View {
                                 if let price = point.goldPriceUSD {
                                     let plotY = goldContext.clampedPlotValue(price)
                                     LineMark(
-                                        x: .value("日期", point.date),
-                                        y: .value("金价", plotY)
+                                        x: .value(L10n.tr("日期"), point.date),
+                                        y: .value(L10n.tr("金价"), plotY)
                                     )
                                     .foregroundStyle(GoldTheme.gold)
                                     .lineStyle(StrokeStyle(lineWidth: 1.8))
@@ -544,8 +544,8 @@ struct MacroDashboardView: View {
 
                                     if goldPoints.count == 1 {
                                         PointMark(
-                                            x: .value("日期", point.date),
-                                            y: .value("金价", plotY)
+                                            x: .value(L10n.tr("日期"), point.date),
+                                            y: .value(L10n.tr("金价"), plotY)
                                         )
                                         .foregroundStyle(GoldTheme.gold)
                                         .symbolSize(36)
@@ -553,12 +553,12 @@ struct MacroDashboardView: View {
                                 }
                             }
                             if let inspected, let price = inspected.goldPriceUSD {
-                                RuleMark(x: .value("选中", inspected.date))
+                                RuleMark(x: .value(L10n.tr("选中"), inspected.date))
                                     .foregroundStyle(GoldTheme.goldSoft.opacity(0.6))
                                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                                 PointMark(
-                                    x: .value("选中", inspected.date),
-                                    y: .value("金价", goldContext.clampedPlotValue(price))
+                                    x: .value(L10n.tr("选中"), inspected.date),
+                                    y: .value(L10n.tr("金价"), goldContext.clampedPlotValue(price))
                                 )
                                 .foregroundStyle(GoldTheme.gold)
                                 .symbolSize(36)
@@ -586,22 +586,22 @@ struct MacroDashboardView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("短期交易温度（0~100° · 虚线 20° 极冷 / 80° 极热）")
+                    Text(L10n.tr("短期交易温度（0~100° · 虚线 20° 极冷 / 80° 极热）"))
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.textSecondary)
                     Chart {
-                        RuleMark(y: .value("过热", 80))
+                        RuleMark(y: .value(L10n.tr("过热"), 80))
                             .foregroundStyle(GoldTheme.tempHot.opacity(0.45))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                        RuleMark(y: .value("冰点", 20))
+                        RuleMark(y: .value(L10n.tr("冰点"), 20))
                             .foregroundStyle(GoldTheme.tempFreezing.opacity(0.45))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
 
                         ForEach(points) { point in
                             AreaMark(
-                                x: .value("日期", point.date),
-                                yStart: .value("底", 0),
-                                yEnd: .value("温度", point.score)
+                                x: .value(L10n.tr("日期"), point.date),
+                                yStart: .value(L10n.tr("底"), 0),
+                                yEnd: .value(L10n.tr("温度"), point.score)
                             )
                             .foregroundStyle(
                                 LinearGradient(
@@ -613,25 +613,25 @@ struct MacroDashboardView: View {
                             .interpolationMethod(.monotone)
 
                             LineMark(
-                                x: .value("日期", point.date),
-                                y: .value("温度", point.score)
+                                x: .value(L10n.tr("日期"), point.date),
+                                y: .value(L10n.tr("温度"), point.score)
                             )
                             .foregroundStyle(GoldTheme.chartSecondary)
                             .lineStyle(StrokeStyle(lineWidth: 1.8))
                             .interpolationMethod(.monotone)
 
                             if points.count == 1 {
-                                PointMark(x: .value("日期", point.date), y: .value("温度", point.score))
+                                PointMark(x: .value(L10n.tr("日期"), point.date), y: .value(L10n.tr("温度"), point.score))
                                     .foregroundStyle(GoldTheme.chartSecondary)
                                     .symbolSize(40)
                             }
                         }
 
                         if let inspected {
-                            RuleMark(x: .value("选中", inspected.date))
+                            RuleMark(x: .value(L10n.tr("选中"), inspected.date))
                                 .foregroundStyle(GoldTheme.goldSoft.opacity(0.6))
                                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                            PointMark(x: .value("选中", inspected.date), y: .value("温度", inspected.score))
+                            PointMark(x: .value(L10n.tr("选中"), inspected.date), y: .value(L10n.tr("温度"), inspected.score))
                                 .foregroundStyle(MacroPresentation.temperatureColor(for: inspected.level))
                                 .symbolSize(40)
                         }
@@ -663,17 +663,17 @@ struct MacroDashboardView: View {
     private func dimensionsCard(_ dimensions: [MacroTemperatureDimension]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("短期温度 · 五维拆解")
+                Text(L10n.tr("短期温度 · 五维拆解"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
-                Text("基于 3 年滚动历史分位")
+                Text(L10n.tr("基于 3 年滚动历史分位"))
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textFaint)
             }
 
             if dimensions.isEmpty {
-                Text("暂无维度拆分数据")
+                Text(L10n.tr("暂无维度拆分数据"))
                     .font(.footnote)
                     .foregroundStyle(GoldTheme.textSecondary)
             } else {
@@ -690,12 +690,13 @@ struct MacroDashboardView: View {
     private func dimensionRow(_ dim: MacroTemperatureDimension) -> some View {
         let clamped = MacroPresentation.clampedTemperatureScore(dim.score)
         let tint = dim.available ? MacroPresentation.temperatureColor(forScore: clamped) : GoldTheme.textFaint
+        let summaryText = dim.localizedSummary
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Text(dim.name.isEmpty ? MacroPresentation.factorDisplayName(dim.key) : dim.name)
+                Text(dim.localizedName)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(GoldTheme.text)
-                Text("权重 \(Int((dim.weight * 100).rounded()))%")
+                Text(L10n.fmt("权重 %@", "\(Int((dim.weight * 100).rounded()))%"))
                     .font(.caption2)
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.textFaint)
@@ -706,7 +707,7 @@ struct MacroDashboardView: View {
                         .monospacedDigit()
                         .foregroundStyle(tint)
                 } else {
-                    Text("暂缺")
+                    Text(L10n.tr("暂缺"))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(GoldTheme.textFaint)
                         .padding(.horizontal, 6)
@@ -727,8 +728,8 @@ struct MacroDashboardView: View {
             }
             .frame(height: 6)
 
-            if !dim.summary.isEmpty {
-                Text(dim.summary)
+            if !summaryText.isEmpty {
+                Text(summaryText)
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -744,9 +745,9 @@ struct MacroDashboardView: View {
     @ViewBuilder
     private var treasuryTabContent: some View {
         if model.isLoadingTreasury && model.treasury == nil {
-            loadingCard("正在加载美国国债与利率专题…")
+            loadingCard(L10n.tr("正在加载美国国债与利率专题…"))
         } else if let error = model.treasuryError, model.treasury == nil {
-            errorCard(title: "美国国债数据加载失败", message: error) {
+            errorCard(title: L10n.tr("美国国债数据加载失败"), message: error) {
                 Task { await model.loadTreasury() }
             }
         } else if let report = model.treasury {
@@ -767,7 +768,7 @@ struct MacroDashboardView: View {
                 treasuryYieldChartCard(real: report.realYieldSeries, nominal: report.nominalYieldSeries)
                 if !report.cards.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("美债与长债 ETF 核心指标")
+                        Text(L10n.tr("美债与长债 ETF 核心指标"))
                             .font(.subheadline.bold())
                             .foregroundStyle(GoldTheme.text)
                             .padding(.horizontal, 2)
@@ -781,23 +782,24 @@ struct MacroDashboardView: View {
             } else {
                 emptyCard(
                     icon: "building.columns",
-                    title: "美国国债数据正在同步中",
-                    detail: "待 Treasury Fiscal Data 与 FRED 首次同步完成后，将自动展示美债总规模、实际利率与财政压力。"
+                    title: L10n.tr("美国国债数据正在同步中"),
+                    detail: L10n.tr("待 Treasury Fiscal Data 与 FRED 首次同步完成后，将自动展示美债总规模、实际利率与财政压力。")
                 ) {
                     Task { await model.loadTreasury() }
                 }
             }
         } else {
-            loadingCard("正在准备美国国债专题…")
+            loadingCard(L10n.tr("正在准备美国国债专题…"))
         }
     }
 
     private func treasurySummaryCard(_ report: MacroTreasuryReport) -> some View {
         let s = report.summary
+        let impactNote = s.localizedGoldImpactNote
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("美国联邦国债总规模")
+                    Text(L10n.tr("美国联邦国债总规模"))
                         .font(.caption.weight(.medium))
                         .foregroundStyle(GoldTheme.textSecondary)
                     Text(MacroPresentation.formatTrillionUSD(s.totalDebtTrillionUSD))
@@ -807,14 +809,14 @@ struct MacroDashboardView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text("近1年净增")
+                    Text(L10n.tr("近1年净增"))
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.textSecondary)
                     Text(MacroPresentation.formatTrillionUSD(s.debtChangeYoYTrillion, signed: true))
                         .font(.subheadline.bold())
                         .monospacedDigit()
                         .foregroundStyle(MacroPresentation.changeColor(for: s.debtChangeYoYTrillion))
-                    Text("截至 \(MacroDateParser.displayDay(report.asOf))")
+                    Text(L10n.fmt("截至 %@", MacroDateParser.displayDay(report.asOf)))
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.textFaint)
@@ -822,23 +824,23 @@ struct MacroDashboardView: View {
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                treasuryMetricCell("10Y 实际利率", MacroPresentation.formatPercent(s.yield10yRealPct), tint: GoldTheme.goldSoft)
-                treasuryMetricCell("10Y 名义利率", MacroPresentation.formatPercent(s.yield10yNominalPct))
-                treasuryMetricCell("2Y 名义利率", MacroPresentation.formatPercent(s.yield2yNominalPct))
-                treasuryMetricCell("10Y-2Y 利差", MacroPresentation.formatPercent(s.spread10y2yPct, signed: true), tint: MacroPresentation.changeColor(for: s.spread10y2yPct))
-                treasuryMetricCell("10Y 通胀预期", MacroPresentation.formatPercent(s.breakeven10yPct))
-                treasuryMetricCell("TLT 长债 ETF", s.tltPrice.map { "$" + $0.formatted(.number.precision(.fractionLength(2))) } ?? "—")
-                treasuryMetricCell("美债 / GDP", MacroPresentation.formatPercent(s.debtToGDPPct))
-                treasuryMetricCell("付息 / 财政收入", MacroPresentation.formatPercent(s.interestToRevenuePct))
-                treasuryMetricCell("财政压力指数", s.fiscalStressScore.map { String(format: "%.1f", $0) } ?? "—", tint: s.fiscalStressScore.map { MacroPresentation.temperatureColor(forScore: $0) } ?? GoldTheme.text)
+                treasuryMetricCell(L10n.tr("10Y 实际利率"), MacroPresentation.formatPercent(s.yield10yRealPct), tint: GoldTheme.goldSoft)
+                treasuryMetricCell(L10n.tr("10Y 名义利率"), MacroPresentation.formatPercent(s.yield10yNominalPct))
+                treasuryMetricCell(L10n.tr("2Y 名义利率"), MacroPresentation.formatPercent(s.yield2yNominalPct))
+                treasuryMetricCell(L10n.tr("10Y-2Y 利差"), MacroPresentation.formatPercent(s.spread10y2yPct, signed: true), tint: MacroPresentation.changeColor(for: s.spread10y2yPct))
+                treasuryMetricCell(L10n.tr("10Y 通胀预期"), MacroPresentation.formatPercent(s.breakeven10yPct))
+                treasuryMetricCell(L10n.tr("TLT 长债 ETF"), s.tltPrice.map { "$" + $0.formatted(.number.precision(.fractionLength(2))) } ?? "—")
+                treasuryMetricCell(L10n.tr("美债 / GDP"), MacroPresentation.formatPercent(s.debtToGDPPct))
+                treasuryMetricCell(L10n.tr("付息 / 财政收入"), MacroPresentation.formatPercent(s.interestToRevenuePct))
+                treasuryMetricCell(L10n.tr("财政压力指数"), s.fiscalStressScore.map { String(format: "%.1f", $0) } ?? "—", tint: s.fiscalStressScore.map { MacroPresentation.temperatureColor(forScore: $0) } ?? GoldTheme.text)
             }
 
-            if !s.goldImpactNote.isEmpty {
+            if !impactNote.isEmpty {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "sparkles")
                         .font(.caption)
                         .foregroundStyle(GoldTheme.gold)
-                    Text(s.goldImpactNote)
+                    Text(impactNote)
                         .font(.footnote)
                         .foregroundStyle(GoldTheme.text)
                         .lineSpacing(3)
@@ -878,7 +880,7 @@ struct MacroDashboardView: View {
         }
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("美债总规模走势（万亿美元）")
+                Text(L10n.tr("美债总规模走势（万亿美元）"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
@@ -891,7 +893,7 @@ struct MacroDashboardView: View {
             }
 
             if series.isEmpty {
-                Text("暂无美债总规模历史序列")
+                Text(L10n.tr("暂无美债总规模历史序列"))
                     .font(.footnote)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
@@ -912,9 +914,9 @@ struct MacroDashboardView: View {
                     ForEach(series) { point in
                         let plotY = debtContext.clampedPlotValue(point.value)
                         AreaMark(
-                            x: .value("日期", point.date),
-                            yStart: .value("基线", domain.lowerBound),
-                            yEnd: .value("规模", plotY)
+                            x: .value(L10n.tr("日期"), point.date),
+                            yStart: .value(L10n.tr("基线"), domain.lowerBound),
+                            yEnd: .value(L10n.tr("规模"), plotY)
                         )
                         .foregroundStyle(
                             LinearGradient(
@@ -926,26 +928,26 @@ struct MacroDashboardView: View {
                         .interpolationMethod(.monotone)
 
                         LineMark(
-                            x: .value("日期", point.date),
-                            y: .value("规模", plotY)
+                            x: .value(L10n.tr("日期"), point.date),
+                            y: .value(L10n.tr("规模"), plotY)
                         )
                         .foregroundStyle(GoldTheme.gold)
                         .lineStyle(StrokeStyle(lineWidth: 2))
                         .interpolationMethod(.monotone)
 
                         if series.count == 1 {
-                            PointMark(x: .value("日期", point.date), y: .value("规模", plotY))
+                            PointMark(x: .value(L10n.tr("日期"), point.date), y: .value(L10n.tr("规模"), plotY))
                                 .foregroundStyle(GoldTheme.gold)
                                 .symbolSize(44)
                         }
                     }
                     if let inspected {
-                        RuleMark(x: .value("选中", inspected.date))
+                        RuleMark(x: .value(L10n.tr("选中"), inspected.date))
                             .foregroundStyle(GoldTheme.goldSoft.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                         PointMark(
-                            x: .value("选中", inspected.date),
-                            y: .value("规模", debtContext.clampedPlotValue(inspected.value))
+                            x: .value(L10n.tr("选中"), inspected.date),
+                            y: .value(L10n.tr("规模"), debtContext.clampedPlotValue(inspected.value))
                         )
                         .foregroundStyle(GoldTheme.gold)
                         .symbolSize(44)
@@ -989,18 +991,18 @@ struct MacroDashboardView: View {
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("10Y 实际利率 vs 名义利率（%）")
+                Text(L10n.tr("10Y 实际利率 vs 名义利率（%）"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
                 if inspectedReal != nil || inspectedNominal != nil {
                     HStack(spacing: 6) {
                         if let r = inspectedReal {
-                            Text("实 \(MacroPresentation.formatPercent(r.value))")
+                            Text(L10n.fmt("实 %@", MacroPresentation.formatPercent(r.value)))
                                 .foregroundStyle(GoldTheme.gold)
                         }
                         if let n = inspectedNominal {
-                            Text("名 \(MacroPresentation.formatPercent(n.value))")
+                            Text(L10n.fmt("名 %@", MacroPresentation.formatPercent(n.value)))
                                 .foregroundStyle(GoldTheme.chartSecondary)
                         }
                     }
@@ -1008,14 +1010,14 @@ struct MacroDashboardView: View {
                     .monospacedDigit()
                 } else {
                     HStack(spacing: 10) {
-                        legendDot(color: GoldTheme.gold, label: "实际")
-                        legendDot(color: GoldTheme.chartSecondary, label: "名义")
+                        legendDot(color: GoldTheme.gold, label: L10n.tr("实际"))
+                        legendDot(color: GoldTheme.chartSecondary, label: L10n.tr("名义"))
                     }
                 }
             }
 
             if real.isEmpty && nominal.isEmpty {
-                Text("暂无 10Y 美债收益率历史数据（需配置 FRED 数据源）")
+                Text(L10n.tr("暂无 10Y 美债收益率历史数据（需配置 FRED 数据源）"))
                     .font(.footnote)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
@@ -1033,7 +1035,7 @@ struct MacroDashboardView: View {
 
                 Chart {
                     if yieldContext.effectiveScale == .linear {
-                        RuleMark(y: .value("零轴", 0))
+                        RuleMark(y: .value(L10n.tr("零轴"), 0))
                             .foregroundStyle(GoldTheme.textFaint.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     }
@@ -1041,16 +1043,16 @@ struct MacroDashboardView: View {
                     ForEach(nominal) { point in
                         let plotY = yieldContext.clampedPlotValue(point.value)
                         LineMark(
-                            x: .value("日期", point.date),
-                            y: .value("收益率", plotY),
-                            series: .value("类型", "名义")
+                            x: .value(L10n.tr("日期"), point.date),
+                            y: .value(L10n.tr("收益率"), plotY),
+                            series: .value(L10n.tr("类型"), L10n.tr("名义"))
                         )
                         .foregroundStyle(GoldTheme.chartSecondary)
                         .lineStyle(StrokeStyle(lineWidth: 1.8))
                         .interpolationMethod(.monotone)
 
                         if nominal.count == 1 {
-                            PointMark(x: .value("日期", point.date), y: .value("收益率", plotY))
+                            PointMark(x: .value(L10n.tr("日期"), point.date), y: .value(L10n.tr("收益率"), plotY))
                                 .foregroundStyle(GoldTheme.chartSecondary)
                                 .symbolSize(36)
                         }
@@ -1059,38 +1061,38 @@ struct MacroDashboardView: View {
                     ForEach(real) { point in
                         let plotY = yieldContext.clampedPlotValue(point.value)
                         LineMark(
-                            x: .value("日期", point.date),
-                            y: .value("收益率", plotY),
-                            series: .value("类型", "实际")
+                            x: .value(L10n.tr("日期"), point.date),
+                            y: .value(L10n.tr("收益率"), plotY),
+                            series: .value(L10n.tr("类型"), L10n.tr("实际"))
                         )
                         .foregroundStyle(GoldTheme.gold)
                         .lineStyle(StrokeStyle(lineWidth: 2.0))
                         .interpolationMethod(.monotone)
 
                         if real.count == 1 {
-                            PointMark(x: .value("日期", point.date), y: .value("收益率", plotY))
+                            PointMark(x: .value(L10n.tr("日期"), point.date), y: .value(L10n.tr("收益率"), plotY))
                                 .foregroundStyle(GoldTheme.gold)
                                 .symbolSize(36)
                         }
                     }
 
                     if let target = inspectedReal?.date ?? inspectedNominal?.date {
-                        RuleMark(x: .value("选中", target))
+                        RuleMark(x: .value(L10n.tr("选中"), target))
                             .foregroundStyle(GoldTheme.goldSoft.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     }
                     if let r = inspectedReal {
                         PointMark(
-                            x: .value("选中", r.date),
-                            y: .value("收益率", yieldContext.clampedPlotValue(r.value))
+                            x: .value(L10n.tr("选中"), r.date),
+                            y: .value(L10n.tr("收益率"), yieldContext.clampedPlotValue(r.value))
                         )
                         .foregroundStyle(GoldTheme.gold)
                         .symbolSize(36)
                     }
                     if let n = inspectedNominal {
                         PointMark(
-                            x: .value("选中", n.date),
-                            y: .value("收益率", yieldContext.clampedPlotValue(n.value))
+                            x: .value(L10n.tr("选中"), n.date),
+                            y: .value(L10n.tr("收益率"), yieldContext.clampedPlotValue(n.value))
                         )
                         .foregroundStyle(GoldTheme.chartSecondary)
                         .symbolSize(36)
@@ -1151,10 +1153,10 @@ struct MacroDashboardView: View {
 
         if model.isLoadingCatalog && model.catalog == nil {
             cotSectionCard
-            loadingCard("正在加载 6 大板块宏观指标…")
+            loadingCard(L10n.tr("正在加载 6 大板块宏观指标…"))
         } else if let error = model.catalogError, model.catalog == nil {
             cotSectionCard
-            errorCard(title: "宏观指标目录加载失败", message: error) {
+            errorCard(title: L10n.tr("宏观指标目录加载失败"), message: error) {
                 Task { await model.loadCatalog() }
             }
         } else if let catalog = model.catalog, !catalog.sections.isEmpty {
@@ -1165,20 +1167,21 @@ struct MacroDashboardView: View {
             }
 
             ForEach(model.filteredSections) { section in
+                let sectionDescription = section.localizedDescription
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
-                            Text(section.nameZh)
+                            Text(section.localizedName)
                                 .font(.headline)
                                 .foregroundStyle(GoldTheme.gold)
                             Spacer()
-                            Text("\(section.indicators.count) 项")
+                            Text(L10n.fmt("%lld 项", Int64(section.indicators.count)))
                                 .font(.caption2)
                                 .monospacedDigit()
                                 .foregroundStyle(GoldTheme.textFaint)
                         }
-                        if !section.description.isEmpty {
-                            Text(section.description)
+                        if !sectionDescription.isEmpty {
+                            Text(sectionDescription)
                                 .font(.caption)
                                 .foregroundStyle(GoldTheme.textSecondary)
                         }
@@ -1201,8 +1204,8 @@ struct MacroDashboardView: View {
             cotSectionCard
             emptyCard(
                 icon: "square.grid.2x2",
-                title: "宏观指标目录暂为空",
-                detail: "待后端完成元数据初始化后即可查看全部 6 大宏观板块与历史走势。"
+                title: L10n.tr("宏观指标目录暂为空"),
+                detail: L10n.tr("待后端完成元数据初始化后即可查看全部 6 大宏观板块与历史走势。")
             ) {
                 Task { await model.loadCatalog() }
             }
@@ -1212,9 +1215,9 @@ struct MacroDashboardView: View {
     private func sectionFilterBar(sections: [MacroIndicatorSection]) -> some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                sectionFilterChip(id: nil, title: "全部板块")
+                sectionFilterChip(id: nil, title: L10n.tr("全部板块"))
                 ForEach(sections) { section in
-                    sectionFilterChip(id: section.id, title: section.nameZh)
+                    sectionFilterChip(id: section.id, title: section.localizedName)
                 }
             }
             .padding(.vertical, 2)
@@ -1252,7 +1255,7 @@ struct MacroDashboardView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("CFTC 黄金持仓（COT）", systemImage: "chart.bar.doc.horizontal")
+                Label(L10n.tr("CFTC 黄金持仓（COT）"), systemImage: "chart.bar.doc.horizontal")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
                 Spacer()
@@ -1272,7 +1275,7 @@ struct MacroDashboardView: View {
             if model.isLoadingCot && points.isEmpty {
                 HStack(spacing: 10) {
                     ProgressView().tint(GoldTheme.gold)
-                    Text("正在加载 CFTC 持仓周报…")
+                    Text(L10n.tr("正在加载 CFTC 持仓周报…"))
                         .font(.footnote)
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
@@ -1282,7 +1285,7 @@ struct MacroDashboardView: View {
                     Task { await model.loadCot() }
                 }
             } else if points.isEmpty {
-                Text("暂无 CFTC 黄金期货持仓数据。")
+                Text(L10n.tr("暂无 CFTC 黄金期货持仓数据。"))
                     .font(.footnote)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 90)
@@ -1290,31 +1293,31 @@ struct MacroDashboardView: View {
                 if let activePoint {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
                         treasuryMetricCell(
-                            "管理基金净多",
+                            L10n.tr("管理基金净多"),
                             MacroPresentation.formatContracts(activePoint.mmNet, signed: true),
                             tint: MacroPresentation.changeColor(for: activePoint.mmNet)
                         )
                         treasuryMetricCell(
-                            "Swap 净头寸",
+                            L10n.tr("Swap 净头寸"),
                             MacroPresentation.formatContracts(activePoint.swapNet, signed: true),
                             tint: GoldTheme.chartSecondary
                         )
                         treasuryMetricCell(
-                            "总持仓量",
+                            L10n.tr("总持仓量"),
                             MacroPresentation.formatContracts(activePoint.openInterest),
                             tint: GoldTheme.goldSoft
                         )
                     }
 
                     HStack(spacing: 12) {
-                        Text("管理基金净多占比：\(MacroPresentation.formatPercent(activePoint.mmNetRatioPct))")
+                        Text(L10n.fmt("管理基金净多占比：%@", MacroPresentation.formatPercent(activePoint.mmNetRatioPct)))
                             .font(.caption2.weight(.medium))
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.textSecondary)
                         Spacer()
                         HStack(spacing: 10) {
-                            legendDot(color: GoldTheme.up, label: "基金净多")
-                            legendDot(color: GoldTheme.chartSecondary, label: "Swap 净头寸")
+                            legendDot(color: GoldTheme.up, label: L10n.tr("基金净多"))
+                            legendDot(color: GoldTheme.chartSecondary, label: L10n.tr("Swap 净头寸"))
                         }
                     }
                 }
@@ -1332,7 +1335,7 @@ struct MacroDashboardView: View {
 
                 Chart {
                     if cotContext.effectiveScale == .linear {
-                        RuleMark(y: .value("零轴", 0))
+                        RuleMark(y: .value(L10n.tr("零轴"), 0))
                             .foregroundStyle(GoldTheme.textFaint.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     }
@@ -1341,46 +1344,46 @@ struct MacroDashboardView: View {
                         let mmPlotY = cotContext.clampedPlotValue(point.mmNet)
                         let swapPlotY = cotContext.clampedPlotValue(point.swapNet)
                         LineMark(
-                            x: .value("日期", point.date),
-                            y: .value("头寸", mmPlotY),
-                            series: .value("阵营", "管理基金净多")
+                            x: .value(L10n.tr("日期"), point.date),
+                            y: .value(L10n.tr("头寸"), mmPlotY),
+                            series: .value(L10n.tr("阵营"), L10n.tr("管理基金净多"))
                         )
                         .foregroundStyle(GoldTheme.up)
                         .lineStyle(StrokeStyle(lineWidth: 2))
                         .interpolationMethod(.monotone)
 
                         LineMark(
-                            x: .value("日期", point.date),
-                            y: .value("头寸", swapPlotY),
-                            series: .value("阵营", "Swap 净头寸")
+                            x: .value(L10n.tr("日期"), point.date),
+                            y: .value(L10n.tr("头寸"), swapPlotY),
+                            series: .value(L10n.tr("阵营"), L10n.tr("Swap 净头寸"))
                         )
                         .foregroundStyle(GoldTheme.chartSecondary)
                         .lineStyle(StrokeStyle(lineWidth: 1.8))
                         .interpolationMethod(.monotone)
 
                         if points.count == 1 {
-                            PointMark(x: .value("日期", point.date), y: .value("头寸", mmPlotY))
+                            PointMark(x: .value(L10n.tr("日期"), point.date), y: .value(L10n.tr("头寸"), mmPlotY))
                                 .foregroundStyle(GoldTheme.up)
                                 .symbolSize(36)
-                            PointMark(x: .value("日期", point.date), y: .value("头寸", swapPlotY))
+                            PointMark(x: .value(L10n.tr("日期"), point.date), y: .value(L10n.tr("头寸"), swapPlotY))
                                 .foregroundStyle(GoldTheme.chartSecondary)
                                 .symbolSize(36)
                         }
                     }
 
                     if let inspected {
-                        RuleMark(x: .value("选中", inspected.date))
+                        RuleMark(x: .value(L10n.tr("选中"), inspected.date))
                             .foregroundStyle(GoldTheme.goldSoft.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                         PointMark(
-                            x: .value("选中", inspected.date),
-                            y: .value("头寸", cotContext.clampedPlotValue(inspected.mmNet))
+                            x: .value(L10n.tr("选中"), inspected.date),
+                            y: .value(L10n.tr("头寸"), cotContext.clampedPlotValue(inspected.mmNet))
                         )
                         .foregroundStyle(GoldTheme.up)
                         .symbolSize(36)
                         PointMark(
-                            x: .value("选中", inspected.date),
-                            y: .value("头寸", cotContext.clampedPlotValue(inspected.swapNet))
+                            x: .value(L10n.tr("选中"), inspected.date),
+                            y: .value(L10n.tr("头寸"), cotContext.clampedPlotValue(inspected.swapNet))
                         )
                         .foregroundStyle(GoldTheme.chartSecondary)
                         .symbolSize(36)
@@ -1488,7 +1491,7 @@ struct MacroDashboardView: View {
                 .font(.footnote)
                 .foregroundStyle(GoldTheme.textSecondary)
                 .multilineTextAlignment(.center)
-            Button("重新加载", action: onRetry)
+            Button(L10n.tr("重新加载"), action: onRetry)
                 .buttonStyle(GoldCapsuleStyle(isSelected: true))
                 .padding(.top, 2)
         }
@@ -1509,7 +1512,7 @@ struct MacroDashboardView: View {
                 .foregroundStyle(GoldTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
-            Button("刷新看看", action: onRefresh)
+            Button(L10n.tr("刷新看看"), action: onRefresh)
                 .buttonStyle(GoldCapsuleStyle(isSelected: false))
                 .padding(.top, 2)
         }
@@ -1523,7 +1526,7 @@ struct MacroDashboardView: View {
                 .font(.footnote)
                 .foregroundStyle(GoldTheme.textSecondary)
                 .multilineTextAlignment(.center)
-            Button("重试", action: onRetry)
+            Button(L10n.tr("重试"), action: onRetry)
                 .buttonStyle(GoldCapsuleStyle(isSelected: false))
         }
         .frame(maxWidth: .infinity, minHeight: 110)
@@ -1537,19 +1540,20 @@ struct MacroIndicatorRowCard: View {
     let onTap: () -> Void
 
     private var primaryChange: (label: String, value: Double?) {
-        if let d5 = summary.change5d { return ("5日", d5) }
-        if let d20 = summary.change20d { return ("20日", d20) }
-        if let d3m = summary.change3m { return ("3月", d3m) }
-        return ("同比", summary.changeYoY)
+        if let d5 = summary.change5d { return (L10n.tr("5日"), d5) }
+        if let d20 = summary.change20d { return (L10n.tr("20日"), d20) }
+        if let d3m = summary.change3m { return (L10n.tr("3月"), d3m) }
+        return (L10n.tr("同比"), summary.changeYoY)
     }
 
     var body: some View {
+        let noteText = summary.localizedPlainNote
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(summary.nameZh)
+                            Text(summary.localizedName)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(GoldTheme.text)
                                 .lineLimit(1)
@@ -1594,7 +1598,7 @@ struct MacroIndicatorRowCard: View {
 
                     if let pct = summary.percentile3y {
                         let tint = MacroPresentation.temperatureColor(forScore: pct)
-                        Text("3年分位 \(MacroPresentation.formatPercentile(pct))")
+                        Text(L10n.fmt("3年分位 %@", MacroPresentation.formatPercentile(pct)))
                             .font(.caption2.weight(.semibold))
                             .monospacedDigit()
                             .foregroundStyle(tint)
@@ -1608,8 +1612,8 @@ struct MacroIndicatorRowCard: View {
                         .foregroundStyle(GoldTheme.textFaint)
                 }
 
-                if !summary.plainNote.isEmpty {
-                    Text(summary.plainNote)
+                if !noteText.isEmpty {
+                    Text(noteText)
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                         .lineLimit(2)

@@ -7,6 +7,13 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
 
     var id: String { rawValue }
 
+    var localizedTitle: String {
+        switch self {
+        case .linear: L10n.tr("线性")
+        case .logarithmic: L10n.tr("对数")
+        }
+    }
+
     /// 只有当当前可视区间内至少有 2 个时间点且全部观测值有限并严格 > 0 时，才允许启用对数刻度。
     static func supportsLogScale(_ values: [Double], pointCount: Int? = nil) -> Bool {
         let effectiveCount = pointCount ?? values.count
@@ -116,14 +123,14 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
 
         case "trillion_usd", "usd_trillion":
             let digits = trillionAxisDigits(absVal: absVal, span: validSpan)
-            return "\(sign)$\(formatGrouped(absVal, digits: digits)) 万亿"
+            return L10n.fmt("%@ 万亿", "\(sign)$\(formatGrouped(absVal, digits: digits))")
 
         case "billion_usd", "usd_billion":
             if absVal >= 1_000 {
                 let tVal = absVal / 1_000
                 let tSpan = validSpan.map { $0 / 1_000 }
                 let digits = trillionAxisDigits(absVal: tVal, span: tSpan)
-                return "\(sign)$\(formatGrouped(tVal, digits: digits)) 万亿"
+                return L10n.fmt("%@ 万亿", "\(sign)$\(formatGrouped(tVal, digits: digits))")
             }
             let digits = compactMagnitudeDigits(absVal: absVal, span: validSpan)
             return "\(sign)$\(formatGrouped(absVal, digits: digits))B"
@@ -133,7 +140,7 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
                 let tVal = absVal / 1_000_000
                 let tSpan = validSpan.map { $0 / 1_000_000 }
                 let digits = trillionAxisDigits(absVal: tVal, span: tSpan)
-                return "\(sign)$\(formatGrouped(tVal, digits: digits)) 万亿"
+                return L10n.fmt("%@ 万亿", "\(sign)$\(formatGrouped(tVal, digits: digits))")
             }
             if absVal >= 1_000 {
                 let bVal = absVal / 1_000
@@ -152,16 +159,26 @@ enum MacroChartScale: String, CaseIterable, Identifiable, Sendable, Equatable, H
 
         case "tons", "tonnes":
             let digits = compactMagnitudeDigits(absVal: absVal, span: validSpan)
-            return "\(sign)\(formatGrouped(absVal, digits: digits)) 吨"
+            return L10n.fmt("%@ 吨", "\(sign)\(formatGrouped(absVal, digits: digits))")
 
         case "contracts":
-            if absVal >= 10_000 {
-                let wVal = absVal / 10_000
-                let wSpan = validSpan.map { $0 / 10_000 }
-                let digits = scaledCompactDigits(scaledSpan: wSpan)
-                return "\(sign)\(formatGrouped(wVal, digits: digits))万"
+            if MacroLocalization.usesTenThousandScale {
+                if absVal >= 10_000 {
+                    let wVal = absVal / 10_000
+                    let wSpan = validSpan.map { $0 / 10_000 }
+                    let digits = scaledCompactDigits(scaledSpan: wSpan)
+                    return L10n.fmt("%@万", "\(sign)\(formatGrouped(wVal, digits: digits))")
+                }
+                return "\(sign)\(formatGrouped(absVal, digits: 0))"
+            } else {
+                if absVal >= 1_000 {
+                    let kVal = absVal / 1_000
+                    let kSpan = validSpan.map { $0 / 1_000 }
+                    let digits = scaledCompactDigits(scaledSpan: kSpan)
+                    return "\(sign)\(formatGrouped(kVal, digits: digits))k"
+                }
+                return "\(sign)\(formatGrouped(absVal, digits: 0))"
             }
-            return "\(sign)\(formatGrouped(absVal, digits: 0))"
 
         default:
             return "\(sign)\(formatGenericMagnitude(absVal, span: validSpan))"
@@ -327,9 +344,9 @@ enum MacroChartLogScaleDisabledReason: Equatable, Sendable {
     var message: String {
         switch self {
         case .nonPositiveValues:
-            return "含零或负值，仅支持线性"
+            return L10n.tr("含零或负值，仅支持线性")
         case .insufficientPoints:
-            return "数据点不足，仅支持线性"
+            return L10n.tr("数据点不足，仅支持线性")
         }
     }
 }

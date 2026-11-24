@@ -87,11 +87,11 @@ struct MacroIndicatorDetailView: View {
                 Spacer(minLength: 4)
 
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text("近3年分位 \(MacroPresentation.formatPercentile(model.percentile3y))")
+                    Text(L10n.fmt("近3年分位 %@", MacroPresentation.formatPercentile(model.percentile3y)))
                         .font(.caption.weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.text)
-                    Text("最新日期 \(MacroDateParser.displayDay(model.latestDate))")
+                    Text(L10n.fmt("最新日期 %@", MacroDateParser.displayDay(model.latestDate)))
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.textSecondary)
@@ -114,7 +114,7 @@ struct MacroIndicatorDetailView: View {
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("历史走势")
+                Text(L10n.tr("历史走势"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
@@ -124,7 +124,7 @@ struct MacroIndicatorDetailView: View {
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.goldSoft)
                 } else if !model.observations.isEmpty {
-                    Text("\(model.observations.count) 个观测点")
+                    Text(L10n.fmt("%lld 个观测点", Int64(model.observations.count)))
                         .font(.caption)
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.textSecondary)
@@ -136,7 +136,7 @@ struct MacroIndicatorDetailView: View {
             if model.isLoading && model.observations.isEmpty {
                 HStack(spacing: 10) {
                     ProgressView().tint(GoldTheme.gold)
-                    Text("正在加载历史曲线…")
+                    Text(L10n.tr("正在加载历史曲线…"))
                         .font(.footnote)
                         .foregroundStyle(GoldTheme.textSecondary)
                 }
@@ -150,7 +150,7 @@ struct MacroIndicatorDetailView: View {
                         .font(.footnote)
                         .foregroundStyle(GoldTheme.textSecondary)
                         .multilineTextAlignment(.center)
-                    Button("重新加载") {
+                    Button(L10n.tr("重新加载")) {
                         Task { await model.load() }
                     }
                     .buttonStyle(GoldCapsuleStyle(isSelected: false))
@@ -161,11 +161,11 @@ struct MacroIndicatorDetailView: View {
                     Image(systemName: "chart.line.flattrend.xyaxis")
                         .font(.title2)
                         .foregroundStyle(GoldTheme.textFaint)
-                    Text("当前区间暂无历史观测数据")
+                    Text(L10n.tr("当前区间暂无历史观测数据"))
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(GoldTheme.textSecondary)
                     if let status = model.detail?.syncStatus {
-                        Text("同步状态：\(MacroPresentation.syncStatusLabel(status))")
+                        Text(L10n.fmt("同步状态：%@", MacroPresentation.syncStatusLabel(status)))
                             .font(.caption2)
                             .foregroundStyle(GoldTheme.textFaint)
                     }
@@ -187,12 +187,12 @@ struct MacroIndicatorDetailView: View {
 
                 if let low = model.periodMin, let high = model.periodMax {
                     HStack(spacing: 12) {
-                        Label("区间最高 \(MacroPresentation.formatValue(high.value, unit: model.displayUnit))", systemImage: "arrow.up.right")
+                        Label(L10n.fmt("区间最高 %@", MacroPresentation.formatValue(high.value, unit: model.displayUnit)), systemImage: "arrow.up.right")
                             .font(.caption2)
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.up)
                         Spacer()
-                        Label("区间最低 \(MacroPresentation.formatValue(low.value, unit: model.displayUnit))", systemImage: "arrow.down.right")
+                        Label(L10n.fmt("区间最低 %@", MacroPresentation.formatValue(low.value, unit: model.displayUnit)), systemImage: "arrow.down.right")
                             .font(.caption2)
                             .monospacedDigit()
                             .foregroundStyle(GoldTheme.down)
@@ -206,7 +206,7 @@ struct MacroIndicatorDetailView: View {
                         .font(.caption)
                         .foregroundStyle(GoldTheme.tempWarm)
                     Spacer()
-                    Button("重试") { Task { await model.load() } }
+                    Button(L10n.tr("重试")) { Task { await model.load() } }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(GoldTheme.gold)
                 }
@@ -243,9 +243,9 @@ struct MacroIndicatorDetailView: View {
             ForEach(points) { point in
                 let plotY = context.clampedPlotValue(point.value)
                 AreaMark(
-                    x: .value("日期", point.date),
-                    yStart: .value("基线", domain.lowerBound),
-                    yEnd: .value("数值", plotY)
+                    x: .value(L10n.tr("日期"), point.date),
+                    yStart: .value(L10n.tr("基线"), domain.lowerBound),
+                    yEnd: .value(L10n.tr("数值"), plotY)
                 )
                 .foregroundStyle(
                     LinearGradient(
@@ -257,8 +257,8 @@ struct MacroIndicatorDetailView: View {
                 .interpolationMethod(.monotone)
 
                 LineMark(
-                    x: .value("日期", point.date),
-                    y: .value("数值", plotY)
+                    x: .value(L10n.tr("日期"), point.date),
+                    y: .value(L10n.tr("数值"), plotY)
                 )
                 .foregroundStyle(GoldTheme.gold)
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
@@ -266,8 +266,8 @@ struct MacroIndicatorDetailView: View {
 
                 if points.count == 1 {
                     PointMark(
-                        x: .value("日期", point.date),
-                        y: .value("数值", plotY)
+                        x: .value(L10n.tr("日期"), point.date),
+                        y: .value(L10n.tr("数值"), plotY)
                     )
                     .foregroundStyle(GoldTheme.gold)
                     .symbolSize(48)
@@ -276,12 +276,12 @@ struct MacroIndicatorDetailView: View {
 
             if let selected = inspectedPoint {
                 let selectedY = context.clampedPlotValue(selected.value)
-                RuleMark(x: .value("选中日期", selected.date))
+                RuleMark(x: .value(L10n.tr("选中日期"), selected.date))
                     .foregroundStyle(GoldTheme.goldSoft.opacity(0.65))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                 PointMark(
-                    x: .value("选中日期", selected.date),
-                    y: .value("选中数值", selectedY)
+                    x: .value(L10n.tr("选中日期"), selected.date),
+                    y: .value(L10n.tr("选中数值"), selectedY)
                 )
                 .foregroundStyle(GoldTheme.gold)
                 .symbolSize(48)
@@ -319,14 +319,14 @@ struct MacroIndicatorDetailView: View {
 
     private var changeStatsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("近期变化")
+            Text(L10n.tr("近期变化"))
                 .font(.subheadline.bold())
                 .foregroundStyle(GoldTheme.text)
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                deltaTile("近5日", model.change5d)
-                deltaTile("近20日", model.change20d)
-                deltaTile("近3月", model.change3m)
-                deltaTile("同比", model.changeYoY)
+                deltaTile(L10n.tr("近5日"), model.change5d)
+                deltaTile(L10n.tr("近20日"), model.change20d)
+                deltaTile(L10n.tr("近3月"), model.change3m)
+                deltaTile(L10n.tr("同比"), model.changeYoY)
             }
         }
         .goldCard(padding: 16)
@@ -357,17 +357,17 @@ struct MacroIndicatorDetailView: View {
         let windows = model.detail?.percentiles ?? []
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("多窗口历史分位")
+                Text(L10n.tr("多窗口历史分位"))
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.text)
                 Spacer()
-                Text("0% 历史最低 · 100% 历史最高")
+                Text(L10n.tr("0% 历史最低 · 100% 历史最高"))
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textFaint)
             }
 
             if windows.isEmpty {
-                Text("暂无足够历史样本计算分位数")
+                Text(L10n.tr("暂无足够历史样本计算分位数"))
                     .font(.footnote)
                     .foregroundStyle(GoldTheme.textSecondary)
             } else {
@@ -378,7 +378,7 @@ struct MacroIndicatorDetailView: View {
                                 Text(item.windowTitle)
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(GoldTheme.text)
-                                Text("(\(item.observationCount) 点)")
+                                Text(L10n.fmt("(%lld 点)", Int64(item.observationCount)))
                                     .font(.caption2)
                                     .monospacedDigit()
                                     .foregroundStyle(GoldTheme.textFaint)
@@ -419,14 +419,14 @@ struct MacroIndicatorDetailView: View {
 
     private var interpretationCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("指标档案")
+            Text(L10n.tr("指标档案"))
                 .font(.subheadline.bold())
                 .foregroundStyle(GoldTheme.text)
 
-            metaRow("数据来源", MacroPresentation.sourceLabel(model.displaySource))
-            metaRow("更新频率", MacroPresentation.frequencyLabel(model.displayFrequency))
-            metaRow("计量单位", MacroPresentation.unitLabel(model.displayUnit))
-            metaRow("黄金逻辑", MacroPresentation.goldRelationLabel(model.displayGoldRelation))
+            metaRow(L10n.tr("数据来源"), MacroPresentation.sourceLabel(model.displaySource))
+            metaRow(L10n.tr("更新频率"), MacroPresentation.frequencyLabel(model.displayFrequency))
+            metaRow(L10n.tr("计量单位"), MacroPresentation.unitLabel(model.displayUnit))
+            metaRow(L10n.tr("黄金逻辑"), MacroPresentation.goldRelationLabel(model.displayGoldRelation))
         }
         .goldCard(padding: 16)
     }
@@ -438,10 +438,10 @@ struct MacroIndicatorDetailView: View {
                 .fill(MacroPresentation.syncStatusColor(for: status))
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
-                Text("同步状态：\(MacroPresentation.syncStatusLabel(status))")
+                Text(L10n.fmt("同步状态：%@", MacroPresentation.syncStatusLabel(status)))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(GoldTheme.text)
-                Text("最近同步：\(MacroDateParser.displaySyncedAt(model.detail?.lastSyncedAt))")
+                Text(L10n.fmt("最近同步：%@", MacroDateParser.displaySyncedAt(model.detail?.lastSyncedAt)))
                     .font(.caption2)
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.textSecondary)

@@ -15,15 +15,15 @@ struct BackendMacroService: MacroServicing, Sendable {
         var errorDescription: String? {
             switch self {
             case .invalidURL:
-                "宏观接口地址无效"
+                L10n.tr("宏观接口地址无效")
             case .badResponse:
-                "服务端响应异常，请稍后重试"
+                L10n.tr("服务端响应异常，请稍后重试")
             case .httpStatus(let code):
-                "服务暂时不可用（HTTP \(code)），请稍后重试"
+                L10n.fmt("服务暂时不可用（HTTP %lld），请稍后重试", Int64(code))
             case .envelope(_, let message):
-                message.isEmpty ? "宏观数据加载失败，请稍后重试" : message
+                message.isEmpty ? L10n.tr("宏观数据加载失败，请稍后重试") : message
             case .emptyData:
-                "服务端返回空数据"
+                L10n.tr("服务端返回空数据")
             }
         }
     }

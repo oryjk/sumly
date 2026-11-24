@@ -13,11 +13,11 @@ enum MacroTreasuryPressureLevel: String, Sendable, CaseIterable, Equatable, Hash
 
     var label: String {
         switch self {
-        case .low: "压力偏低"
-        case .moderate: "温和区间"
-        case .elevated: "压力偏高"
-        case .high: "高压区间"
-        case .extreme: "极高压力"
+        case .low: L10n.tr("压力偏低")
+        case .moderate: L10n.tr("温和区间")
+        case .elevated: L10n.tr("压力偏高")
+        case .high: L10n.tr("高压区间")
+        case .extreme: L10n.tr("极高压力")
         }
     }
 
@@ -34,15 +34,15 @@ enum MacroTreasuryPressureLevel: String, Sendable, CaseIterable, Equatable, Hash
     var guideDescription: String {
         switch self {
         case .low:
-            "债务率与付息负担处于偏低水平，财政空间相对充裕。"
+            L10n.tr("债务率与付息负担处于偏低水平，财政空间相对充裕。")
         case .moderate:
-            "偿债支出与赤字规模处于常规区间，美元长期信用压力相对缓和。"
+            L10n.tr("偿债支出与赤字规模处于常规区间，美元长期信用压力相对缓和。")
         case .elevated:
-            "债务扩张与付息占比逐步抬升，财政空间边际收窄，信用承压初显。"
+            L10n.tr("债务扩张与付息占比逐步抬升，财政空间边际收窄，信用承压初显。")
         case .high:
-            "付息支出占财政收入比与债务率处于高位，长期信用压力较显著。"
+            L10n.tr("付息支出占财政收入比与债务率处于高位，长期信用压力较显著。")
         case .extreme:
-            "债务规模、赤字率与付息负担同步处于历史极高位，长期信用压力凸显。"
+            L10n.tr("债务规模、赤字率与付息负担同步处于历史极高位，长期信用压力凸显。")
         }
     }
 
@@ -97,7 +97,7 @@ struct MacroTreasuryPressureModel: Sendable, Equatable {
     }
 
     var levelLabel: String {
-        level?.label ?? "待同步"
+        level?.label ?? L10n.tr("待同步")
     }
 
     static func make(from report: MacroTreasuryReport) -> MacroTreasuryPressureModel {
@@ -134,19 +134,19 @@ struct MacroTreasuryPressureModel: Sendable, Equatable {
         let drivers: [MacroTreasuryPressureDriver] = [
             MacroTreasuryPressureDriver(
                 id: "debt_to_gdp",
-                title: "债务 / GDP",
+                title: L10n.tr("债务 / GDP"),
                 valueText: MacroPresentation.formatPercent(debtToGDP),
                 hasValue: debtToGDP != nil
             ),
             MacroTreasuryPressureDriver(
                 id: "interest_to_revenue",
-                title: "付息 / 财政收入",
+                title: L10n.tr("付息 / 财政收入"),
                 valueText: MacroPresentation.formatPercent(interestToRevenue),
                 hasValue: interestToRevenue != nil
             ),
             MacroTreasuryPressureDriver(
                 id: "total_debt",
-                title: "国债总规模",
+                title: L10n.tr("国债总规模"),
                 valueText: MacroPresentation.formatTrillionUSD(totalDebt),
                 hasValue: totalDebt != nil
             )
@@ -163,19 +163,19 @@ struct MacroTreasuryPressureModel: Sendable, Equatable {
 
     static func objectivePlainNote(for level: MacroTreasuryPressureLevel?) -> String {
         guard let level else {
-            return "财政压力指数待同步，待美国财政部与美联储基础数据更新后自动计算呈现。"
+            return L10n.tr("财政压力指数待同步，待美国财政部与美联储基础数据更新后自动计算呈现。")
         }
         switch level {
         case .low:
-            return "当前美国财政压力处于低位，债务与付息负担相对可控，美元长期信用面较为平稳。"
+            return L10n.tr("当前美国财政压力处于低位，债务与付息负担相对可控，美元长期信用面较为平稳。")
         case .moderate:
-            return "当前美国财政压力处于温和区间，偿债支出与债务比率处于常规范围，长期信用压力相对缓和。"
+            return L10n.tr("当前美国财政压力处于温和区间，偿债支出与债务比率处于常规范围，长期信用压力相对缓和。")
         case .elevated:
-            return "当前美国财政压力处于偏高区间，债务扩张与付息支出逐步抬升，黄金的长期信用对冲属性受关注。"
+            return L10n.tr("当前美国财政压力处于偏高区间，债务扩张与付息支出逐步抬升，黄金的长期信用对冲属性受关注。")
         case .high:
-            return "当前美国财政压力处于高压区间，联邦偿债负担与美元信用承压较明显，反映黄金长期信用属性偏强。"
+            return L10n.tr("当前美国财政压力处于高压区间，联邦偿债负担与美元信用承压较明显，反映黄金长期信用属性偏强。")
         case .extreme:
-            return "当前美国财政压力处于极高区间，债务规模与利息支出占比均处历史高位，美元信用压力持续凸显。"
+            return L10n.tr("当前美国财政压力处于极高区间，债务规模与利息支出占比均处历史高位，美元信用压力持续凸显。")
         }
     }
 
@@ -200,11 +200,11 @@ struct MacroTreasuryPressureModel: Sendable, Equatable {
 }
 
 enum MacroTreasuryPressureGuideContent {
-    static let title = "美债财政压力表说明"
-    static let badgeText = "3 项财政因子 · 0~100"
-    static let methodology = "美债财政压力指数（0~100）由联邦付息支出占财政收入比、财政赤字占 GDP 比例与联邦债务占 GDP 比例非线性加权合成，用于客观刻画美国财政偿债负担与美元长期信用压力水平。"
-    static let goldCreditRelationTitle = "与黄金的长期信用关联"
-    static let goldCreditRelationNote = "黄金作为非主权实物资产，在历史上往往与美元长期财政信用周期呈反向波动。当联邦债务规模扩张且付息占比走高时，市场对法币长期购买力与偿债可持续性的关注度上升，本表仅做客观状态展示。"
+    static var title: String { L10n.tr("美债财政压力表说明") }
+    static var badgeText: String { L10n.tr("3 项财政因子 · 0~100") }
+    static var methodology: String { L10n.tr("美债财政压力指数（0~100）由联邦付息支出占财政收入比、财政赤字占 GDP 比例与联邦债务占 GDP 比例非线性加权合成，用于客观刻画美国财政偿债负担与美元长期信用压力水平。") }
+    static var goldCreditRelationTitle: String { L10n.tr("与黄金的长期信用关联") }
+    static var goldCreditRelationNote: String { L10n.tr("黄金作为非主权实物资产，在历史上往往与美元长期财政信用周期呈反向波动。当联邦债务规模扩张且付息占比走高时，市场对法币长期购买力与偿债可持续性的关注度上升，本表仅做客观状态展示。") }
 }
 
 // MARK: - 2. 美债财政压力表半圆弧纯几何模型
@@ -323,14 +323,18 @@ struct MacroPanoramaPillar: Sendable, Equatable, Identifiable {
     let validIndicatorCount: Int
     let totalIndicatorCount: Int
 
+    var localizedName: String {
+        MacroLocalization.sectionName(id: id, fallback: nameZh)
+    }
+
     var shortStatusLabel: String {
-        guard let level else { return "待同步" }
+        guard let level else { return L10n.tr("待同步") }
         switch level {
-        case .freezing: return "极冷"
-        case .cool: return "偏冷"
-        case .neutral: return "中性"
-        case .warm: return "偏热"
-        case .hot: return "极热"
+        case .freezing: return L10n.tr("极冷")
+        case .cool: return L10n.tr("偏冷")
+        case .neutral: return L10n.tr("中性")
+        case .warm: return L10n.tr("偏热")
+        case .hot: return L10n.tr("极热")
         }
     }
 
@@ -360,14 +364,14 @@ struct MacroPanoramaThermometerModel: Sendable, Equatable {
     var hasAnyData: Bool { hasScore || !pillars.isEmpty }
 
     var levelLabel: String {
-        level?.defaultLabel ?? "待同步"
+        level?.defaultLabel ?? L10n.tr("待同步")
     }
 
     var sourceBadgeText: String {
         switch scoreSource {
-        case .macroRegime: "长期宏观同源"
-        case .catalogFallback: "板块分位合成"
-        case .unavailable: "待数据同步"
+        case .macroRegime: L10n.tr("长期宏观同源")
+        case .catalogFallback: L10n.tr("板块分位合成")
+        case .unavailable: L10n.tr("待数据同步")
         }
     }
 
@@ -517,50 +521,50 @@ struct MacroPanoramaThermometerModel: Sendable, Equatable {
     ) -> String {
         if scoredPillarCount > 0 {
             if hotCount > 0 && coldCount > 0 {
-                return "当前 \(scoredPillarCount) 大宏观板块中，\(hotCount) 个处于偏热及以上区间、\(coldCount) 个偏冷，板块冷热呈现结构分化。"
+                return L10n.fmt("当前 %lld 大宏观板块中，%lld 个处于偏热及以上区间、%lld 个偏冷，板块冷热呈现结构分化。", Int64(scoredPillarCount), Int64(hotCount), Int64(coldCount))
             }
             if hotCount > 0 {
                 if neutralCount > 0 {
-                    return "当前 \(scoredPillarCount) 大宏观板块中，\(hotCount) 个处于偏热及以上区间、\(neutralCount) 个中性，整体宏观热度偏高。"
+                    return L10n.fmt("当前 %lld 大宏观板块中，%lld 个处于偏热及以上区间、%lld 个中性，整体宏观热度偏高。", Int64(scoredPillarCount), Int64(hotCount), Int64(neutralCount))
                 }
-                return "当前 \(scoredPillarCount) 大宏观板块均处于偏热及以上区间，整体宏观热度处于高位。"
+                return L10n.fmt("当前 %lld 大宏观板块均处于偏热及以上区间，整体宏观热度处于高位。", Int64(scoredPillarCount))
             }
             if coldCount > 0 {
                 if neutralCount > 0 {
-                    return "当前 \(scoredPillarCount) 大宏观板块中，\(coldCount) 个处于偏冷及以下区间、\(neutralCount) 个中性，整体宏观热度偏低。"
+                    return L10n.fmt("当前 %lld 大宏观板块中，%lld 个处于偏冷及以下区间、%lld 个中性，整体宏观热度偏低。", Int64(scoredPillarCount), Int64(coldCount), Int64(neutralCount))
                 }
-                return "当前 \(scoredPillarCount) 大宏观板块均处于偏冷及以下区间，整体宏观热度处于低位。"
+                return L10n.fmt("当前 %lld 大宏观板块均处于偏冷及以下区间，整体宏观热度处于低位。", Int64(scoredPillarCount))
             }
-            return "当前 \(scoredPillarCount) 大宏观板块均处于中性区间，各项宏观指标分位整体平稳。"
+            return L10n.fmt("当前 %lld 大宏观板块均处于中性区间，各项宏观指标分位整体平稳。", Int64(scoredPillarCount))
         }
 
         if let level {
-            return "宏观综合温度处于\(level.defaultLabel)，各宏观板块指标分位同步完成后将展示分项热度。"
+            return L10n.fmt("宏观综合温度处于%@，各宏观板块指标分位同步完成后将展示分项热度。", level.defaultLabel)
         }
 
-        return "宏观全景指标正在同步中，待数据就绪后自动计算综合温度与各板块分位。"
+        return L10n.tr("宏观全景指标正在同步中，待数据就绪后自动计算综合温度与各板块分位。")
     }
 }
 
 enum MacroPanoramaThermometerGuideContent {
-    static let title = "宏观全景温度计说明"
-    static let badgeText = "6 大板块 · 3 年分位 · 0°~100°"
-    static let methodology = "宏观全景温度计（0°~100°）优先与首页「长期 · 宏观背景」读数保持同源，综合刻画美债财政、利率水平、美元流动性、通胀增长、跨资产比价及资金情绪等长期宏观环境；若主温度接口尚未返回，则自动以各板块有效指标的折算分位均值作为无缝兜底。"
-    static let pillarRuleTitle = "6 大板块折算与联动说明"
-    static let pillarRuleNote = "每个板块基于旗下有效指标的近 3 年历史分位，按与黄金的同/反向统计关系折算均值（同向取原分位，反向取 100 − 分位；若板块全为中性指标则取原始均值）。点击任意板块条即可筛选下方对应指标卡片，再次点击取消筛选。"
+    static var title: String { L10n.tr("宏观全景温度计说明") }
+    static var badgeText: String { L10n.tr("6 大板块 · 3 年分位 · 0°~100°") }
+    static var methodology: String { L10n.tr("宏观全景温度计（0°~100°）优先与首页「长期 · 宏观背景」读数保持同源，综合刻画美债财政、利率水平、美元流动性、通胀增长、跨资产比价及资金情绪等长期宏观环境；若主温度接口尚未返回，则自动以各板块有效指标的折算分位均值作为无缝兜底。") }
+    static var pillarRuleTitle: String { L10n.tr("6 大板块折算与联动说明") }
+    static var pillarRuleNote: String { L10n.tr("每个板块基于旗下有效指标的近 3 年历史分位，按与黄金的同/反向统计关系折算均值（同向取原分位，反向取 100 − 分位；若板块全为中性指标则取原始均值）。点击任意板块条即可筛选下方对应指标卡片，再次点击取消筛选。") }
 
     static func levelDescription(for level: MacroTemperatureLevel) -> String {
         switch level {
         case .freezing:
-            "多数宏观指标折算分位处于近 3 年极低区间，长期宏观支撑偏弱"
+            L10n.tr("多数宏观指标折算分位处于近 3 年极低区间，长期宏观支撑偏弱")
         case .cool:
-            "宏观指标折算分位处于近 3 年偏低区间，整体宏观热度偏冷"
+            L10n.tr("宏观指标折算分位处于近 3 年偏低区间，整体宏观热度偏冷")
         case .neutral:
-            "各宏观板块分位力量相对均衡，宏观环境处于中性常态"
+            L10n.tr("各宏观板块分位力量相对均衡，宏观环境处于中性常态")
         case .warm:
-            "多项宏观指标折算分位走高，整体宏观热度偏强"
+            L10n.tr("多项宏观指标折算分位走高，整体宏观热度偏强")
         case .hot:
-            "多数宏观板块分位同步处于近 3 年高位，长期宏观驱动集中凸显"
+            L10n.tr("多数宏观板块分位同步处于近 3 年高位，长期宏观驱动集中凸显")
         }
     }
 }
@@ -662,7 +666,7 @@ struct MacroTreasuryPressureGauge: View {
                         .foregroundStyle(GoldTheme.textFaint)
                 }
 
-                Text(level?.label ?? "待同步")
+                Text(level?.label ?? L10n.tr("待同步"))
                     .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                     .foregroundStyle(accentColor)
                     .padding(.horizontal, 10)
@@ -672,12 +676,12 @@ struct MacroTreasuryPressureGauge: View {
             .position(x: g.center.x, y: g.center.y + 4)
 
             // 左右端点刻度标注
-            Text("0 低压")
+            Text(L10n.tr("0 低压"))
                 .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(GoldTheme.textFaint)
                 .position(x: g.startPoint.x + 14, y: g.startPoint.y + 18)
 
-            Text("100 极高")
+            Text(L10n.tr("100 极高"))
                 .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(GoldTheme.textFaint)
                 .position(x: g.endPoint.x - 16, y: g.endPoint.y + 18)
@@ -687,8 +691,8 @@ struct MacroTreasuryPressureGauge: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             g.hasScore
-                ? "美债财政压力指数 \(String(format: "%.1f", g.clampedScore)) 分，\(level?.label ?? "")"
-                : "美债财政压力指数待同步"
+                ? L10n.fmt("美债财政压力指数 %@ 分，%@", String(format: "%.1f", g.clampedScore), level?.label ?? "")
+                : L10n.tr("美债财政压力指数待同步")
         )
     }
 
@@ -733,11 +737,11 @@ struct MacroTreasuryPressureCard: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(GoldTheme.gold)
 
-                        Text("美债财政压力表")
+                        Text(L10n.tr("美债财政压力表"))
                             .font(.headline)
                             .foregroundStyle(GoldTheme.text)
 
-                        Text("财政信用压力")
+                        Text(L10n.tr("财政信用压力"))
                             .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                             .foregroundStyle(model.level?.color ?? GoldTheme.textSecondary)
                             .padding(.horizontal, 7)
@@ -750,7 +754,7 @@ struct MacroTreasuryPressureCard: View {
                             .fixedSize(horizontal: true, vertical: false)
                     }
 
-                    Text("截至 \(MacroDateParser.displayDay(asOf)) · 综合付息 / 赤字 / 债务率")
+                    Text(L10n.fmt("截至 %@ · 综合付息 / 赤字 / 债务率", MacroDateParser.displayDay(asOf)))
                         .font(.caption2)
                         .monospacedDigit()
                         .foregroundStyle(GoldTheme.textSecondary)
@@ -766,7 +770,7 @@ struct MacroTreasuryPressureCard: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("查看美债财政压力表说明")
+                .accessibilityLabel(L10n.tr("查看美债财政压力表说明"))
                 .accessibilityIdentifier("macro.treasury.pressureGuideButton")
             }
 
@@ -844,13 +848,13 @@ struct MacroPanoramaThermometerCard: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
-                        Text("6 大宏观板块 · 近 3 年分位")
+                        Text(L10n.tr("6 大宏观板块 · 近 3 年分位"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(GoldTheme.textSecondary)
                         Spacer(minLength: 4)
                         if selectedSectionID != nil {
                             Button(action: onClearSelection) {
-                                Text("查看全部")
+                                Text(L10n.tr("查看全部"))
                                     .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                                     .foregroundStyle(GoldTheme.onGold)
                                     .padding(.horizontal, 8)
@@ -860,7 +864,7 @@ struct MacroPanoramaThermometerCard: View {
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("macro.panorama.clearFilterButton")
                         } else {
-                            Text("点击板块筛选下方指标")
+                            Text(L10n.tr("点击板块筛选下方指标"))
                                 .font(.caption2)
                                 .foregroundStyle(GoldTheme.textFaint)
                         }
@@ -881,7 +885,7 @@ struct MacroPanoramaThermometerCard: View {
 
     private var headerRow: some View {
         HStack(spacing: 6) {
-            Label("宏观全景温度计", systemImage: "globe.americas.fill")
+            Label(L10n.tr("宏观全景温度计"), systemImage: "globe.americas.fill")
                 .font(.subheadline.bold())
                 .foregroundStyle(GoldTheme.gold)
 
@@ -904,7 +908,7 @@ struct MacroPanoramaThermometerCard: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("查看宏观全景温度计说明")
+            .accessibilityLabel(L10n.tr("查看宏观全景温度计说明"))
             .accessibilityIdentifier("macro.panorama.guideButton")
         }
     }
@@ -927,7 +931,7 @@ struct MacroPanoramaThermometerCard: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 6) {
-                    Text("综合读数")
+                    Text(L10n.tr("综合读数"))
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundStyle(GoldTheme.textSecondary)
                         .padding(.horizontal, 6)
@@ -950,9 +954,9 @@ struct MacroPanoramaThermometerCard: View {
 
                 if model.hotPillarCount + model.neutralPillarCount + model.coldPillarCount > 0 {
                     HStack(spacing: 8) {
-                        pillarCountChip("偏热 \(model.hotPillarCount)", tint: GoldTheme.tempWarm)
-                        pillarCountChip("中性 \(model.neutralPillarCount)", tint: GoldTheme.tempNeutral)
-                        pillarCountChip("偏冷 \(model.coldPillarCount)", tint: GoldTheme.tempCool)
+                        pillarCountChip(L10n.fmt("偏热 %lld", Int64(model.hotPillarCount)), tint: GoldTheme.tempWarm)
+                        pillarCountChip(L10n.fmt("中性 %lld", Int64(model.neutralPillarCount)), tint: GoldTheme.tempNeutral)
+                        pillarCountChip(L10n.fmt("偏冷 %lld", Int64(model.coldPillarCount)), tint: GoldTheme.tempCool)
                     }
                 }
             }
@@ -976,7 +980,7 @@ struct MacroPanoramaThermometerCard: View {
                 Text("—")
                     .font(.system(size: 23, weight: .bold, design: .rounded))
                     .foregroundStyle(GoldTheme.textSecondary)
-                Text("待同步")
+                Text(L10n.tr("待同步"))
                     .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                     .foregroundStyle(GoldTheme.textFaint)
                     .padding(.horizontal, 6)
@@ -986,7 +990,7 @@ struct MacroPanoramaThermometerCard: View {
             .offset(y: 4)
         }
         .frame(width: g.size, height: g.size)
-        .accessibilityLabel("宏观全景温度待同步")
+        .accessibilityLabel(L10n.tr("宏观全景温度待同步"))
     }
 
     private func pillarCountChip(_ text: String, tint: Color) -> some View {
@@ -1010,7 +1014,7 @@ struct MacroPanoramaThermometerCard: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(pillar.nameZh)
+                    Text(pillar.localizedName)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(isSelected ? GoldTheme.goldSoft : GoldTheme.text)
                         .lineLimit(1)
@@ -1055,7 +1059,7 @@ struct MacroPanoramaThermometerCard: View {
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundStyle(tint)
                     Spacer(minLength: 2)
-                    Text(isSelected ? "已筛选" : "\(pillar.validIndicatorCount) 项")
+                    Text(isSelected ? L10n.tr("已筛选") : L10n.fmt("%lld 项", Int64(pillar.validIndicatorCount)))
                         .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
                         .monospacedDigit()
                         .foregroundStyle(isSelected ? GoldTheme.gold : GoldTheme.textFaint)
@@ -1095,7 +1099,7 @@ struct MacroTreasuryPressureGuideSheet: View {
                 VStack(alignment: .leading, spacing: 11) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
-                            Label("计算方法论", systemImage: "slider.horizontal.3")
+                            Label(L10n.tr("计算方法论"), systemImage: "slider.horizontal.3")
                                 .font(.subheadline.bold())
                                 .foregroundStyle(GoldTheme.gold)
                             Spacer(minLength: 4)
@@ -1131,11 +1135,11 @@ struct MacroTreasuryPressureGuideSheet: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Label("压力五档区间", systemImage: "gauge.with.needle")
+                            Label(L10n.tr("压力五档区间"), systemImage: "gauge.with.needle")
                                 .font(.subheadline.bold())
                                 .foregroundStyle(GoldTheme.gold)
                             Spacer()
-                            Text("仅反映财政偿债与信用压力")
+                            Text(L10n.tr("仅反映财政偿债与信用压力"))
                                 .font(.caption2)
                                 .foregroundStyle(GoldTheme.textFaint)
                         }
@@ -1161,7 +1165,7 @@ struct MacroTreasuryPressureGuideSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                    Button(L10n.tr("完成")) {
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -1200,7 +1204,7 @@ struct MacroTreasuryPressureGuideSheet: View {
                 Spacer(minLength: 4)
 
                 if isCurrent {
-                    Text("当前区间")
+                    Text(L10n.tr("当前区间"))
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundStyle(GoldTheme.onGold)
                         .padding(.horizontal, 7)
@@ -1242,7 +1246,7 @@ struct MacroPanoramaThermometerGuideSheet: View {
                 VStack(alignment: .leading, spacing: 11) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
-                            Label("计算方法论", systemImage: "slider.horizontal.3")
+                            Label(L10n.tr("计算方法论"), systemImage: "slider.horizontal.3")
                                 .font(.subheadline.bold())
                                 .foregroundStyle(GoldTheme.gold)
                             Spacer(minLength: 4)
@@ -1278,11 +1282,11 @@ struct MacroPanoramaThermometerGuideSheet: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Label("宏观温度五档区间", systemImage: "thermometer.medium")
+                            Label(L10n.tr("宏观温度五档区间"), systemImage: "thermometer.medium")
                                 .font(.subheadline.bold())
                                 .foregroundStyle(GoldTheme.gold)
                             Spacer()
-                            Text("仅反映宏观指标历史分位")
+                            Text(L10n.tr("仅反映宏观指标历史分位"))
                                 .font(.caption2)
                                 .foregroundStyle(GoldTheme.textFaint)
                         }
@@ -1308,7 +1312,7 @@ struct MacroPanoramaThermometerGuideSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                    Button(L10n.tr("完成")) {
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -1347,7 +1351,7 @@ struct MacroPanoramaThermometerGuideSheet: View {
                 Spacer(minLength: 4)
 
                 if isCurrent {
-                    Text("当前区间")
+                    Text(L10n.tr("当前区间"))
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundStyle(GoldTheme.onGold)
                         .padding(.horizontal, 7)
@@ -1377,7 +1381,7 @@ struct MacroPanoramaThermometerGuideSheet: View {
 
 private func disclaimerFooter(_ text: String) -> some View {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    let resolved = trimmed.isEmpty ? MacroPresentation.defaultDisclaimer : trimmed
+    let resolved = (MacroLocalization.isChinese && !trimmed.isEmpty) ? trimmed : MacroPresentation.defaultDisclaimer
     return HStack(alignment: .top, spacing: 6) {
         Image(systemName: "info.circle")
             .font(.caption2)

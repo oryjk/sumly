@@ -50,7 +50,7 @@ struct MacroChartScaleBar: View {
                     Text("·")
                         .foregroundStyle(GoldTheme.textFaint)
                 }
-                Text("对数刻度 · 等比观察趋势")
+                Text(L10n.tr("对数刻度 · 等比观察趋势"))
                     .foregroundStyle(GoldTheme.goldSoft)
             }
             .font(.caption2)
@@ -63,7 +63,7 @@ struct MacroChartScaleBar: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         } else {
-            Text("纵轴刻度")
+            Text(L10n.tr("纵轴刻度"))
                 .font(.caption2)
                 .foregroundStyle(GoldTheme.textSecondary)
                 .lineLimit(1)
@@ -78,7 +78,7 @@ struct MacroChartScaleBar: View {
                 Button {
                     onSelect(scale)
                 } label: {
-                    Text(scale.rawValue)
+                    Text(scale.localizedTitle)
                         .font(.system(size: 11.5, weight: isSelected ? .bold : .semibold, design: .rounded))
                         .padding(.horizontal, 10)
                         .frame(minWidth: 42, minHeight: 26)
@@ -95,7 +95,7 @@ struct MacroChartScaleBar: View {
                 .buttonStyle(.plain)
                 .disabled(isDisabled)
                 .opacity(isDisabled ? 0.65 : 1)
-                .accessibilityLabel(scale.rawValue + "纵轴刻度")
+                .accessibilityLabel(L10n.fmt("%@纵轴刻度", scale.localizedTitle))
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
                 .accessibilityHint(isDisabled ? (context.disabledReason?.message ?? "") : "")
                 .accessibilityIdentifier("\(accessibilityPrefix).scale.\(scale == .linear ? "linear" : "log")")

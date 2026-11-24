@@ -13,6 +13,7 @@ struct MacroTemperatureGuideSheet: View {
     @State private var copyResetTask: Task<Void, Never>?
 
     private var resolvedDisclaimer: String {
+        guard MacroLocalization.isChinese else { return MacroPresentation.defaultDisclaimer }
         let trimmed = disclaimer.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? MacroPresentation.defaultDisclaimer : trimmed
     }
@@ -42,7 +43,7 @@ struct MacroTemperatureGuideSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
+                    Button(L10n.tr("完成")) {
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -65,25 +66,25 @@ struct MacroTemperatureGuideSheet: View {
 
     private var dualHorizonOverviewCard: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Label("两套指标如何区分", systemImage: "rectangle.split.2x1")
+            Label(L10n.tr("两套指标如何区分"), systemImage: "rectangle.split.2x1")
                 .font(.subheadline.bold())
                 .foregroundStyle(GoldTheme.gold)
 
             VStack(alignment: .leading, spacing: 7) {
                 horizonGuideRow(
                     dotColor: GoldTheme.tempCool,
-                    title: "短期 · 交易热度（0~100°）",
-                    detail: "衡量近期交易冷热、趋势偏离与市场拥挤度。"
+                    title: L10n.tr("短期 · 交易热度（0~100°）"),
+                    detail: L10n.tr("衡量近期交易冷热、趋势偏离与市场拥挤度。")
                 )
 
                 horizonGuideRow(
                     dotColor: GoldTheme.gold,
-                    title: "长期 · 宏观背景（0~100分）",
-                    detail: "衡量美债规模、财政压力、央行购金与实际利率等大环境强弱。"
+                    title: L10n.tr("长期 · 宏观背景（0~100分）"),
+                    detail: L10n.tr("衡量美债规模、财政压力、央行购金与实际利率等大环境强弱。")
                 )
             }
 
-            Text("两者衡量不同时间尺度，走势可能同向也可能错位。")
+            Text(L10n.tr("两者衡量不同时间尺度，走势可能同向也可能错位。"))
                 .font(.caption2)
                 .foregroundStyle(GoldTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -120,11 +121,11 @@ struct MacroTemperatureGuideSheet: View {
     private var methodologyCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Label("计算方法论", systemImage: "slider.horizontal.3")
+                Label(L10n.tr("计算方法论"), systemImage: "slider.horizontal.3")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
                 Spacer(minLength: 4)
-                Text("5 维度 · 3 年分位 · 0°~100°")
+                Text(L10n.tr("5 维度 · 3 年分位 · 0°~100°"))
                     .font(.caption2.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.goldSoft)
@@ -147,11 +148,11 @@ struct MacroTemperatureGuideSheet: View {
     private var levelsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("短期温度五档区间", systemImage: "thermometer.medium")
+                Label(L10n.tr("短期温度五档区间"), systemImage: "thermometer.medium")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
                 Spacer()
-                Text("仅反映市场冷热与拥挤度")
+                Text(L10n.tr("仅反映市场冷热与拥挤度"))
                     .font(.caption2)
                     .foregroundStyle(GoldTheme.textFaint)
             }
@@ -168,9 +169,8 @@ struct MacroTemperatureGuideSheet: View {
     private func levelRow(_ item: MacroTemperatureGuideLevel) -> some View {
         let tint = MacroPresentation.temperatureColor(for: item.level)
         let isCurrent = currentLevel == item.level
-        let labelText = item.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? item.level.defaultLabel
-            : item.label
+        let labelText = MacroLocalization.guideLevelLabel(for: item)
+        let descriptionText = MacroLocalization.guideLevelDescription(for: item)
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
@@ -195,7 +195,7 @@ struct MacroTemperatureGuideSheet: View {
                 Spacer(minLength: 4)
 
                 if isCurrent {
-                    Text("当前区间")
+                    Text(L10n.tr("当前区间"))
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundStyle(GoldTheme.onGold)
                         .padding(.horizontal, 7)
@@ -204,8 +204,8 @@ struct MacroTemperatureGuideSheet: View {
                 }
             }
 
-            if !item.description.isEmpty {
-                Text(item.description)
+            if !descriptionText.isEmpty {
+                Text(descriptionText)
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
                     .lineSpacing(2)
@@ -231,7 +231,7 @@ struct MacroTemperatureGuideSheet: View {
         let accountNote = help.trimmedOfficialAccountNote
 
         return VStack(alignment: .leading, spacing: 8) {
-            Label("宏观数据笔记同步", systemImage: "doc.text.magnifyingglass")
+            Label(L10n.tr("宏观数据笔记同步"), systemImage: "doc.text.magnifyingglass")
                 .font(.subheadline.bold())
                 .foregroundStyle(GoldTheme.gold)
 
@@ -245,7 +245,7 @@ struct MacroTemperatureGuideSheet: View {
 
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("微信公众号")
+                    Text(L10n.tr("微信公众号"))
                         .font(.caption2)
                         .foregroundStyle(GoldTheme.textFaint)
                     Text(accountName)
@@ -262,7 +262,7 @@ struct MacroTemperatureGuideSheet: View {
                     HStack(spacing: 4) {
                         Image(systemName: copiedOfficialAccount ? "checkmark" : "doc.on.doc")
                             .font(.caption2.weight(.semibold))
-                        Text(copiedOfficialAccount ? "已复制" : "复制公众号名称")
+                        Text(copiedOfficialAccount ? L10n.tr("已复制") : L10n.tr("复制公众号名称"))
                             .font(.caption.weight(.semibold))
                     }
                     .foregroundStyle(copiedOfficialAccount ? GoldTheme.down : GoldTheme.onGold)

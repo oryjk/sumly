@@ -140,20 +140,21 @@ struct GoldTemperatureGauge: View {
                 .allowsHitTesting(false)
 
             // 中心温度读数
+            let resolvedLabel = MacroLocalization.temperatureLevelLabel(level: level, fallback: levelLabel)
             VStack(spacing: compact ? 2 : 4) {
                 Text(String(format: "%.1f°", g.clampedScore))
                     .font(.system(size: compact ? 23 : 38, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(GoldTheme.text)
                     .contentTransition(.numericText())
-                Text(levelLabel.isEmpty ? level.defaultLabel : levelLabel)
+                Text(resolvedLabel)
                     .font(.system(size: compact ? 10.5 : 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(accentColor)
                     .padding(.horizontal, compact ? 6 : 10)
                     .padding(.vertical, compact ? 2 : 4)
                     .background(accentColor.opacity(0.14), in: GoldTheme.capsuleShape)
                 if !compact {
-                    Text("0° 极冷  ·  100° 极热")
+                    Text(L10n.tr("0° 极冷  ·  100° 极热"))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(GoldTheme.textFaint)
                         .padding(.top, 2)
@@ -163,7 +164,9 @@ struct GoldTemperatureGauge: View {
         }
         .frame(width: g.size, height: g.size)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("黄金温度 \(String(format: "%.1f", g.clampedScore)) 度，\(levelLabel.isEmpty ? level.defaultLabel : levelLabel)")
+        .accessibilityLabel(
+            L10n.fmt("黄金温度 %@ 度，%@", String(format: "%.1f", g.clampedScore), MacroLocalization.temperatureLevelLabel(level: level, fallback: levelLabel))
+        )
     }
 }
 
@@ -218,7 +221,7 @@ struct GoldTemperatureCard: View {
     private var headerRow: some View {
         HStack(spacing: 6) {
             Button(action: onOpenDashboard) {
-                Label("黄金温度计", systemImage: "thermometer.medium")
+                Label(L10n.tr("黄金温度计"), systemImage: "thermometer.medium")
                     .font(.subheadline.bold())
                     .foregroundStyle(GoldTheme.gold)
             }
@@ -234,14 +237,14 @@ struct GoldTemperatureCard: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("查看黄金温度计说明")
+            .accessibilityLabel(L10n.tr("查看黄金温度计说明"))
             .accessibilityIdentifier("home.macroTemperatureGuideButton")
 
             Spacer(minLength: 4)
 
             Button(action: onOpenDashboard) {
                 HStack(spacing: 3) {
-                    Text("宏观与美债")
+                    Text(L10n.tr("宏观与美债"))
                         .font(.caption.weight(.medium))
                     Image(systemName: "chevron.right")
                         .font(.caption2.weight(.bold))
@@ -249,7 +252,7 @@ struct GoldTemperatureCard: View {
                 .foregroundStyle(GoldTheme.textSecondary)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("进入黄金温度与美国国债专题页")
+            .accessibilityLabel(L10n.tr("进入黄金温度与美国国债专题页"))
         }
     }
 
@@ -258,10 +261,10 @@ struct GoldTemperatureCard: View {
             ProgressView()
                 .tint(GoldTheme.gold)
             VStack(alignment: .leading, spacing: 3) {
-                Text("正在同步黄金温度与美债数据…")
+                Text(L10n.tr("正在同步黄金温度与美债数据…"))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(GoldTheme.text)
-                Text("点击可进入宏观国债全景看板")
+                Text(L10n.tr("点击可进入宏观国债全景看板"))
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
             }
@@ -279,12 +282,12 @@ struct GoldTemperatureCard: View {
                 Text(message)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(GoldTheme.text)
-                Text("不影响行情查看，可点击重试或进入专题页")
+                Text(L10n.tr("不影响行情查看，可点击重试或进入专题页"))
                     .font(.caption)
                     .foregroundStyle(GoldTheme.textSecondary)
             }
             Spacer(minLength: 8)
-            Button("重试", action: onRetry)
+            Button(L10n.tr("重试"), action: onRetry)
                 .buttonStyle(GoldCapsuleStyle(isSelected: false))
         }
         .padding(.vertical, 6)
@@ -297,10 +300,10 @@ struct GoldTemperatureCard: View {
                     .font(.title2)
                     .foregroundStyle(GoldTheme.goldSoft)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("宏观指标正在初始化同步中")
+                    Text(L10n.tr("宏观指标正在初始化同步中"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(GoldTheme.text)
-                    Text("待后端完成首次数据同步后将自动呈现 0~100° 市场温度，绝不展示估算假数据。")
+                    Text(L10n.tr("待后端完成首次数据同步后将自动呈现 0~100° 市场温度，绝不展示估算假数据。"))
                         .font(.caption)
                         .foregroundStyle(GoldTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -330,7 +333,7 @@ struct GoldTemperatureCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
-                            horizonMicroTag("短期热度")
+                            horizonMicroTag(L10n.tr("短期热度"))
                             Text(dual.shortTermCompactTitle)
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundStyle(shortTint)
@@ -351,7 +354,7 @@ struct GoldTemperatureCard: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
-                            horizonMicroTag("长期宏观")
+                            horizonMicroTag(L10n.tr("长期宏观"))
                             Text(dual.longTermState)
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundStyle(longTint)
@@ -381,7 +384,7 @@ struct GoldTemperatureCard: View {
             if report.volatilityAlert || report.degraded {
                 HStack(spacing: 6) {
                     if report.volatilityAlert {
-                        Label("短期高波动", systemImage: "waveform.path.ecg")
+                        Label(L10n.tr("短期高波动"), systemImage: "waveform.path.ecg")
                             .font(.system(size: 10.5, weight: .semibold))
                             .foregroundStyle(GoldTheme.up)
                             .padding(.horizontal, 8)
@@ -390,7 +393,7 @@ struct GoldTemperatureCard: View {
                     }
 
                     if report.degraded {
-                        Text("部分因子降级")
+                        Text(L10n.tr("部分因子降级"))
                             .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(GoldTheme.goldSoft)
                             .padding(.horizontal, 8)
@@ -419,17 +422,17 @@ struct GoldTemperatureCard: View {
     private func quickMacroStrip(_ report: MacroTemperatureReport) -> some View {
         HStack(spacing: 8) {
             quickStatCell(
-                title: "美债总规模",
+                title: L10n.tr("美债总规模"),
                 value: MacroPresentation.formatTrillionUSD(treasury?.totalDebtTrillionUSD),
                 tint: GoldTheme.goldSoft
             )
             quickStatCell(
-                title: "10Y 实际利率",
+                title: L10n.tr("10Y 实际利率"),
                 value: MacroPresentation.formatPercent(treasury?.yield10yRealPct),
                 tint: GoldTheme.text
             )
             quickStatCell(
-                title: "200日均线偏离",
+                title: L10n.tr("200日均线偏离"),
                 value: MacroPresentation.formatPercent(report.actionGuide.ma200DeviationPct, signed: true),
                 tint: MacroPresentation.changeColor(for: report.actionGuide.ma200DeviationPct)
             )

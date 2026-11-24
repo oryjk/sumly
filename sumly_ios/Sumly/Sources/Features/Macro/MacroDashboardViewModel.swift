@@ -411,13 +411,13 @@ final class MacroDashboardViewModel {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .notConnectedToInternet, .networkConnectionLost:
-                return "网络连接不可用，请检查网络后重试"
+                return L10n.tr("网络连接不可用，请检查网络后重试")
             case .timedOut:
-                return "请求超时，请稍后重试"
+                return L10n.tr("请求超时，请稍后重试")
             default:
-                return "宏观数据获取失败，请稍后重试"
+                return L10n.tr("宏观数据获取失败，请稍后重试")
             }
         }
-        return "宏观数据暂时不可用，请稍后重试"
+        return L10n.tr("宏观数据暂时不可用，请稍后重试")
     }
 }

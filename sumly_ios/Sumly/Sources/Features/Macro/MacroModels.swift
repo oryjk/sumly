@@ -25,11 +25,18 @@ enum MacroDateParser {
     }
 
     static func displaySyncedAt(_ raw: String?) -> String {
-        guard let raw else { return "尚未同步" }
+        guard let raw else { return L10n.tr("尚未同步") }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "尚未同步" }
+        guard !trimmed.isEmpty else { return L10n.tr("尚未同步") }
         if let date = parseTimestamp(trimmed) {
-            return date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+            return date.formatted(
+                Date.FormatStyle(locale: AppLanguage.currentLocale)
+                    .year()
+                    .month(.twoDigits)
+                    .day(.twoDigits)
+                    .hour(.twoDigits(amPM: .omitted))
+                    .minute(.twoDigits)
+            )
         }
         return trimmed
     }
@@ -47,12 +54,14 @@ enum MacroHistoryRange: String, Codable, Sendable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .oneYear: "1年"
-        case .threeYears: "3年"
-        case .fiveYears: "5年"
-        case .all: "全部"
+        case .oneYear: L10n.tr("1年")
+        case .threeYears: L10n.tr("3年")
+        case .fiveYears: L10n.tr("5年")
+        case .all: L10n.tr("全部")
         }
     }
+
+    var localizedTitle: String { title }
 }
 
 enum MacroExtendedRange: String, Codable, Sendable, CaseIterable, Identifiable {
@@ -66,13 +75,15 @@ enum MacroExtendedRange: String, Codable, Sendable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .oneYear: "1年"
-        case .threeYears: "3年"
-        case .fiveYears: "5年"
-        case .tenYears: "10年"
-        case .all: "全部"
+        case .oneYear: L10n.tr("1年")
+        case .threeYears: L10n.tr("3年")
+        case .fiveYears: L10n.tr("5年")
+        case .tenYears: L10n.tr("10年")
+        case .all: L10n.tr("全部")
         }
     }
+
+    var localizedTitle: String { title }
 }
 
 enum MacroDashboardTab: String, CaseIterable, Identifiable, Sendable {
@@ -81,6 +92,14 @@ enum MacroDashboardTab: String, CaseIterable, Identifiable, Sendable {
     case panorama = "宏观全景"
 
     var id: String { rawValue }
+
+    var localizedTitle: String {
+        switch self {
+        case .temperature: L10n.tr("黄金温度")
+        case .treasury: L10n.tr("美国国债")
+        case .panorama: L10n.tr("宏观全景")
+        }
+    }
 }
 
 enum MacroTemperatureLevel: String, Codable, Sendable, CaseIterable, Hashable {
@@ -98,11 +117,11 @@ enum MacroTemperatureLevel: String, Codable, Sendable, CaseIterable, Hashable {
 
     var defaultLabel: String {
         switch self {
-        case .freezing: "极冷区间"
-        case .cool: "偏冷区间"
-        case .neutral: "中性区间"
-        case .warm: "偏热区间"
-        case .hot: "极热区间"
+        case .freezing: L10n.tr("极冷区间")
+        case .cool: L10n.tr("偏冷区间")
+        case .neutral: L10n.tr("中性区间")
+        case .warm: L10n.tr("偏热区间")
+        case .hot: L10n.tr("极热区间")
         }
     }
 
@@ -131,9 +150,9 @@ enum MacroRegimeKind: String, Codable, Sendable, CaseIterable, Hashable {
 
     var defaultLabel: String {
         switch self {
-        case .tailwind: "支撑偏强"
-        case .neutral: "背景中性"
-        case .headwind: "支撑偏弱"
+        case .tailwind: L10n.tr("支撑偏强")
+        case .neutral: L10n.tr("背景中性")
+        case .headwind: L10n.tr("支撑偏弱")
         }
     }
 }
@@ -236,6 +255,14 @@ struct MacroTemperatureDimension: Codable, Sendable, Equatable, Identifiable {
 
     var id: String { key }
 
+    var localizedName: String {
+        MacroLocalization.dimensionName(self)
+    }
+
+    var localizedSummary: String {
+        MacroLocalization.dimensionSummary(self)
+    }
+
     enum CodingKeys: String, CodingKey {
         case key, name, weight, score, available, status, summary, metrics
     }
@@ -313,59 +340,76 @@ struct MacroTemperatureGuideHelp: Codable, Sendable, Equatable {
     let officialAccountName: String
     let officialAccountNote: String
 
-    static let defaultOfficialAccountNote = "每日宏观数据复盘与模型方法论笔记同步更新于微信公众号"
+    static var defaultOfficialAccountNote: String {
+        L10n.tr("每日宏观数据复盘与模型方法论笔记同步更新于微信公众号")
+    }
 
-    static let defaultGuide = MacroTemperatureGuideHelp(
-        title: "黄金温度计说明",
-        methodology: "黄金温度计综合趋势偏离、机构持仓拥挤度、国内溢价、资金流与跨品种强弱、实际利率与美元短期共振共 5 个维度，基于近 3 年滚动历史分位加权合成（0°~100°），仅客观刻画市场冷热与拥挤程度，不构成投资建议。",
-        levels: [
-            MacroTemperatureGuideLevel(
-                range: "0° ~ 20°",
-                level: .freezing,
-                label: "极冷区间",
-                description: "情绪与交易热度处于近 3 年低位，市场关注度低迷"
-            ),
-            MacroTemperatureGuideLevel(
-                range: "20° ~ 40°",
-                level: .cool,
-                label: "偏冷区间",
-                description: "交易拥挤度较低，市场情绪尚未过热"
-            ),
-            MacroTemperatureGuideLevel(
-                range: "40° ~ 60°",
-                level: .neutral,
-                label: "中性区间",
-                description: "多空力量相对均衡，市场热度处于常态"
-            ),
-            MacroTemperatureGuideLevel(
-                range: "60° ~ 80°",
-                level: .warm,
-                label: "偏热区间",
-                description: "资金关注度升温，交投活跃度偏高"
-            ),
-            MacroTemperatureGuideLevel(
-                range: "80° ~ 100°",
-                level: .hot,
-                label: "极热区间",
-                description: "短期偏离与多头拥挤度处于高位，历史波动往往放大"
-            )
-        ],
-        officialAccountName: "",
-        officialAccountNote: ""
-    )
+    static var defaultGuide: MacroTemperatureGuideHelp {
+        MacroTemperatureGuideHelp(
+            title: L10n.tr("黄金温度计说明"),
+            methodology: L10n.tr("黄金温度计综合趋势偏离、机构持仓拥挤度、国内溢价、资金流与跨品种强弱、实际利率与美元短期共振共 5 个维度，基于近 3 年滚动历史分位加权合成（0°~100°），仅客观刻画市场冷热与拥挤程度，不构成投资建议。"),
+            levels: [
+                MacroTemperatureGuideLevel(
+                    range: "0° ~ 20°",
+                    level: .freezing,
+                    label: L10n.tr("极冷区间"),
+                    description: L10n.tr("情绪与交易热度处于近 3 年低位，市场关注度低迷")
+                ),
+                MacroTemperatureGuideLevel(
+                    range: "20° ~ 40°",
+                    level: .cool,
+                    label: L10n.tr("偏冷区间"),
+                    description: L10n.tr("交易拥挤度较低，市场情绪尚未过热")
+                ),
+                MacroTemperatureGuideLevel(
+                    range: "40° ~ 60°",
+                    level: .neutral,
+                    label: L10n.tr("中性区间"),
+                    description: L10n.tr("多空力量相对均衡，市场热度处于常态")
+                ),
+                MacroTemperatureGuideLevel(
+                    range: "60° ~ 80°",
+                    level: .warm,
+                    label: L10n.tr("偏热区间"),
+                    description: L10n.tr("资金关注度升温，交投活跃度偏高")
+                ),
+                MacroTemperatureGuideLevel(
+                    range: "80° ~ 100°",
+                    level: .hot,
+                    label: L10n.tr("极热区间"),
+                    description: L10n.tr("短期偏离与多头拥挤度处于高位，历史波动往往放大")
+                )
+            ],
+            officialAccountName: "",
+            officialAccountNote: ""
+        )
+    }
 
     var displayTitle: String {
+        guard MacroLocalization.isChinese else { return Self.defaultGuide.title }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? Self.defaultGuide.title : trimmed
     }
 
     var displayMethodology: String {
+        guard MacroLocalization.isChinese else { return Self.defaultGuide.methodology }
         let trimmed = methodology.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? Self.defaultGuide.methodology : trimmed
     }
 
     var displayLevels: [MacroTemperatureGuideLevel] {
-        levels.isEmpty ? Self.defaultGuide.levels : levels
+        guard !levels.isEmpty else { return Self.defaultGuide.levels }
+        if MacroLocalization.isChinese {
+            return levels
+        }
+        return levels.map { item in
+            MacroTemperatureGuideLevel(
+                range: item.range,
+                level: item.level,
+                label: MacroLocalization.guideLevelLabel(for: item),
+                description: MacroLocalization.guideLevelDescription(for: item)
+            )
+        }
     }
 
     var trimmedOfficialAccountName: String {
@@ -373,9 +417,11 @@ struct MacroTemperatureGuideHelp: Codable, Sendable, Equatable {
     }
 
     var trimmedOfficialAccountNote: String {
-        let trimmed = officialAccountNote.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            return trimmed
+        if MacroLocalization.isChinese {
+            let trimmed = officialAccountNote.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
         }
         return hasOfficialAccount ? Self.defaultOfficialAccountNote : ""
     }
@@ -685,6 +731,14 @@ struct MacroIndicatorSummary: Codable, Sendable, Equatable, Hashable, Identifiab
 
     var id: String { seriesID }
 
+    var localizedName: String {
+        MacroLocalization.indicatorName(seriesID: seriesID, fallback: nameZh)
+    }
+
+    var localizedPlainNote: String {
+        MacroLocalization.indicatorPlainNote(seriesID: seriesID, fallback: plainNote)
+    }
+
     enum CodingKeys: String, CodingKey {
         case section, unit, frequency, source, sparkline
         case seriesID = "series_id"
@@ -763,6 +817,14 @@ struct MacroIndicatorSection: Codable, Sendable, Equatable, Identifiable {
     let description: String
     let indicators: [MacroIndicatorSummary]
 
+    var localizedName: String {
+        MacroLocalization.sectionName(id: id, fallback: nameZh)
+    }
+
+    var localizedDescription: String {
+        MacroLocalization.sectionDescription(id: id, fallback: description)
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, description, indicators
         case nameZh = "name_zh"
@@ -816,6 +878,10 @@ struct MacroTreasurySummary: Codable, Sendable, Equatable {
     let breakeven10yPct: Double?
     let tltPrice: Double?
     let goldImpactNote: String
+
+    var localizedGoldImpactNote: String {
+        MacroLocalization.treasuryGoldImpactNote(for: self)
+    }
 
     enum CodingKeys: String, CodingKey {
         case totalDebtTrillionUSD = "total_debt_trillion_usd"
@@ -941,11 +1007,11 @@ struct MacroPercentileWindow: Codable, Sendable, Equatable, Identifiable {
 
     var windowTitle: String {
         switch window.lowercased() {
-        case "1y": "近1年"
-        case "3y": "近3年"
-        case "5y": "近5年"
-        case "10y": "近10年"
-        case "all": "全部历史"
+        case "1y": L10n.tr("近1年")
+        case "3y": L10n.tr("近3年")
+        case "5y": L10n.tr("近5年")
+        case "10y": L10n.tr("近10年")
+        case "all": L10n.tr("全部历史")
         default: window
         }
     }
@@ -983,6 +1049,14 @@ struct MacroIndicatorDetail: Codable, Sendable, Equatable {
     let lastSyncedAt: String?
     let syncStatus: String
     let observations: [MacroTimePoint]
+
+    var localizedName: String {
+        MacroLocalization.indicatorName(seriesID: seriesID, fallback: nameZh)
+    }
+
+    var localizedPlainNote: String {
+        MacroLocalization.indicatorPlainNote(seriesID: seriesID, fallback: plainNote)
+    }
 
     enum CodingKeys: String, CodingKey {
         case section, unit, frequency, source, range, percentiles, observations
@@ -1273,31 +1347,31 @@ enum MacroPresentation {
 
     static func syncStatusLabel(_ raw: String) -> String {
         switch raw.lowercased() {
-        case "ok", "success", "synced": "数据正常"
-        case "error", "failed": "同步异常"
-        case "skipped": "已跳过（未配置数据源）"
-        case "pending", "": "待同步"
+        case "ok", "success", "synced": L10n.tr("数据正常")
+        case "error", "failed": L10n.tr("同步异常")
+        case "skipped": L10n.tr("已跳过（未配置数据源）")
+        case "pending", "": L10n.tr("待同步")
         default: raw
         }
     }
 
     static func goldRelationLabel(_ raw: String) -> String {
         switch raw.lowercased() {
-        case "positive", "bullish", "same": "与金价同向"
-        case "negative", "inverse", "bearish": "与金价反向"
-        case "neutral", "mixed", "reference": "综合参考"
-        case "": "宏观关联"
+        case "positive", "bullish", "same": L10n.tr("与金价同向")
+        case "negative", "inverse", "bearish": L10n.tr("与金价反向")
+        case "neutral", "mixed", "reference": L10n.tr("综合参考")
+        case "": L10n.tr("宏观关联")
         default: raw
         }
     }
 
     static func frequencyLabel(_ raw: String) -> String {
         switch raw.lowercased() {
-        case "daily": "日频"
-        case "weekly": "周频"
-        case "monthly": "月频"
-        case "quarterly": "季频"
-        case "annual", "yearly": "年频"
+        case "daily": L10n.tr("日频")
+        case "weekly": L10n.tr("周频")
+        case "monthly": L10n.tr("月频")
+        case "quarterly": L10n.tr("季频")
+        case "annual", "yearly": L10n.tr("年频")
         case "": "—"
         default: raw
         }
@@ -1307,15 +1381,15 @@ enum MacroPresentation {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "—" }
         switch trimmed.lowercased() {
-        case "treasury": return "美国财政部"
-        case "fred": return "美联储经济数据（FRED）"
-        case "yahoo": return "雅虎财经"
-        case "spdr": return "SPDR 黄金 ETF 官方"
-        case "cftc": return "美国商品期货交易委员会（CFTC）"
+        case "treasury": return L10n.tr("美国财政部")
+        case "fred": return L10n.tr("美联储经济数据（FRED）")
+        case "yahoo": return L10n.tr("雅虎财经")
+        case "spdr": return L10n.tr("SPDR 黄金 ETF 官方")
+        case "cftc": return L10n.tr("美国商品期货交易委员会（CFTC）")
         case "bitcoin": return "Blockchain.com"
-        case "imf": return "国际货币基金组织（IMF）"
-        case "seedcsv": return "历史统计归档"
-        case "derived": return "公开数据衍生计算"
+        case "imf": return L10n.tr("国际货币基金组织（IMF）")
+        case "seedcsv": return L10n.tr("历史统计归档")
+        case "derived": return L10n.tr("公开数据衍生计算")
         default: return trimmed
         }
     }
@@ -1324,28 +1398,28 @@ enum MacroPresentation {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "—" }
         switch trimmed.lowercased() {
-        case "trillion_usd": return "万亿美元"
-        case "billion_usd": return "十亿美元"
-        case "million_usd": return "百万美元"
-        case "usd": return "美元"
-        case "percent", "%": return "百分比（%）"
-        case "index": return "指数点"
-        case "tons": return "吨"
-        case "contracts": return "手（期货合约）"
-        case "ratio": return "比值"
-        case "cny/usd": return "人民币/美元"
-        case "cny/g": return "人民币/克"
+        case "trillion_usd": return L10n.tr("万亿美元")
+        case "billion_usd": return L10n.tr("十亿美元")
+        case "million_usd": return L10n.tr("百万美元")
+        case "usd": return L10n.tr("美元")
+        case "percent", "%": return L10n.tr("百分比（%）")
+        case "index": return L10n.tr("指数点")
+        case "tons": return L10n.tr("吨")
+        case "contracts": return L10n.tr("手（期货合约）")
+        case "ratio": return L10n.tr("比值")
+        case "cny/usd": return L10n.tr("人民币/美元")
+        case "cny/g": return L10n.tr("人民币/克")
         default: return trimmed
         }
     }
 
     static func factorDisplayName(_ key: String) -> String {
         switch key.lowercased() {
-        case "trend_momentum": "趋势与动量"
-        case "positioning": "期货持仓拥挤度"
-        case "domestic_premium": "国内金价溢价"
-        case "flow_cross_asset": "资金流与跨资产"
-        case "macro_pulse": "宏观脉冲"
+        case "trend_momentum": L10n.tr("趋势与动量")
+        case "positioning": L10n.tr("期货持仓拥挤度")
+        case "domestic_premium": L10n.tr("国内金价溢价")
+        case "flow_cross_asset": L10n.tr("资金流与跨资产")
+        case "macro_pulse": L10n.tr("宏观脉冲")
         default: key
         }
     }
@@ -1361,7 +1435,9 @@ enum MacroPresentation {
         return "\(prefix)\(String(format: "%.1f", value))°"
     }
 
-    static let defaultDisclaimer = "数据与温度模型基于公开宏观及市场统计测算，仅反映历史分位与市场热度状态，不构成任何投资建议。"
+    static var defaultDisclaimer: String {
+        L10n.tr("数据与温度模型基于公开宏观及市场统计测算，仅反映历史分位与市场热度状态，不构成任何投资建议。")
+    }
 
     static let advisoryKeywords: [String] = [
         "操作指南针", "逢低", "加配", "定投", "加仓", "减仓", "止盈", "建仓", "追高",
@@ -1393,7 +1469,7 @@ enum MacroPresentation {
     ) -> MacroDualHorizonSummary {
         let clampedShort = clampedTemperatureScore(shortScore)
         let clampedLong = clampedTemperatureScore(longScore)
-        let longScoreText = "\(Int(clampedLong.rounded()))分"
+        let longScoreText = L10n.fmt("%lld分", Int64(clampedLong.rounded()))
 
         let shortCompactTitle: String
         let shortState: String
@@ -1403,35 +1479,35 @@ enum MacroPresentation {
 
         switch level {
         case .freezing:
-            shortCompactTitle = "极冷 · 交投清淡"
-            shortState = "交投极冷"
-            shortCrowding = "拥挤度极低"
-            shortPlainNote = "近期交投极冷，市场关注度低迷"
-            shortDetailNote = "短期五维热度处于近 3 年极低分位，市场交投清淡、拥挤度极低。"
+            shortCompactTitle = L10n.tr("极冷 · 交投清淡")
+            shortState = L10n.tr("交投极冷")
+            shortCrowding = L10n.tr("拥挤度极低")
+            shortPlainNote = L10n.tr("近期交投极冷，市场关注度低迷")
+            shortDetailNote = L10n.tr("短期五维热度处于近 3 年极低分位，市场交投清淡、拥挤度极低。")
         case .cool:
-            shortCompactTitle = "偏冷 · 拥挤度低"
-            shortState = "交投偏冷"
-            shortCrowding = "拥挤度较低"
-            shortPlainNote = "近期交投偏冷，市场情绪未过热"
-            shortDetailNote = "短期五维热度处于近 3 年偏低分位，交易拥挤度较低、情绪尚未过热。"
+            shortCompactTitle = L10n.tr("偏冷 · 拥挤度低")
+            shortState = L10n.tr("交投偏冷")
+            shortCrowding = L10n.tr("拥挤度较低")
+            shortPlainNote = L10n.tr("近期交投偏冷，市场情绪未过热")
+            shortDetailNote = L10n.tr("短期五维热度处于近 3 年偏低分位，交易拥挤度较低、情绪尚未过热。")
         case .neutral:
-            shortCompactTitle = "中性 · 多空均衡"
-            shortState = "热度适中"
-            shortCrowding = "热度均衡"
-            shortPlainNote = "近期交投平稳，多空力量较均衡"
-            shortDetailNote = "短期五维热度处于近 3 年中位区间，多空力量与交投活跃度相对均衡。"
+            shortCompactTitle = L10n.tr("中性 · 多空均衡")
+            shortState = L10n.tr("热度适中")
+            shortCrowding = L10n.tr("热度均衡")
+            shortPlainNote = L10n.tr("近期交投平稳，多空力量较均衡")
+            shortDetailNote = L10n.tr("短期五维热度处于近 3 年中位区间，多空力量与交投活跃度相对均衡。")
         case .warm:
-            shortCompactTitle = "偏热 · 关注升温"
-            shortState = "交投偏热"
-            shortCrowding = "关注度偏高"
-            shortPlainNote = "近期交投升温，资金关注度偏高"
-            shortDetailNote = "短期五维热度处于近 3 年偏高分位，资金关注度升温、交投活跃度偏高。"
+            shortCompactTitle = L10n.tr("偏热 · 关注升温")
+            shortState = L10n.tr("交投偏热")
+            shortCrowding = L10n.tr("关注度偏高")
+            shortPlainNote = L10n.tr("近期交投升温，资金关注度偏高")
+            shortDetailNote = L10n.tr("短期五维热度处于近 3 年偏高分位，资金关注度升温、交投活跃度偏高。")
         case .hot:
-            shortCompactTitle = "过热 · 拥挤度高"
-            shortState = "交易过热"
-            shortCrowding = "拥挤度偏高"
-            shortPlainNote = "近期交投过热，多头拥挤度偏高"
-            shortDetailNote = "短期五维热度处于近 3 年高位区间，短期偏离与多头拥挤度均处于高位。"
+            shortCompactTitle = L10n.tr("过热 · 拥挤度高")
+            shortState = L10n.tr("交易过热")
+            shortCrowding = L10n.tr("拥挤度偏高")
+            shortPlainNote = L10n.tr("近期交投过热，多头拥挤度偏高")
+            shortDetailNote = L10n.tr("短期五维热度处于近 3 年高位区间，短期偏离与多头拥挤度均处于高位。")
         }
 
         let longState: String
@@ -1440,17 +1516,17 @@ enum MacroPresentation {
 
         switch regime {
         case .tailwind:
-            longState = "支撑偏强"
-            longPlainNote = "美债与央行购金等长期支撑较强"
-            longDetailNote = "美债规模、财政压力与央行购金等长期宏观指标整体偏强，中长期基本面支撑较强。"
+            longState = L10n.tr("支撑偏强")
+            longPlainNote = L10n.tr("美债与央行购金等长期支撑较强")
+            longDetailNote = L10n.tr("美债规模、财政压力与央行购金等长期宏观指标整体偏强，中长期基本面支撑较强。")
         case .neutral:
-            longState = "背景中性"
-            longPlainNote = "实际利率与美债等长期因素均衡"
-            longDetailNote = "实际利率水平与美债规模、央行购金等长期宏观指标力量相对均衡，整体处于中性背景。"
+            longState = L10n.tr("背景中性")
+            longPlainNote = L10n.tr("实际利率与美债等长期因素均衡")
+            longDetailNote = L10n.tr("实际利率水平与美债规模、央行购金等长期宏观指标力量相对均衡，整体处于中性背景。")
         case .headwind:
-            longState = "支撑偏弱"
-            longPlainNote = "实际利率偏高等使长期背景偏弱"
-            longDetailNote = "实际利率水平相对偏高且财政与外储端驱动偏弱，中长期宏观支撑相对偏弱。"
+            longState = L10n.tr("支撑偏弱")
+            longPlainNote = L10n.tr("实际利率偏高等使长期背景偏弱")
+            longDetailNote = L10n.tr("实际利率水平相对偏高且财政与外储端驱动偏弱，中长期宏观支撑相对偏弱。")
         }
 
         let combinedPatternLabel: String
@@ -1458,50 +1534,50 @@ enum MacroPresentation {
 
         switch (level, regime) {
         case (.freezing, .tailwind):
-            combinedPatternLabel = "极冷长强"
-            combinedSummary = "短期交投极冷、拥挤度处于近 3 年极低分位，而长期美债与央行购金等宏观支撑偏强，短长周期呈现明显错位。"
+            combinedPatternLabel = L10n.tr("极冷长强")
+            combinedSummary = L10n.tr("短期交投极冷、拥挤度处于近 3 年极低分位，而长期美债与央行购金等宏观支撑偏强，短长周期呈现明显错位。")
         case (.freezing, .neutral):
-            combinedPatternLabel = "极冷长平"
-            combinedSummary = "短期交投极冷、市场关注度低迷，同时长期实际利率与美债等宏观背景处于中性常态。"
+            combinedPatternLabel = L10n.tr("极冷长平")
+            combinedSummary = L10n.tr("短期交投极冷、市场关注度低迷，同时长期实际利率与美债等宏观背景处于中性常态。")
         case (.freezing, .headwind):
-            combinedPatternLabel = "极冷长弱"
-            combinedSummary = "短期交投极冷、市场活跃度处于近 3 年低位，同时长期宏观指标支撑偏弱，短期低迷与长期偏弱并存。"
+            combinedPatternLabel = L10n.tr("极冷长弱")
+            combinedSummary = L10n.tr("短期交投极冷、市场活跃度处于近 3 年低位，同时长期宏观指标支撑偏弱，短期低迷与长期偏弱并存。")
         case (.cool, .tailwind):
-            combinedPatternLabel = "短冷长强"
-            combinedSummary = "短期交投偏冷、交易拥挤度较低，而长期美债与央行购金等宏观支撑依然偏强，短长周期呈现温和错位。"
+            combinedPatternLabel = L10n.tr("短冷长强")
+            combinedSummary = L10n.tr("短期交投偏冷、交易拥挤度较低，而长期美债与央行购金等宏观支撑依然偏强，短长周期呈现温和错位。")
         case (.cool, .neutral):
-            combinedPatternLabel = "短冷长平"
-            combinedSummary = "短期交投偏冷、交易拥挤度较低，同时长期宏观基本面各项指标力量相对均衡。"
+            combinedPatternLabel = L10n.tr("短冷长平")
+            combinedSummary = L10n.tr("短期交投偏冷、交易拥挤度较低，同时长期宏观基本面各项指标力量相对均衡。")
         case (.cool, .headwind):
-            combinedPatternLabel = "短冷长弱"
-            combinedSummary = "短期交投偏冷、交易活跃度偏低，同时长期实际利率与财政端等宏观支撑整体偏弱。"
+            combinedPatternLabel = L10n.tr("短冷长弱")
+            combinedSummary = L10n.tr("短期交投偏冷、交易活跃度偏低，同时长期实际利率与财政端等宏观支撑整体偏弱。")
         case (.neutral, .tailwind):
-            combinedPatternLabel = "短平长强"
-            combinedSummary = "短期交投热度适中、多空力量相对均衡，同时长期美债与央行购金等宏观指标整体偏强。"
+            combinedPatternLabel = L10n.tr("短平长强")
+            combinedSummary = L10n.tr("短期交投热度适中、多空力量相对均衡，同时长期美债与央行购金等宏观指标整体偏强。")
         case (.neutral, .neutral):
-            combinedPatternLabel = "双端中性"
-            combinedSummary = "短期交易热度与长期宏观背景均处于近 3 年中位常态，市场多空与基本面力量相对均衡。"
+            combinedPatternLabel = L10n.tr("双端中性")
+            combinedSummary = L10n.tr("短期交易热度与长期宏观背景均处于近 3 年中位常态，市场多空与基本面力量相对均衡。")
         case (.neutral, .headwind):
-            combinedPatternLabel = "短平长弱"
-            combinedSummary = "短期交投热度适中、多空力量均衡，但长期实际利率等宏观指标支撑相对偏弱。"
+            combinedPatternLabel = L10n.tr("短平长弱")
+            combinedSummary = L10n.tr("短期交投热度适中、多空力量均衡，但长期实际利率等宏观指标支撑相对偏弱。")
         case (.warm, .tailwind):
-            combinedPatternLabel = "短热长强"
-            combinedSummary = "短期交投升温、资金关注度偏高，同时长期美债与央行购金等宏观支撑偏强，短长周期同步偏强。"
+            combinedPatternLabel = L10n.tr("短热长强")
+            combinedSummary = L10n.tr("短期交投升温、资金关注度偏高，同时长期美债与央行购金等宏观支撑偏强，短长周期同步偏强。")
         case (.warm, .neutral):
-            combinedPatternLabel = "短热长平"
-            combinedSummary = "短期交投偏热、资金关注度处于近 3 年偏高分位，而长期宏观基本面整体处于中性常态。"
+            combinedPatternLabel = L10n.tr("短热长平")
+            combinedSummary = L10n.tr("短期交投偏热、资金关注度处于近 3 年偏高分位，而长期宏观基本面整体处于中性常态。")
         case (.warm, .headwind):
-            combinedPatternLabel = "短热长弱"
-            combinedSummary = "短期交投偏热、资金关注度升温，但长期宏观指标支撑偏弱，短长周期呈现错位特征。"
+            combinedPatternLabel = L10n.tr("短热长弱")
+            combinedSummary = L10n.tr("短期交投偏热、资金关注度升温，但长期宏观指标支撑偏弱，短长周期呈现错位特征。")
         case (.hot, .tailwind):
-            combinedPatternLabel = "过热长强"
-            combinedSummary = "短期交投过热、多头拥挤度处于近 3 年高位，虽有长期宏观支撑偏强，历史同期短期振幅往往放大。"
+            combinedPatternLabel = L10n.tr("过热长强")
+            combinedSummary = L10n.tr("短期交投过热、多头拥挤度处于近 3 年高位，虽有长期宏观支撑偏强，历史同期短期振幅往往放大。")
         case (.hot, .neutral):
-            combinedPatternLabel = "过热长平"
-            combinedSummary = "短期交投过热、多头拥挤度处于近 3 年高位，长期宏观背景处于中性常态，历史同期短期波动往往放大。"
+            combinedPatternLabel = L10n.tr("过热长平")
+            combinedSummary = L10n.tr("短期交投过热、多头拥挤度处于近 3 年高位，长期宏观背景处于中性常态，历史同期短期波动往往放大。")
         case (.hot, .headwind):
-            combinedPatternLabel = "过热长弱"
-            combinedSummary = "短期交投过热、多头拥挤度处于近 3 年高位，且长期宏观支撑偏弱，短长周期明显错位，历史同期波动往往放大。"
+            combinedPatternLabel = L10n.tr("过热长弱")
+            combinedSummary = L10n.tr("短期交投过热、多头拥挤度处于近 3 年高位，且长期宏观支撑偏弱，短长周期明显错位，历史同期波动往往放大。")
         }
 
         return MacroDualHorizonSummary(
@@ -1526,18 +1602,18 @@ enum MacroPresentation {
 
     static func objectiveStatusLabel(for level: MacroTemperatureLevel) -> String {
         switch level {
-        case .freezing: "近3年极低分位"
-        case .cool: "拥挤度较低"
-        case .neutral: "热度均衡"
-        case .warm: "关注度偏高"
-        case .hot: "拥挤度偏高"
+        case .freezing: L10n.tr("近3年极低分位")
+        case .cool: L10n.tr("拥挤度较低")
+        case .neutral: L10n.tr("热度均衡")
+        case .warm: L10n.tr("关注度偏高")
+        case .hot: L10n.tr("拥挤度偏高")
         }
     }
 
-    /// 优先使用服务端下发的客观标签；若旧版服务端仍返回含投顾/定投字样，则前端兜底映射为客观历史分位标签。
+    /// 优先使用服务端下发的客观标签；若旧版服务端仍返回含投顾/定投字样或处于非中文语言环境，则前端兜底映射为本地化客观历史分位标签。
     static func objectiveStatusBadge(for guide: MacroActionGuide, level: MacroTemperatureLevel) -> String {
         let trimmed = guide.dcaLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+        if MacroLocalization.isChinese && !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
             return trimmed
         }
         return objectiveStatusLabel(for: level)
@@ -1545,90 +1621,102 @@ enum MacroPresentation {
 
     static func objectiveGuideTitle(for report: MacroTemperatureReport) -> String {
         let trimmed = report.actionGuide.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+        if MacroLocalization.isChinese && !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
             return trimmed
         }
         let levelPart = report.level.defaultLabel
         let regimePart = report.macroRegime.regime.defaultLabel
         switch report.level {
-        case .freezing: return "\(levelPart) · 热度处于低位"
-        case .cool: return "\(levelPart) · \(regimePart)"
-        case .neutral: return "\(levelPart) · 多空相对均衡"
-        case .warm: return "\(levelPart) · 关注度升温"
-        case .hot: return "\(levelPart) · 交易高度拥挤"
+        case .freezing: return L10n.fmt("%@ · 热度处于低位", levelPart)
+        case .cool: return L10n.fmt("%@ · %@", levelPart, regimePart)
+        case .neutral: return L10n.fmt("%@ · 多空相对均衡", levelPart)
+        case .warm: return L10n.fmt("%@ · 关注度升温", levelPart)
+        case .hot: return L10n.fmt("%@ · 交易高度拥挤", levelPart)
         }
     }
 
     static func objectiveGuideSummary(for report: MacroTemperatureReport) -> String {
         let trimmed = report.actionGuide.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+        if MacroLocalization.isChinese && !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
             return trimmed
         }
         let regimeSummary: String
         switch report.macroRegime.regime {
-        case .tailwind: regimeSummary = "长期宏观底座偏暖"
-        case .neutral: regimeSummary = "长期宏观底座处于中性"
-        case .headwind: regimeSummary = "长期宏观底座偏弱"
+        case .tailwind: regimeSummary = L10n.tr("长期宏观支撑偏强")
+        case .neutral: regimeSummary = L10n.tr("长期宏观底座处于中性")
+        case .headwind: regimeSummary = L10n.tr("长期宏观底座偏弱")
         }
         switch report.level {
         case .freezing:
-            return "五维市场热度处于近 3 年极低分位，市场关注度低迷；\(regimeSummary)。"
+            return L10n.fmt("五维市场热度处于近 3 年极低分位，市场关注度低迷；%@。", regimeSummary)
         case .cool:
-            return "五维市场热度处于近 3 年偏低分位，交易拥挤度较低；\(regimeSummary)。"
+            return L10n.fmt("五维市场热度处于近 3 年偏低分位，交易拥挤度较低；%@。", regimeSummary)
         case .neutral:
-            return "五维市场热度处于近 3 年中位区间，多空力量相对均衡；\(regimeSummary)。"
+            return L10n.fmt("五维市场热度处于近 3 年中位区间，多空力量相对均衡；%@。", regimeSummary)
         case .warm:
-            return "五维市场热度处于近 3 年偏高分位，资金关注度升温；\(regimeSummary)。"
+            return L10n.fmt("五维市场热度处于近 3 年偏高分位，资金关注度升温；%@。", regimeSummary)
         case .hot:
-            return "五维市场热度处于近 3 年高位，短期偏离与多头拥挤度偏高；\(regimeSummary)。"
+            return L10n.fmt("五维市场热度处于近 3 年高位，短期偏离与多头拥挤度偏高；%@。", regimeSummary)
         }
     }
 
     static func objectiveMa200Note(for guide: MacroActionGuide) -> String {
         let trimmed = guide.ma200Note.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+        if MacroLocalization.isChinese && !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
             return trimmed
         }
         guard let dev = guide.ma200DeviationPct, dev.isFinite else {
-            return "暂无 200 日均线偏离统计"
+            return L10n.tr("暂无 200 日均线偏离统计")
         }
         if dev > 0.05 {
-            return "高于 200 日均线 \(String(format: "%.2f", dev))%，处于年线上方"
+            return L10n.fmt("高于 200 日均线 %@，处于年线上方", "\(String(format: "%.2f", dev))%")
         } else if dev < -0.05 {
-            return "低于 200 日均线 \(String(format: "%.2f", abs(dev)))%，处于年线下方"
+            return L10n.fmt("低于 200 日均线 %@，处于年线下方", "\(String(format: "%.2f", abs(dev)))%")
         } else {
-            return "接近 200 日均线位置"
+            return L10n.tr("接近 200 日均线位置")
         }
     }
 
     static func objectiveDomesticPremiumNote(for guide: MacroActionGuide) -> String {
         let trimmed = guide.domesticPremiumNote.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+        if MacroLocalization.isChinese && !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
             return trimmed
         }
         guard let premium = guide.domesticPremiumPct, premium.isFinite else {
-            return "暂无上海金溢价统计"
+            return L10n.tr("暂无上海金溢价统计")
         }
         if premium > 0.05 {
-            return "国内金价较国际溢价 +\(String(format: "%.2f", premium))%"
+            return L10n.fmt("国内金价较国际溢价 %@", "+\(String(format: "%.2f", premium))%")
         } else if premium < -0.05 {
-            return "国内金价较国际折价 \(String(format: "%.2f", premium))%"
+            return L10n.fmt("国内金价较国际折价 %@", "\(String(format: "%.2f", premium))%")
         } else {
-            return "国内与国际金价基本平水"
+            return L10n.tr("国内与国际金价基本平水")
         }
     }
 
     static func objectiveVolatilityNote(for report: MacroTemperatureReport) -> String {
         let trimmed = report.volatilityNote.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
+        if MacroLocalization.isChinese && !trimmed.isEmpty && !containsAdvisoryTerms(trimmed) {
             return trimmed
         }
-        return "黄金隐含波动率处于近 3 年偏高分位，历史同期短期振幅往往放大。"
+        if !MacroLocalization.isChinese {
+            if report.volatilityAlert {
+                return L10n.tr("黄金隐含波动率处于近 3 年偏高分位，历史同期短期振幅往往放大。")
+            }
+            if !report.hasAvailableData {
+                return L10n.tr("波动率指标尚未同步，暂无法评估当前市场波动水平。")
+            }
+            return L10n.tr("黄金隐含波动率处于常态区间，暂无高波动提示。")
+        }
+        return L10n.tr("黄金隐含波动率处于近 3 年偏高分位，历史同期短期振幅往往放大。")
     }
 
     static func objectiveDisclaimer(for guide: MacroActionGuide) -> String {
         let trimmed = guide.disclaimer.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? defaultDisclaimer : trimmed
+        if MacroLocalization.isChinese && !trimmed.isEmpty {
+            return trimmed
+        }
+        return defaultDisclaimer
     }
 
     static func formatPercent(_ value: Double?, signed: Bool = false) -> String {
@@ -1646,17 +1734,24 @@ enum MacroPresentation {
     static func formatTrillionUSD(_ value: Double?, signed: Bool = false) -> String {
         guard let value, value.isFinite else { return "—" }
         let sign = signPrefix(for: value, signed: signed)
-        return "\(sign)$\(String(format: "%.2f", abs(value))) 万亿"
+        return L10n.fmt("%@ 万亿", "\(sign)$\(String(format: "%.2f", abs(value)))")
     }
 
     static func formatContracts(_ value: Double?, signed: Bool = false) -> String {
         guard let value, value.isFinite else { return "—" }
         let absVal = abs(value)
         let prefix = signPrefix(for: value, signed: signed)
-        if absVal >= 10_000 {
-            return "\(prefix)\(String(format: "%.2f", absVal / 10_000)) 万手"
+        if MacroLocalization.usesTenThousandScale {
+            if absVal >= 10_000 {
+                return L10n.fmt("%@ 万手", "\(prefix)\(String(format: "%.2f", absVal / 10_000))")
+            }
+            return L10n.fmt("%@ 手", "\(prefix)\(Int(absVal.rounded()))")
+        } else {
+            if absVal >= 1_000 {
+                return L10n.fmt("%@k 手", "\(prefix)\(String(format: "%.1f", absVal / 1_000))")
+            }
+            return L10n.fmt("%@ 手", "\(prefix)\(Int(absVal.rounded()))")
         }
-        return "\(prefix)\(Int(absVal.rounded())) 手"
     }
 
     static func formatValue(_ value: Double?, unit: String) -> String {
@@ -1668,22 +1763,22 @@ enum MacroPresentation {
         case "%", "pct", "percent", "percentage":
             return String(format: "%.2f%%", value)
         case "trillion_usd", "usd_trillion":
-            return "\(sign)$\(String(format: "%.2f", absVal)) 万亿"
+            return L10n.fmt("%@ 万亿", "\(sign)$\(String(format: "%.2f", absVal))")
         case "billion_usd", "usd_billion":
             if absVal >= 1_000 {
-                return "\(sign)$\(String(format: "%.2f", absVal / 1_000)) 万亿"
+                return L10n.fmt("%@ 万亿", "\(sign)$\(String(format: "%.2f", absVal / 1_000))")
             }
             return "\(sign)$\(String(format: "%.1f", absVal))B"
         case "million_usd", "usd_million":
             if absVal >= 1_000_000 {
-                return "\(sign)$\(String(format: "%.2f", absVal / 1_000_000)) 万亿"
+                return L10n.fmt("%@ 万亿", "\(sign)$\(String(format: "%.2f", absVal / 1_000_000))")
             }
             if absVal >= 1_000 {
                 return "\(sign)$\(String(format: "%.1f", absVal / 1_000))B"
             }
             return "\(sign)$\(String(format: "%.1f", absVal))M"
         case "tons", "tonnes":
-            return String(format: "%.1f 吨", value)
+            return L10n.fmt("%@ 吨", String(format: "%.1f", value))
         case "usd", "usd/oz", "usd_oz", "usd/troy_oz", "usd/bbl":
             return "\(sign)$" + absVal.formatted(.number.precision(.fractionLength(2)))
         case "cny/g", "cny_g":
@@ -1706,22 +1801,22 @@ enum MacroPresentation {
         case "%", "pct", "percent", "percentage":
             return "\(sign)\(String(format: "%.2f", absVal))%"
         case "trillion_usd", "usd_trillion":
-            return "\(sign)\(String(format: "%.2f", absVal)) 万亿"
+            return L10n.fmt("%@ 万亿", "\(sign)\(String(format: "%.2f", absVal))")
         case "billion_usd", "usd_billion":
             if absVal >= 1_000 {
-                return "\(sign)\(String(format: "%.2f", absVal / 1_000)) 万亿"
+                return L10n.fmt("%@ 万亿", "\(sign)\(String(format: "%.2f", absVal / 1_000))")
             }
             return "\(sign)\(String(format: "%.1f", absVal))B"
         case "million_usd", "usd_million":
             if absVal >= 1_000_000 {
-                return "\(sign)\(String(format: "%.2f", absVal / 1_000_000)) 万亿"
+                return L10n.fmt("%@ 万亿", "\(sign)\(String(format: "%.2f", absVal / 1_000_000))")
             }
             if absVal >= 1_000 {
                 return "\(sign)\(String(format: "%.1f", absVal / 1_000))B"
             }
             return "\(sign)\(String(format: "%.1f", absVal))M"
         case "tons", "tonnes":
-            return "\(sign)\(String(format: "%.1f", absVal)) 吨"
+            return L10n.fmt("%@ 吨", "\(sign)\(String(format: "%.1f", absVal))")
         case "contracts":
             return formatContracts(value, signed: true)
         default:
@@ -1735,15 +1830,15 @@ enum MacroPresentation {
     }
 
     static func percentileBadgeText(_ value: Double?) -> String {
-        guard let value, value.isFinite else { return "分位待积累" }
+        guard let value, value.isFinite else { return L10n.tr("分位待积累") }
         let clamped = min(max(value, 0), 100)
         let tier: String
         switch clamped {
-        case ..<20: tier = "极低位"
-        case 20..<40: tier = "偏低位"
-        case 40..<60: tier = "中位区"
-        case 60..<80: tier = "偏高位"
-        default: tier = "极高位"
+        case ..<20: tier = L10n.tr("极低位")
+        case 20..<40: tier = L10n.tr("偏低位")
+        case 40..<60: tier = L10n.tr("中位区")
+        case 60..<80: tier = L10n.tr("偏高位")
+        default: tier = L10n.tr("极高位")
         }
         return "\(String(format: "%.0f", clamped))% · \(tier)"
     }

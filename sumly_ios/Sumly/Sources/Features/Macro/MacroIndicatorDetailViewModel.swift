@@ -27,7 +27,8 @@ final class MacroIndicatorDetailViewModel {
     }
 
     var displayTitle: String {
-        detail?.nameZh ?? initialSummary?.nameZh ?? seriesID
+        let fallback = detail?.nameZh ?? initialSummary?.nameZh ?? ""
+        return MacroLocalization.indicatorName(seriesID: seriesID, fallback: fallback)
     }
 
     var displayUnit: String {
@@ -47,7 +48,8 @@ final class MacroIndicatorDetailViewModel {
     }
 
     var displayPlainNote: String {
-        detail?.plainNote ?? initialSummary?.plainNote ?? ""
+        let fallback = detail?.plainNote ?? initialSummary?.plainNote ?? ""
+        return MacroLocalization.indicatorPlainNote(seriesID: seriesID, fallback: fallback)
     }
 
     var latestValue: Double? {
