@@ -13,6 +13,7 @@ struct MacroDashboardView: View {
     @State private var showingGuideHelp = false
     @State private var showingTreasuryPressureGuide = false
     @State private var showingPanoramaGuide = false
+    @State private var hasHandledInitialAppear = false
 
     init(
         model: MacroDashboardViewModel,
@@ -24,7 +25,7 @@ struct MacroDashboardView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 14) {
                 tabPicker
 
                 switch model.selectedTab {
@@ -93,13 +94,10 @@ struct MacroDashboardView: View {
         .refreshable {
             await model.refreshAll()
         }
-        .task {
-            await model.loadDashboard()
-        }
         .task(id: model.selectedTab) {
-            if model.selectedTab == .panorama {
-                await model.ensurePanoramaDependenciesLoaded()
-            }
+            let shouldDefer = !hasHandledInitialAppear
+            hasHandledInitialAppear = true
+            await model.loadActiveTab(deferAfterTransition: shouldDefer)
         }
         .sensoryFeedback(.selection, trigger: model.selectedTab)
         .sensoryFeedback(.selection, trigger: model.selectedSectionID)
@@ -147,7 +145,7 @@ struct MacroDashboardView: View {
             }
         } else if let report = model.temperature {
             if report.hasAvailableData {
-                let dual = MacroPresentation.dualHorizonSummary(for: report)
+                let dual = model.cachedDualHorizonSummary ?? MacroPresentation.dualHorizonSummary(for: report)
                 temperatureHeroCard(report, dual: dual)
                 if report.volatilityAlert {
                     volatilityAlertCard(MacroPresentation.objectiveVolatilityNote(for: report))
@@ -459,7 +457,7 @@ struct MacroDashboardView: View {
     // MARK: - 金价 vs 黄金温度 历史联动曲线
 
     private var temperatureHistoryCard: some View {
-        let points = model.temperatureHistory?.points ?? []
+        let points = model.displayTemperatureHistoryPoints
         let inspected: MacroTemperatureHistoryPoint? = selectedHistoryDate.flatMap { target in
             points.min { abs($0.date.timeIntervalSince(target)) < abs($1.date.timeIntervalSince(target)) }
         }
@@ -514,12 +512,9 @@ struct MacroDashboardView: View {
                     .foregroundStyle(GoldTheme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
             } else {
-                let goldPoints = points.compactMap { p -> (Date, Double)? in
-                    guard let price = p.goldPriceUSD else { return nil }
-                    return (p.date, price)
-                }
-                if !goldPoints.isEmpty {
+                if model.hasTemperatureHistoryGoldPrices {
                     let goldContext = model.temperatureGoldPriceScaleContext
+                    let singleGoldPoint = points.count == 1
                     VStack(alignment: .leading, spacing: 6) {
                         MacroChartScaleBar(
                             context: goldContext,
@@ -542,7 +537,7 @@ struct MacroDashboardView: View {
                                     .lineStyle(StrokeStyle(lineWidth: 1.8))
                                     .interpolationMethod(.monotone)
 
-                                    if goldPoints.count == 1 {
+                                    if singleGoldPoint {
                                         PointMark(
                                             x: .value(L10n.tr("日期"), point.date),
                                             y: .value(L10n.tr("金价"), plotY)
@@ -753,7 +748,7 @@ struct MacroDashboardView: View {
         } else if let report = model.treasury {
             if report.hasAnyData {
                 MacroTreasuryPressureCard(
-                    model: MacroTreasuryPressureModel.make(from: report),
+                    model: model.treasuryPressureModel ?? MacroTreasuryPressureModel.make(from: report),
                     asOf: report.asOf
                 ) {
                     showingTreasuryPressureGuide = true
@@ -764,8 +759,8 @@ struct MacroDashboardView: View {
                     selectedYieldDate = nil
                     Task { await model.selectTreasuryRange(chosen) }
                 }
-                treasuryDebtChartCard(report.debtSeries)
-                treasuryYieldChartCard(real: report.realYieldSeries, nominal: report.nominalYieldSeries)
+                treasuryDebtChartCard(model.displayTreasuryDebtSeries)
+                treasuryYieldChartCard(real: model.displayTreasuryRealYieldSeries, nominal: model.displayTreasuryNominalYieldSeries)
                 if !report.cards.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(L10n.tr("美债与长债 ETF 核心指标"))
@@ -1246,7 +1241,7 @@ struct MacroDashboardView: View {
     // MARK: - CFTC 黄金持仓（COT）
 
     private var cotSectionCard: some View {
-        let points = model.cot?.points ?? []
+        let points = model.displayCotPoints
         let latest = model.cot?.latest ?? points.last
         let inspected = selectedCotDate.flatMap { target in
             points.min { abs($0.date.timeIntervalSince(target)) < abs($1.date.timeIntervalSince(target)) }

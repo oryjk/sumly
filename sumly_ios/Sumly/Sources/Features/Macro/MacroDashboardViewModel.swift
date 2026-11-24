@@ -15,11 +15,37 @@ final class MacroDashboardViewModel {
     private(set) var treasuryYieldScale: MacroChartScale = .linear
     private(set) var cotScale: MacroChartScale = .linear
 
-    private(set) var temperature: MacroTemperatureReport?
-    private(set) var temperatureHistory: MacroTemperatureHistory?
-    private(set) var treasury: MacroTreasuryReport?
-    private(set) var catalog: MacroIndicatorsCatalog?
-    private(set) var cot: MacroCotReport?
+    private(set) var temperature: MacroTemperatureReport? {
+        didSet { rebuildTemperatureDerivedState() }
+    }
+    private(set) var temperatureHistory: MacroTemperatureHistory? {
+        didSet { rebuildTemperatureHistoryDerivedState() }
+    }
+    private(set) var treasury: MacroTreasuryReport? {
+        didSet { rebuildTreasuryDerivedState() }
+    }
+    private(set) var catalog: MacroIndicatorsCatalog? {
+        didSet { rebuildPanoramaDerivedState() }
+    }
+    private(set) var cot: MacroCotReport? {
+        didSet { rebuildCotDerivedState() }
+    }
+
+    // 预计算的绘制序列与图表刻度上下文，避免 SwiftUI 每次 body 重绘 / 手指选点都 O(N) 扫描上千点
+    private(set) var displayTemperatureHistoryPoints: [MacroTemperatureHistoryPoint] = []
+    private(set) var hasTemperatureHistoryGoldPrices: Bool = false
+    private(set) var displayTreasuryDebtSeries: [MacroTimePoint] = []
+    private(set) var displayTreasuryRealYieldSeries: [MacroTimePoint] = []
+    private(set) var displayTreasuryNominalYieldSeries: [MacroTimePoint] = []
+    private(set) var displayCotPoints: [MacroCotPoint] = []
+
+    private(set) var cachedDualHorizonSummary: MacroDualHorizonSummary?
+    private(set) var cachedTreasuryPressureModel: MacroTreasuryPressureModel?
+    private(set) var cachedPanoramaThermometerModel: MacroPanoramaThermometerModel = MacroPanoramaThermometerModel.make(temperature: nil, catalog: nil)
+    private(set) var cachedTemperatureGoldPriceScaleContext: MacroChartScaleContext = MacroChartScaleContext.make(values: [], requestedScale: .linear, unit: "usd/oz", minLinearPadding: 10, desiredTickCount: 3)
+    private(set) var cachedTreasuryDebtScaleContext: MacroChartScaleContext = MacroChartScaleContext.make(values: [], requestedScale: .linear, unit: "trillion_usd", minLinearPadding: 0.2, desiredTickCount: 4)
+    private(set) var cachedTreasuryYieldScaleContext: MacroChartScaleContext = MacroChartScaleContext.make(values: [], requestedScale: .linear, unit: "%", includeZeroInLinear: true, minLinearPadding: 0.25, desiredTickCount: 4)
+    private(set) var cachedCotScaleContext: MacroChartScaleContext = MacroChartScaleContext.make(values: [], requestedScale: .linear, unit: "contracts", includeZeroInLinear: true, minLinearPadding: 10_000, desiredTickCount: 4)
 
     private(set) var isLoadingTemperature = false
     private(set) var isLoadingHistory = false
@@ -55,11 +81,11 @@ final class MacroDashboardViewModel {
     }
 
     var treasuryPressureModel: MacroTreasuryPressureModel? {
-        treasury.map(MacroTreasuryPressureModel.make(from:))
+        cachedTreasuryPressureModel
     }
 
     var panoramaThermometerModel: MacroPanoramaThermometerModel {
-        MacroPanoramaThermometerModel.make(temperature: temperature, catalog: catalog)
+        cachedPanoramaThermometerModel
     }
 
     func toggleSectionSelection(_ sectionID: String) {
@@ -108,7 +134,80 @@ final class MacroDashboardViewModel {
     }
 
     var temperatureGoldPriceScaleContext: MacroChartScaleContext {
-        MacroChartScaleContext.make(
+        cachedTemperatureGoldPriceScaleContext
+    }
+
+    var treasuryDebtScaleContext: MacroChartScaleContext {
+        cachedTreasuryDebtScaleContext
+    }
+
+    var treasuryYieldScaleContext: MacroChartScaleContext {
+        cachedTreasuryYieldScaleContext
+    }
+
+    var cotScaleContext: MacroChartScaleContext {
+        cachedCotScaleContext
+    }
+
+    func setTemperatureGoldPriceScale(_ scale: MacroChartScale) {
+        temperatureGoldPriceScale = MacroChartScale.effectiveScale(
+            requested: scale,
+            for: temperatureGoldPriceValues
+        )
+        rebuildTemperatureGoldScaleContext()
+    }
+
+    func setTreasuryDebtScale(_ scale: MacroChartScale) {
+        treasuryDebtScale = MacroChartScale.effectiveScale(
+            requested: scale,
+            for: treasuryDebtValues
+        )
+        rebuildTreasuryScaleContexts()
+    }
+
+    func setTreasuryYieldScale(_ scale: MacroChartScale) {
+        treasuryYieldScale = MacroChartScale.effectiveScale(
+            requested: scale,
+            for: treasuryYieldValues,
+            pointCount: treasuryYieldPointCount
+        )
+        rebuildTreasuryScaleContexts()
+    }
+
+    func setCotScale(_ scale: MacroChartScale) {
+        cotScale = MacroChartScale.effectiveScale(
+            requested: scale,
+            for: cotValues,
+            pointCount: cotPointCount
+        )
+        rebuildCotScaleContext()
+    }
+
+    // MARK: - 派生缓存与极值保留降采样
+
+    private func rebuildTemperatureDerivedState() {
+        cachedDualHorizonSummary = temperature.map(MacroPresentation.dualHorizonSummary(for:))
+        rebuildPanoramaDerivedState()
+    }
+
+    private func rebuildPanoramaDerivedState() {
+        cachedPanoramaThermometerModel = MacroPanoramaThermometerModel.make(temperature: temperature, catalog: catalog)
+    }
+
+    private func rebuildTemperatureHistoryDerivedState() {
+        let raw = temperatureHistory?.points ?? []
+        displayTemperatureHistoryPoints = MacroChartDownsampler.downsample(
+            raw,
+            maxPoints: 180,
+            primaryValue: \.score,
+            secondaryValue: \.goldPriceUSD
+        )
+        hasTemperatureHistoryGoldPrices = raw.contains { $0.goldPriceUSD != nil }
+        rebuildTemperatureGoldScaleContext()
+    }
+
+    private func rebuildTemperatureGoldScaleContext() {
+        cachedTemperatureGoldPriceScaleContext = MacroChartScaleContext.make(
             values: temperatureGoldPriceValues,
             requestedScale: temperatureGoldPriceScale,
             unit: "usd/oz",
@@ -117,18 +216,35 @@ final class MacroDashboardViewModel {
         )
     }
 
-    var treasuryDebtScaleContext: MacroChartScaleContext {
-        MacroChartScaleContext.make(
+    private func rebuildTreasuryDerivedState() {
+        cachedTreasuryPressureModel = treasury.map(MacroTreasuryPressureModel.make(from:))
+        displayTreasuryDebtSeries = MacroChartDownsampler.downsample(
+            treasury?.debtSeries ?? [],
+            maxPoints: 180,
+            primaryValue: \.value
+        )
+        displayTreasuryRealYieldSeries = MacroChartDownsampler.downsample(
+            treasury?.realYieldSeries ?? [],
+            maxPoints: 180,
+            primaryValue: \.value
+        )
+        displayTreasuryNominalYieldSeries = MacroChartDownsampler.downsample(
+            treasury?.nominalYieldSeries ?? [],
+            maxPoints: 180,
+            primaryValue: \.value
+        )
+        rebuildTreasuryScaleContexts()
+    }
+
+    private func rebuildTreasuryScaleContexts() {
+        cachedTreasuryDebtScaleContext = MacroChartScaleContext.make(
             values: treasuryDebtValues,
             requestedScale: treasuryDebtScale,
             unit: "trillion_usd",
             minLinearPadding: 0.2,
             desiredTickCount: 4
         )
-    }
-
-    var treasuryYieldScaleContext: MacroChartScaleContext {
-        MacroChartScaleContext.make(
+        cachedTreasuryYieldScaleContext = MacroChartScaleContext.make(
             values: treasuryYieldValues,
             pointCount: treasuryYieldPointCount,
             requestedScale: treasuryYieldScale,
@@ -139,8 +255,18 @@ final class MacroDashboardViewModel {
         )
     }
 
-    var cotScaleContext: MacroChartScaleContext {
-        MacroChartScaleContext.make(
+    private func rebuildCotDerivedState() {
+        displayCotPoints = MacroChartDownsampler.downsample(
+            cot?.points ?? [],
+            maxPoints: 180,
+            primaryValue: \.mmNet,
+            secondaryValue: \.swapNet
+        )
+        rebuildCotScaleContext()
+    }
+
+    private func rebuildCotScaleContext() {
+        cachedCotScaleContext = MacroChartScaleContext.make(
             values: cotValues,
             pointCount: cotPointCount,
             requestedScale: cotScale,
@@ -148,36 +274,6 @@ final class MacroDashboardViewModel {
             includeZeroInLinear: true,
             minLinearPadding: 10_000,
             desiredTickCount: 4
-        )
-    }
-
-    func setTemperatureGoldPriceScale(_ scale: MacroChartScale) {
-        temperatureGoldPriceScale = MacroChartScale.effectiveScale(
-            requested: scale,
-            for: temperatureGoldPriceValues
-        )
-    }
-
-    func setTreasuryDebtScale(_ scale: MacroChartScale) {
-        treasuryDebtScale = MacroChartScale.effectiveScale(
-            requested: scale,
-            for: treasuryDebtValues
-        )
-    }
-
-    func setTreasuryYieldScale(_ scale: MacroChartScale) {
-        treasuryYieldScale = MacroChartScale.effectiveScale(
-            requested: scale,
-            for: treasuryYieldValues,
-            pointCount: treasuryYieldPointCount
-        )
-    }
-
-    func setCotScale(_ scale: MacroChartScale) {
-        cotScale = MacroChartScale.effectiveScale(
-            requested: scale,
-            for: cotValues,
-            pointCount: cotPointCount
         )
     }
 
@@ -193,6 +289,49 @@ final class MacroDashboardViewModel {
             }
             if shouldLoadTreasury {
                 group.addTask { await self.loadTreasury() }
+            }
+        }
+    }
+
+    /// 进场或切换 Tab 时按需加载当前 Tab 依赖，避免首帧并发拉取 5 个接口并礼让导航转场动画。
+    func loadActiveTab(deferAfterTransition: Bool = false) async {
+        if deferAfterTransition, selectedTab == .temperature, temperature != nil, temperatureHistory == nil {
+            try? await Task.sleep(for: .milliseconds(280))
+            guard !Task.isCancelled else { return }
+        }
+
+        switch selectedTab {
+        case .temperature:
+            let needTemp = temperature == nil && !isLoadingTemperature
+            let needHistory = temperatureHistory == nil && !isLoadingHistory
+            guard needTemp || needHistory else { return }
+            await withTaskGroup(of: Void.self) { group in
+                if needTemp {
+                    group.addTask { await self.loadTemperature() }
+                }
+                if needHistory {
+                    group.addTask { await self.loadTemperatureHistory() }
+                }
+            }
+        case .treasury:
+            if treasury == nil && !isLoadingTreasury {
+                await loadTreasury()
+            }
+        case .panorama:
+            let needTemp = temperature == nil && !isLoadingTemperature && temperatureError == nil
+            let needCatalog = catalog == nil && !isLoadingCatalog
+            let needCot = cot == nil && !isLoadingCot
+            guard needTemp || needCatalog || needCot else { return }
+            await withTaskGroup(of: Void.self) { group in
+                if needTemp {
+                    group.addTask { await self.loadTemperature() }
+                }
+                if needCatalog {
+                    group.addTask { await self.loadCatalog() }
+                }
+                if needCot {
+                    group.addTask { await self.loadCot() }
+                }
             }
         }
     }
@@ -294,6 +433,7 @@ final class MacroDashboardViewModel {
                 requested: temperatureGoldPriceScale,
                 for: temperatureGoldPriceValues
             )
+            rebuildTemperatureGoldScaleContext()
         } catch {
             guard !Self.isCancellationError(error), historyRequestID == requestID else { return }
             historyError = Self.userFacingError(error)
@@ -332,6 +472,7 @@ final class MacroDashboardViewModel {
                 for: treasuryYieldValues,
                 pointCount: treasuryYieldPointCount
             )
+            rebuildTreasuryScaleContexts()
         } catch {
             guard !Self.isCancellationError(error), treasuryRequestID == requestID else { return }
             treasuryError = Self.userFacingError(error)
@@ -387,6 +528,7 @@ final class MacroDashboardViewModel {
                 for: cotValues,
                 pointCount: cotPointCount
             )
+            rebuildCotScaleContext()
         } catch {
             guard !Self.isCancellationError(error), cotRequestID == requestID else { return }
             cotError = Self.userFacingError(error)
@@ -419,5 +561,77 @@ final class MacroDashboardViewModel {
             }
         }
         return L10n.tr("宏观数据暂时不可用，请稍后重试")
+    }
+}
+
+/// 极值保留视觉抽稀器：保留首尾点与每个桶内的主序列最小/最大值（按时间顺序去重），
+/// 在肉眼无损的前提下把上千个 Swift Charts `.monotone` 样条节点压缩到 ~180 点以内。
+enum MacroChartDownsampler {
+    static func downsample<T>(
+        _ items: [T],
+        maxPoints: Int = 180,
+        primaryValue: (T) -> Double,
+        secondaryValue: ((T) -> Double?)? = nil
+    ) -> [T] {
+        guard maxPoints >= 4, items.count > maxPoints else { return items }
+        let interiorCount = items.count - 2
+        let bucketCount = max(1, (maxPoints - 2) / 2)
+        var pickedIndices: [Int] = []
+        pickedIndices.reserveCapacity(maxPoints)
+        pickedIndices.append(0)
+
+        for bucket in 0..<bucketCount {
+            let start = 1 + (bucket * interiorCount) / bucketCount
+            let end = 1 + ((bucket + 1) * interiorCount) / bucketCount
+            guard start < end else { continue }
+
+            var minIdx = start
+            var maxIdx = start
+            var minVal = primaryValue(items[start])
+            var maxVal = minVal
+
+            if let secondaryValue {
+                var secMinIdx = start
+                var secMaxIdx = start
+                var secMin = secondaryValue(items[start]) ?? minVal
+                var secMax = secMin
+
+                for idx in (start + 1)..<end {
+                    let v = primaryValue(items[idx])
+                    if v < minVal { minVal = v; minIdx = idx }
+                    if v > maxVal { maxVal = v; maxIdx = idx }
+                    if let sv = secondaryValue(items[idx]) {
+                        if sv < secMin { secMin = sv; secMinIdx = idx }
+                        if sv > secMax { secMax = sv; secMaxIdx = idx }
+                    }
+                }
+                // 如果主序列只选中 1 个点且次序列极值不同，附带次序列最显著点
+                if minIdx == maxIdx && secMaxIdx != minIdx {
+                    maxIdx = secMaxIdx
+                } else if minIdx == maxIdx && secMinIdx != minIdx {
+                    maxIdx = secMinIdx
+                }
+            } else {
+                for idx in (start + 1)..<end {
+                    let v = primaryValue(items[idx])
+                    if v < minVal { minVal = v; minIdx = idx }
+                    if v > maxVal { maxVal = v; maxIdx = idx }
+                }
+            }
+
+            if minIdx <= maxIdx {
+                if pickedIndices.last != minIdx { pickedIndices.append(minIdx) }
+                if pickedIndices.last != maxIdx { pickedIndices.append(maxIdx) }
+            } else {
+                if pickedIndices.last != maxIdx { pickedIndices.append(maxIdx) }
+                if pickedIndices.last != minIdx { pickedIndices.append(minIdx) }
+            }
+        }
+
+        let lastIdx = items.count - 1
+        if pickedIndices.last != lastIdx {
+            pickedIndices.append(lastIdx)
+        }
+        return pickedIndices.map { items[$0] }
     }
 }
