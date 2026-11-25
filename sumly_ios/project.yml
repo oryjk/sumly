@@ -55,8 +55,8 @@ targets:
           - fr
           - pt
           - ja
-        CFBundleShortVersionString: "1.0.6"
-        CFBundleVersion: "65"
+        CFBundleShortVersionString: "1.0.7"
+        CFBundleVersion: "66"
         UILaunchScreen:
           UIColorName: NeoBackground
         UISupportedInterfaceOrientations:
@@ -115,8 +115,8 @@ targets:
           - fr
           - pt
           - ja
-        CFBundleShortVersionString: "1.0.6"
-        CFBundleVersion: "65"
+        CFBundleShortVersionString: "1.0.7"
+        CFBundleVersion: "66"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
   SumlyTests:
