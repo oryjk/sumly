@@ -79,3 +79,15 @@
   - 全部 175 个国家/地区均已置为 `available: false`（当前在售地区数：`0 / 175`，0 报错）
   - 中国大陆（`CHN`，`eyJzIjoiNjgxMzg4NDU5NSIsInQiOiJDSE4ifQ`）：`available=false`，`contentStatuses=["CANNOT_SELL"]`
   - `1.0.6 (61)` 草稿（`8a52f4ba-749a-4d27-a469-23507217cf3c`）及全部 6 语种元数据、12 张新版截图、TestFlight 内部测试构建 `61` 均完整保留，待新域名与重新备案完成后可随时重新上架并提审。
+
+## 2026-11-25 1.0.6 过审与全区恢复上架记录
+
+- 时间：2026-11-25 10:12（北京时间）。
+- 审核与域名核实：
+  - App Review 审核单 `5e4e1a41-ee42-4951-a782-f32165bcb1ae`（提交时间 `2026-11-24T15:32:27.915Z`）状态为 **`COMPLETE`**；
+  - 版本 `1.0.6 (61)`（`8a52f4ba-749a-4d27-a469-23507217cf3c`）状态为 **`READY_FOR_SALE`**（`READY_FOR_DISTRIBUTION`）；
+  - 域名与后端接口恢复正常：`https://oryjk.cn/sumly/api/v1/app/config` 与 `https://oryjk.cn/sumly/privacy` 均返回 HTTP `200`。
+- 全区恢复上架核实：
+  - 通过 App Store Connect `v1/territoryAvailabilities` 将全部 175 个国家/地区恢复为 `available: true`（在售地区：`175 / 175`，0 报错）；
+  - 中国大陆（`CHN`）状态已转正为 `available: true`、`contentStatuses: ["AVAILABLE"]`；
+  - 美国（`USA`）状态已转正为 `available: true`、`contentStatuses: ["AVAILABLE"]`。
