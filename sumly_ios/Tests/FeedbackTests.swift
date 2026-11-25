@@ -261,15 +261,14 @@ struct FeedbackTests {
                 == "https://cdn.oryjk.cn/sumly/feedback/20261123/full.jpg"
         )
 
-        let productionBase = URL(string: "https://oryjk.cn:18443/sumly/api/v1")!
         #expect(
-            first.attachments[0].productionImageURL(baseURL: productionBase)?.absoluteString
-                == "https://oryjk.cn:18443/sumly/api/v1/app/feedback/attachments/20261123/abc123.jpg"
+            first.attachments[0].productionImageURL(baseURL: prodBase)?.absoluteString
+                == "https://oryjk.cn/sumly/api/v1/app/feedback/attachments/20261123/abc123.jpg"
         )
         #expect(first.attachments[0].productionImageURL(baseURL: localBase) == nil)
-        #expect(absoluteAttachment.productionImageURL(baseURL: productionBase) == nil)
+        #expect(absoluteAttachment.productionImageURL(baseURL: prodBase) == nil)
         let invalidAttachment = FeedbackAttachment(objectKey: "bad", url: "/api/v1/app/feedback/attachments/../mine")
-        #expect(invalidAttachment.productionImageURL(baseURL: productionBase) == nil)
+        #expect(invalidAttachment.productionImageURL(baseURL: prodBase) == nil)
 
         // 未知枚举值与 null 字段安全回退
         let second = list.items[1]

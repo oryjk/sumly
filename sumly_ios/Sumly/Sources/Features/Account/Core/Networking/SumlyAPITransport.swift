@@ -6,10 +6,16 @@ actor SumlyAPITransport {
 
     typealias Transfer = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
-    private enum Origin {
-        case primary, backup
+    private enum Origin: CaseIterable {
+        case primary, backup, home
 
-        var alternate: Self { self == .primary ? .backup : .primary }
+        var baseURL: URL {
+            switch self {
+            case .primary: SumlyProductionEndpoints.apiBaseURL
+            case .backup: SumlyProductionEndpoints.backupAPIBaseURL
+            case .home: SumlyProductionEndpoints.homeAPIBaseURL
+            }
+        }
     }
 
     private let uptime: @Sendable () -> TimeInterval
@@ -26,7 +32,7 @@ actor SumlyAPITransport {
         let primary = SumlyProductionEndpoints.apiBaseURL
         guard baseURL == primary,
               let url = request.url,
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               components.scheme == primary.scheme, components.host == primary.host, components.port == primary.port,
               components.user == nil, components.password == nil,
               components.percentEncodedPath.hasPrefix(primary.path + "/") else {
@@ -34,50 +40,48 @@ actor SumlyAPITransport {
         }
 
         let safeRead = request.httpMethod == "GET"
-        let first = chooseOrigin(safeRead: safeRead)
+        let active = preferred
+        let origins = chooseOrigins(safeRead: safeRead)
         let startedAtGeneration = generation
-        var primaryRequest = request
-        var backupRequest = request
-        let backup = SumlyProductionEndpoints.backupAPIBaseURL
-        components.host = backup.host
-        components.port = backup.port
-        guard let backupURL = components.url else { return try await transfer(request) }
-        backupRequest.url = backupURL
-        // A cached response cannot establish that the other origin is accepting requests again.
-        if safeRead {
-            if preferred == .primary {
-                backupRequest.cachePolicy = .reloadIgnoringLocalCacheData
-            } else {
-                primaryRequest.cachePolicy = .reloadIgnoringLocalCacheData
+
+        func routedRequest(to origin: Origin) throws -> URLRequest {
+            var routed = request
+            if origin != .primary {
+                var target = components
+                target.host = origin.baseURL.host
+                target.port = origin.baseURL.port
+                guard let targetURL = target.url else { throw URLError(.badURL) }
+                routed.url = targetURL
             }
+            // A cached response cannot establish that another origin is accepting requests.
+            if safeRead, origin != active { routed.cachePolicy = .reloadIgnoringLocalCacheData }
+            return routed
         }
 
-        let initial = first == .primary ? primaryRequest : backupRequest
-        guard safeRead else { return try await Self.perform(initial, using: transfer) }
+        guard safeRead else { return try await Self.perform(routedRequest(to: active), using: transfer) }
 
-        do {
-            let result = try await Self.perform(initial, using: transfer)
-            if !Self.isGatewayFailure(result.1) {
-                noteResponse(from: first, response: result.1, generation: startedAtGeneration)
+        for (index, origin) in origins.enumerated() {
+            let hasNext = index < origins.count - 1
+            do {
+                let result = try await Self.perform(routedRequest(to: origin), using: transfer)
+                if hasNext, Self.isGatewayFailure(result.1) { continue }
+                noteResponse(from: origin, response: result.1, generation: startedAtGeneration)
                 return result
+            } catch {
+                guard hasNext, Self.isConnectivityFailure(error) else { throw error }
             }
-        } catch {
-            guard Self.isConnectivityFailure(error) else { throw error }
         }
-
-        let alternate = first.alternate
-        let result = try await Self.perform(alternate == .primary ? primaryRequest : backupRequest, using: transfer)
-        noteResponse(from: alternate, response: result.1, generation: startedAtGeneration)
-        return result
+        preconditionFailure("The production API requires at least one origin")
     }
 
-    private func chooseOrigin(safeRead: Bool) -> Origin {
-        if preferred == .primary { return .primary }
+    private func chooseOrigins(safeRead: Bool) -> [Origin] {
+        if !safeRead { return [preferred] }
+        if preferred == .primary { return Origin.allCases }
         let now = uptime()
-        guard safeRead, now >= nextProbe else { return .backup }
+        guard now >= nextProbe else { return [preferred] + Origin.allCases.filter { $0 != preferred } }
         // While this probe runs, other requests keep using the last responding origin.
         nextProbe = now + probeInterval
-        return .primary
+        return Origin.allCases
     }
 
     private func noteResponse(from origin: Origin, response: URLResponse, generation startedAtGeneration: UInt64) {
@@ -86,7 +90,7 @@ actor SumlyAPITransport {
               response is HTTPURLResponse, !Self.isGatewayFailure(response) else { return }
         preferred = origin
         generation &+= 1
-        if origin == .backup { nextProbe = uptime() + probeInterval }
+        if origin != .primary { nextProbe = uptime() + probeInterval }
     }
 
     private static func perform(_ request: URLRequest, using transfer: Transfer) async throws -> (Data, URLResponse) {

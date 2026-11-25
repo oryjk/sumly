@@ -74,7 +74,7 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
     // MARK: - GoldPriceServicing
 
     private var cacheSeries: String { instrumentID ?? "xauusd" }
-    private var cacheScope: String { baseURL.absoluteString }
+    private var cacheScope: String { SumlyProductionEndpoints.marketCacheScope(for: baseURL) }
     private func synchronizedPoints() async throws -> [MarketSyncPoint] {
         try await MarketHistoryCache.shared.sync(scope: cacheScope, series: cacheSeries,
             transport: BackendMarketSyncTransport(baseURL: baseURL, session: session))

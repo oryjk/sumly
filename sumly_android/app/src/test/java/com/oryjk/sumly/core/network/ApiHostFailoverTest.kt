@@ -21,6 +21,11 @@ import java.util.concurrent.TimeUnit
 
 class ApiHostFailoverTest {
     @Test
+    fun productionApiUsesDefaultHttpsPort() {
+        assertEquals("https://oryjk.cn/sumly/api/v1/", ApiClient.DefaultBaseUrl)
+    }
+
+    @Test
     fun gatewayFailurePreservesRequestAndKeepsBackupUntilSafePrimaryProbe() = runBlocking {
         MockWebServer().use { main ->
             MockWebServer().use { backup ->
@@ -57,6 +62,54 @@ class ApiHostFailoverTest {
     }
 
     @Test
+    fun secondBackupReceivesReadsAndWritesUntilFirstBackupRecovers() = runBlocking {
+        MockWebServer().use { main ->
+            MockWebServer().use { backup ->
+                MockWebServer().use { home ->
+                    var elapsedMs = 0L
+                    val primaryUrl = main.url("/sumly/api/v1/")
+                    val backupUrl = backup.url("/sumly/api/v1/")
+                    val homeUrl = home.url("/sumly/api/v1/")
+                    val api = ApiClient(primaryUrl, ApiHostFailover(primaryUrl, backupUrl, homeUrl) { elapsedMs })
+                    main.enqueue(MockResponse().setResponseCode(504))
+                    main.enqueue(MockResponse().setResponseCode(502))
+                    backup.enqueue(MockResponse().setResponseCode(503))
+                    repeat(2) { backup.enqueue(ok("backup")) }
+                    repeat(2) { home.enqueue(ok("home")) }
+                    home.enqueue(MockResponse().setResponseCode(503).setHeader("Retry-After", "0"))
+                    home.enqueue(ok("unexpected write replay"))
+
+                    val path = "app/holdings"
+                    assertEquals("home", api.get(path, mapOf("cursor" to "a+b"), "session-token").getString("host"))
+                    assertEquals("home", api.get(path).getString("host"))
+                    elapsedMs = 61_000L
+                    val error = assertThrows(ApiException::class.java) {
+                        runBlocking { api.put(path, JSONObject().put("revision", 7), "session-token") }
+                    }
+                    assertEquals(503, error.httpStatus)
+                    assertEquals(1, main.requestCount)
+                    assertEquals(1, backup.requestCount)
+                    assertEquals("backup", api.get(path).getString("host"))
+                    assertEquals("backup", api.get(path).getString("host"))
+
+                    val retried = home.takeRequest()
+                    assertEquals("/sumly/api/v1/app/holdings", retried.requestUrl?.encodedPath)
+                    assertEquals("a+b", retried.requestUrl?.queryParameter("cursor"))
+                    assertEquals("Bearer session-token", retried.getHeader("Authorization"))
+                    home.takeRequest()
+                    val write = home.takeRequest()
+                    assertEquals("PUT", write.method)
+                    assertEquals("Bearer session-token", write.getHeader("Authorization"))
+                    assertEquals(7, JSONObject(write.body.readUtf8()).getInt("revision"))
+                    assertEquals(2, main.requestCount)
+                    assertEquals(3, backup.requestCount)
+                    assertEquals(3, home.requestCount)
+                }
+            }
+        }
+    }
+
+    @Test
     fun aRefusedConnectionRetriesOnBackup() = runBlocking {
         MockWebServer().use { backup ->
             val backupUrl = backup.url("/sumly/api/v1/")
@@ -71,21 +124,26 @@ class ApiHostFailoverTest {
     }
 
     @Test
-    fun failedBackupStopsAfterTwoAttemptsAndDoesNotBecomePreferred() {
+    fun failedOriginsStopAfterThreeAttemptsAndDoNotBecomePreferred() {
         MockWebServer().use { main ->
             MockWebServer().use { backup ->
-                val primaryUrl = main.url("/sumly/api/v1/")
-                val backupUrl = backup.url("/sumly/api/v1/")
-                val api = ApiClient(primaryUrl, ApiHostFailover(primaryUrl, backupUrl))
-                main.enqueue(MockResponse().setResponseCode(504))
-                main.enqueue(ok("main"))
-                backup.enqueue(MockResponse().setResponseCode(502))
+                MockWebServer().use { home ->
+                    val primaryUrl = main.url("/sumly/api/v1/")
+                    val backupUrl = backup.url("/sumly/api/v1/")
+                    val homeUrl = home.url("/sumly/api/v1/")
+                    val api = ApiClient(primaryUrl, ApiHostFailover(primaryUrl, backupUrl, homeUrl))
+                    main.enqueue(MockResponse().setResponseCode(504))
+                    main.enqueue(ok("main"))
+                    backup.enqueue(MockResponse().setResponseCode(502))
+                    home.enqueue(MockResponse().setResponseCode(503))
 
-                val error = assertThrows(ApiException::class.java) { runBlocking { api.get("app/auth/me") } }
-                assertEquals(502, error.httpStatus)
-                assertEquals(1, main.requestCount)
-                assertEquals("main", runBlocking { api.get("app/auth/me") }.getString("host"))
-                assertEquals(1, backup.requestCount)
+                    val error = assertThrows(ApiException::class.java) { runBlocking { api.get("app/auth/me") } }
+                    assertEquals(503, error.httpStatus)
+                    assertEquals(1, main.requestCount)
+                    assertEquals("main", runBlocking { api.get("app/auth/me") }.getString("host"))
+                    assertEquals(1, backup.requestCount)
+                    assertEquals(1, home.requestCount)
+                }
             }
         }
     }

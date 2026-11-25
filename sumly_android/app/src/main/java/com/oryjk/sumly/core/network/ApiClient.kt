@@ -194,11 +194,12 @@ class ApiClient internal constructor(url: HttpUrl, private val failover: ApiHost
     }
 
     companion object {
-        private const val DefaultSiteUrl = "https://oryjk.cn:18443/sumly/"
+        private const val DefaultSiteUrl = "https://oryjk.cn/sumly/"
         const val DefaultBaseUrl = "${DefaultSiteUrl}api/v1/"
         const val DefaultPrivacyPolicyUrl = "${DefaultSiteUrl}privacy"
         private const val BackupBaseUrl = "https://backup.oryjk.cn:19443/sumly/api/v1/"
-        private val productionFailover = ApiHostFailover(DefaultBaseUrl.toHttpUrl(), BackupBaseUrl.toHttpUrl())
+        private const val HomeBaseUrl = "https://home.oryjk.cn:18443/sumly/api/v1/"
+        private val productionFailover = ApiHostFailover(DefaultBaseUrl.toHttpUrl(), BackupBaseUrl.toHttpUrl(), HomeBaseUrl.toHttpUrl())
         private val loopbackHosts = setOf("localhost", "127.0.0.1", "::1")
         private val relativePath = Regex("app(?:/[A-Za-z0-9_-]+)+")
     }

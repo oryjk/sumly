@@ -96,11 +96,11 @@ final class HoldingsCalendarViewModel {
             return (try? await service.fetchDailyPrices()) ?? []
         }
         self.cachedTemperatureLoader = cachedTemperatureLoader ?? { range in
-            let scope = BackendGoldPriceService.defaultBaseURL.absoluteString
+            let scope = SumlyProductionEndpoints.marketCacheScope(for: BackendGoldPriceService.defaultBaseURL)
             return await MacroTemperatureHistoryCache.shared.cached(scope: scope, range: range)
         }
         self.temperatureLoader = temperatureLoader ?? { range in
-            let scope = BackendGoldPriceService.defaultBaseURL.absoluteString
+            let scope = SumlyProductionEndpoints.marketCacheScope(for: BackendGoldPriceService.defaultBaseURL)
             let service = BackendMacroService()
             return (try? await MacroTemperatureHistoryCache.shared.fetch(scope: scope, range: range, service: service)) ?? []
         }

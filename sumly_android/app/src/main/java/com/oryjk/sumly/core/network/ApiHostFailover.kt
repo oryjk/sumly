@@ -13,53 +13,54 @@ import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 
-/** Process-wide routing for the two configured production API origins. */
+/** Process-wide routing for the configured production API origins. */
 internal class ApiHostFailover(
     val primary: HttpUrl,
-    private val backup: HttpUrl,
+    vararg backups: HttpUrl,
     private val elapsedMs: () -> Long = { TimeUnit.NANOSECONDS.toMillis(System.nanoTime()) },
 ) {
-    private data class Selection(val url: HttpUrl, val generation: Long)
+    private data class Selection(val origins: List<HttpUrl>, val generation: Long)
 
+    private val origins = listOf(primary, *backups).distinct()
     private var preferred = primary
     private var nextProbeMs = 0L
     private var generation = 0L
 
     suspend fun <T> send(safeRead: Boolean, transfer: suspend (HttpUrl) -> Response<T>): Response<T> {
         currentCoroutineContext().ensureActive()
-        val first = select(safeRead)
-        if (!safeRead) return transfer(first.url)
+        val selection = select(safeRead)
+        if (!safeRead) return transfer(selection.origins.first())
 
-        val initial = try {
-            transfer(first.url)
-        } catch (error: IOException) {
+        val attempts = selection.origins.iterator()
+        while (true) {
             currentCoroutineContext().ensureActive()
-            if (!isConnectivityFailure(error)) throw error
-            null
-        }
-        if (initial != null && !isGatewayFailure(initial.code())) {
+            val origin = attempts.next()
+            val response = try {
+                transfer(origin)
+            } catch (error: IOException) {
+                currentCoroutineContext().ensureActive()
+                if (!attempts.hasNext() || !isConnectivityFailure(error)) throw error
+                continue
+            }
+            if (isGatewayFailure(response.code()) && attempts.hasNext()) {
+                response.errorBody()?.close()
+                continue
+            }
             currentCoroutineContext().ensureActive()
-            noteResponse(first.url, first.generation)
-            return initial
+            if (!isGatewayFailure(response.code())) noteResponse(origin, selection.generation)
+            return response
         }
-
-        initial?.errorBody()?.close()
-        currentCoroutineContext().ensureActive()
-        val alternate = if (first.url == primary) backup else primary
-        val response = transfer(alternate)
-        currentCoroutineContext().ensureActive()
-        if (!isGatewayFailure(response.code())) noteResponse(alternate, first.generation)
-        return response
     }
 
     @Synchronized
     private fun select(safeRead: Boolean): Selection {
-        if (preferred == primary) return Selection(primary, generation)
+        if (!safeRead) return Selection(listOf(preferred), generation)
+        if (preferred == primary) return Selection(origins, generation)
         val now = elapsedMs()
-        if (!safeRead || now < nextProbeMs) return Selection(backup, generation)
+        if (now < nextProbeMs) return Selection(listOf(preferred) + origins.filterNot { it == preferred }, generation)
         // While this probe runs, other requests keep using the last responding origin.
         nextProbeMs = now + ProbeIntervalMs
-        return Selection(primary, generation)
+        return Selection(origins, generation)
     }
 
     @Synchronized
@@ -68,7 +69,7 @@ internal class ApiHostFailover(
         if (generation != startedAtGeneration || preferred == origin) return
         preferred = origin
         generation++
-        if (origin == backup) nextProbeMs = elapsedMs() + ProbeIntervalMs
+        if (origin != primary) nextProbeMs = elapsedMs() + ProbeIntervalMs
     }
 
     private fun isGatewayFailure(status: Int): Boolean = status == 502 || status == 503 || status == 504
