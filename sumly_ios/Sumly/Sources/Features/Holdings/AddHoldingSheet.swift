@@ -98,6 +98,7 @@ struct AddHoldingSheet: View {
                         coreInputCard {
                             focusDetailsParameters(using: scrollProxy)
                         }
+                        HoldingHolderSelectorCard(selected: $draft.holder)
                         detailsDrawer
                             .id(Self.detailsParamsAnchorID)
                             .overlay {
@@ -149,6 +150,7 @@ struct AddHoldingSheet: View {
         }
         .presentationBackground(GoldTheme.background)
         .sensoryFeedback(.selection, trigger: draft.assetType)
+        .sensoryFeedback(.selection, trigger: draft.holder)
         .sensoryFeedback(.selection, trigger: quickGramPulse)
         .sensoryFeedback(.selection, trigger: detailsFocusPulse)
         .sensoryFeedback(.selection, trigger: selectedSubPreset)

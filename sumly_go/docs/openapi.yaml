@@ -1556,6 +1556,7 @@ components:
         recoveryDeduction: {type: number, format: double, minimum: 0}
         recoveryDiscount: {type: number, format: double, minimum: 0, maximum: 1, exclusiveMaximum: true}
         recoveryFixedFee: {type: number, format: double, minimum: 0}
+        holder: {type: string, enum: [mother, father, husband, wife, child, grandfather, grandmother], nullable: true}
         alerts:
           type: array
           maxItems: 4

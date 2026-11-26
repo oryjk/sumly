@@ -31,7 +31,11 @@ enum HoldingsSelection {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         return records.filter { record in
             guard record.bookName == book, record.disposition == "holding" else { return false }
-            guard query.isEmpty || (record.brand.isEmpty ? L10n.tr("未知") : record.brand).localizedCaseInsensitiveContains(query) || record.note.localizedCaseInsensitiveContains(query) else { return false }
+            guard query.isEmpty
+                || (record.brand.isEmpty ? L10n.tr("未知") : record.brand).localizedCaseInsensitiveContains(query)
+                || record.note.localizedCaseInsensitiveContains(query)
+                || (record.holdingHolder?.displayName.localizedCaseInsensitiveContains(query) ?? false)
+            else { return false }
             if filter != .all {
                 guard let quote, quote.isFinite, quote > 0 else { return false }
                 guard let profit = GoldReturnCalculator.calculate(record.returnInput, referencePrice: quote)?.profit else { return false }

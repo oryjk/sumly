@@ -9,7 +9,7 @@ GET 返回 `{code:0,message:"ok",data:{revision:0,document:{schemaVersion:1,book
 revision 加 1。409 不改变云文档；客户端重新 GET，并以已保存的 base document 做三方合并。
 
 所有非可选字段必填，未知字段、必填 null、JSON 尾随值拒绝（422）。可选 `disposedAt`、`purchaseID`、
-`purchaseTotalOverride` 支持省略或 null。精确字段定义和上限见 [OpenAPI](openapi.yaml)。
+`purchaseTotalOverride`、`holder`（家庭持有人枚举：`mother/father/husband/wife/child/grandfather/grandmother`）支持省略或 null。精确字段定义和上限见 [OpenAPI](openapi.yaml)。
 日期为 Unix 毫秒 Double，保留小数，范围公历 0001–9999 年。UUID 接受大小写，记录 UUID 大小写无关去重。
 处置枚举为 `holding/sold/gift`，与现有 iOS 数据一致（不是 gifted）。提醒仅保存配置，不保存 armed、基线、冷却。
 书名、note、其余文本上限分别为 100、2000、200 个 Unicode 字符；文本禁止 NUL。

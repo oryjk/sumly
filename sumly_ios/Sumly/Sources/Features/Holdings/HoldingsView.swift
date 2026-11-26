@@ -424,6 +424,9 @@ struct HoldingRowView: View {
             HStack(spacing: 8) {
                 GoldAssetGlyph(type: assetType, size: 26, emphasized: true)
                 Text(record.displayName).font(.subheadline.bold()).lineLimit(1)
+                if let holder = record.holdingHolder {
+                    HoldingHolderAvatar(holder: holder, size: 24, emphasized: true)
+                }
                 Spacer()
                 Text(HoldingsSelection.dateText(record.timestamp)).font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(GoldTheme.textSecondary)

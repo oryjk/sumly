@@ -1812,3 +1812,14 @@
 "（含工费与其他 %@）" = "(façon et autres %@ incl.)";
 "（手动总价）" = "(total manuel)";
 "；" = " ; ";
+"母亲" = "Mère";
+"父亲" = "Père";
+"老公" = "Mari";
+"老婆" = "Femme";
+"孩子" = "Enfant";
+"爷爷" = "Grand-père";
+"奶奶" = "Grand-mère";
+"%@持有" = "Détenu par %@";
+"在谁手上" = "Détenu par";
+"自己持有" = "Détenu par moi";
+"自己" = "Moi";

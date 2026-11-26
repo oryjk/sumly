@@ -88,6 +88,7 @@ struct HoldingDraft: Sendable {
     var channel = ""
     var brand = ""
     var note = ""
+    var holder: HoldingHolder? = nil
     var deductionText = ""
     var discountText = ""
     var fixedFeeText = ""
@@ -239,6 +240,7 @@ struct HoldingDraft: Sendable {
         otherText = record.extraFee > 0 ? Self.formatPrecise(record.extraFee) : ""
         purityText = Self.formatPrecise(record.purity * 100)
         brand = record.brand; channel = record.purchaseChannel; note = record.note
+        holder = record.holdingHolder
         deductionText = record.recoveryDeduction > 0 ? Self.formatPrecise(record.recoveryDeduction) : ""
         discountText = record.recoveryDiscount > 0 ? Self.formatPrecise(record.recoveryDiscount * 100) : ""
         fixedFeeText = record.recoveryFixedFee > 0 ? Self.formatPrecise(record.recoveryFixedFee) : ""
@@ -256,5 +258,6 @@ struct HoldingDraft: Sendable {
         record.brand = brand.trimmingCharacters(in: .whitespacesAndNewlines)
         record.purchaseChannel = channel.trimmingCharacters(in: .whitespacesAndNewlines)
         record.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        record.holder = holder?.rawValue ?? ""
     }
 }

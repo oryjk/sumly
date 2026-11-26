@@ -22,6 +22,7 @@ enum HoldingDisposal {
             disposed.recoveryDeduction = record.recoveryDeduction
             disposed.recoveryDiscount = record.recoveryDiscount
             disposed.recoveryFixedFee = record.recoveryFixedFee
+            disposed.holder = record.holder
             record.laborFee -= disposed.laborFee
             if let total = record.purchaseTotalOverride { record.purchaseTotalOverride = total - (disposed.purchaseTotalOverride ?? 0) }
             record.extraFee -= disposed.extraFee

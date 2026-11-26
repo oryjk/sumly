@@ -100,4 +100,24 @@ func TestBoundedAuthenticatedStrictSnapshotProtocol(t *testing.T) {
 	if got = request("PUT", string(encoded), true); got.Code != 200 || !strings.Contains(got.Body.String(), `1700000000000.25`) {
 		t.Fatal("fractional date roundtrip", got.Code, got.Body.String())
 	}
+
+	// Holder optional field: valid enum, null clearing, and invalid enum rejection
+	record.Holder = "mother"
+	encodedHolder, e := json.Marshal(map[string]any{"expectedRevision": 2, "document": documentFromDomain(domain.Document{SchemaVersion: 1, Books: []string{"默认账本"}, Records: []domain.Record{record}})})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if got = request("PUT", string(encodedHolder), true); got.Code != 200 || !strings.Contains(got.Body.String(), `"holder":"mother"`) {
+		t.Fatal("valid holder roundtrip failed", got.Code, got.Body.String())
+	}
+	invalidHolder := strings.Replace(string(encodedHolder), `"expectedRevision":2`, `"expectedRevision":3`, 1)
+	invalidHolder = strings.Replace(invalidHolder, `"holder":"mother"`, `"holder":"stranger"`, 1)
+	if got = request("PUT", invalidHolder, true); got.Code != 422 {
+		t.Fatal("invalid holder should return 422", got.Code, got.Body.String())
+	}
+	nullHolder := strings.Replace(string(encodedHolder), `"expectedRevision":2`, `"expectedRevision":3`, 1)
+	nullHolder = strings.Replace(nullHolder, `"holder":"mother"`, `"holder":null`, 1)
+	if got = request("PUT", nullHolder, true); got.Code != 200 || strings.Contains(got.Body.String(), `"holder"`) {
+		t.Fatal("null holder should clear holder and omit key", got.Code, got.Body.String())
+	}
 }

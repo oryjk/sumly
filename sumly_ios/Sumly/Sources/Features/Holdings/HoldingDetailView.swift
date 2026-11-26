@@ -46,7 +46,12 @@ struct HoldingDetailView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(record.displayName).font(.title2.bold())
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(record.displayName).font(.title2.bold())
+                        if let holder = record.holdingHolder {
+                            HoldingHolderBadge(holder: holder)
+                        }
+                    }
                     Text(L10n.fmt("%@ · %@ 购入 · 持有 %lld 天", assetLabel, HoldingsSelection.dateText(record.timestamp), Int64(holdDays)))
                         .font(.caption).foregroundStyle(GoldTheme.textSecondary)
                 }

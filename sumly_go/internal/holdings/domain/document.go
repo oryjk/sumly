@@ -44,6 +44,7 @@ type Record struct {
 	RecoveryDeduction     float64
 	RecoveryDiscount      float64
 	RecoveryFixedFee      float64
+	Holder                string
 	Alerts                []Alert
 }
 type Alert struct {
@@ -92,6 +93,11 @@ func (d Document) Validate() error {
 			return invalid()
 		}
 		if r.Disposition != "holding" && r.Disposition != "sold" && r.Disposition != "gift" {
+			return invalid()
+		}
+		switch r.Holder {
+		case "", "mother", "father", "husband", "wife", "child", "grandfather", "grandmother":
+		default:
 			return invalid()
 		}
 		if r.DisposedAt != nil && (!date(*r.DisposedAt) || *r.DisposedAt < r.Timestamp) {

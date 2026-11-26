@@ -39,6 +39,7 @@ type storedRecord struct {
 	RecoveryDeduction     float64       `json:"recoveryDeduction"`
 	RecoveryDiscount      float64       `json:"recoveryDiscount"`
 	RecoveryFixedFee      float64       `json:"recoveryFixedFee"`
+	Holder                *string       `json:"holder,omitempty"`
 	Alerts                []storedAlert `json:"alerts"`
 }
 type storedAlert struct {
@@ -77,6 +78,11 @@ func storedRecordFromDomain(r domain.Record) storedRecord {
 			alerts[i] = storedAlert(a)
 		}
 	}
+	var holder *string
+	if r.Holder != "" {
+		v := r.Holder
+		holder = &v
+	}
 	return storedRecord{
 		ID:                    r.ID,
 		Grams:                 r.Grams,
@@ -100,6 +106,7 @@ func storedRecordFromDomain(r domain.Record) storedRecord {
 		RecoveryDeduction:     r.RecoveryDeduction,
 		RecoveryDiscount:      r.RecoveryDiscount,
 		RecoveryFixedFee:      r.RecoveryFixedFee,
+		Holder:                holder,
 		Alerts:                alerts,
 	}
 }
@@ -110,6 +117,10 @@ func (r storedRecord) toDomain() domain.Record {
 		for i, a := range r.Alerts {
 			alerts[i] = domain.Alert(a)
 		}
+	}
+	var holder string
+	if r.Holder != nil {
+		holder = *r.Holder
 	}
 	return domain.Record{
 		ID:                    r.ID,
@@ -134,6 +145,7 @@ func (r storedRecord) toDomain() domain.Record {
 		RecoveryDeduction:     r.RecoveryDeduction,
 		RecoveryDiscount:      r.RecoveryDiscount,
 		RecoveryFixedFee:      r.RecoveryFixedFee,
+		Holder:                holder,
 		Alerts:                alerts,
 	}
 }

@@ -37,6 +37,7 @@ struct HoldingCloudRecord: Codable, Equatable, Identifiable, Sendable {
     var recoveryDeduction: Double
     var recoveryDiscount: Double
     var recoveryFixedFee: Double
+    var holder: String?
     var alerts: [HoldingCloudAlert]
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -59,6 +60,7 @@ struct HoldingCloudRecord: Codable, Equatable, Identifiable, Sendable {
         lhs.recoveryDeduction == rhs.recoveryDeduction &&
         lhs.recoveryDiscount == rhs.recoveryDiscount &&
         lhs.recoveryFixedFee == rhs.recoveryFixedFee &&
+        lhs.holder == rhs.holder &&
         lhs.alerts == rhs.alerts &&
         sameDate(lhs.timestamp, rhs.timestamp) && sameDate(lhs.createdAt, rhs.createdAt) && sameDate(lhs.disposedAt, rhs.disposedAt)
     }
@@ -93,6 +95,7 @@ struct HoldingCloudRecord: Codable, Equatable, Identifiable, Sendable {
         recoveryDeduction = record.recoveryDeduction
         recoveryDiscount = record.recoveryDiscount
         recoveryFixedFee = record.recoveryFixedFee
+        holder = record.holdingHolder?.rawValue
         alerts = record.alerts.map(HoldingCloudAlert.init).sorted { $0.id.uuidString < $1.id.uuidString }
     }
     @MainActor func makeRecord() -> HoldingRecord {
@@ -127,6 +130,7 @@ struct HoldingCloudRecord: Codable, Equatable, Identifiable, Sendable {
         record.recoveryDeduction = recoveryDeduction
         record.recoveryDiscount = recoveryDiscount
         record.recoveryFixedFee = recoveryFixedFee
+        record.holder = HoldingHolder.parse(holder)?.rawValue ?? ""
         let merged = alerts.map { configuration in
             if unchangedInput, let prior = previousAlerts.first(where: { $0.id == configuration.id }),
                HoldingCloudAlert(prior) == configuration { return prior }
@@ -233,6 +237,7 @@ extension HoldingDocument {
                   record.unitPriceCNY > 0 || (record.purchaseTotalOverride ?? 0) > 0,
                   Self.validDate(record.timestamp), Self.validDate(record.createdAt),
                   ["holding", "sold", "gift"].contains(record.disposition),
+                  HoldingHolder.isValidCloudValue(record.holder),
                   record.purity.isFinite, record.purity > 0, record.purity <= 1,
                   record.recoveryDiscount.isFinite, record.recoveryDiscount >= 0, record.recoveryDiscount < 1,
                   Self.validText(record.note, max: 2000),

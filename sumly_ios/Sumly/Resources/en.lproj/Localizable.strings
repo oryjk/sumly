@@ -1812,3 +1812,14 @@
 "（含工费与其他 %@）" = "(Incl. Craft & Other %@)";
 "（手动总价）" = "(Manual Total)";
 "；" = "; ";
+"母亲" = "Mother";
+"父亲" = "Father";
+"老公" = "Husband";
+"老婆" = "Wife";
+"孩子" = "Child";
+"爷爷" = "Grandpa";
+"奶奶" = "Grandma";
+"%@持有" = "Held by %@";
+"在谁手上" = "Held By";
+"自己持有" = "Held by Me";
+"自己" = "Me";

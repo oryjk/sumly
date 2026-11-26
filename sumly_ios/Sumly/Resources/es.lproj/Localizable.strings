@@ -1812,3 +1812,14 @@
 "（含工费与其他 %@）" = "(Incl. hechura y otros %@)";
 "（手动总价）" = "(Total manual)";
 "；" = "; ";
+"母亲" = "Madre";
+"父亲" = "Padre";
+"老公" = "Esposo";
+"老婆" = "Esposa";
+"孩子" = "Hijo";
+"爷爷" = "Abuelo";
+"奶奶" = "Abuela";
+"%@持有" = "Con %@";
+"在谁手上" = "¿Quién lo tiene?";
+"自己持有" = "Conmigo";
+"自己" = "Yo";

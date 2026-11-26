@@ -33,7 +33,11 @@ final class HoldingRecord {
     var recoveryDeduction: Double = 0
     var recoveryDiscount: Double = 0
     var recoveryFixedFee: Double = 0
+    /// 黄金当前实际保管人 / 持有人（空字符串代表自己持有）。
+    var holder: String = ""
     var alertsJSON: String = "[]"
+
+    var holdingHolder: HoldingHolder? { HoldingHolder.parse(holder) }
 
     var totalPurchaseCost: Double { purchaseTotalOverride ?? (grams * unitPriceCNY + laborFee + extraFee) }
     var returnInput: GoldReturnInput {

@@ -41,6 +41,8 @@ func TestDocumentValidation(t *testing.T) {
 		{"date huge", func(d *Document) { d.Records[0].CreatedAt = 1e100 }},
 		{"unknown book", func(d *Document) { d.Records[0].BookName = "不存在" }},
 		{"unknown disposition", func(d *Document) { d.Records[0].Disposition = "gifted" }},
+		{"unknown holder", func(d *Document) { d.Records[0].Holder = "uncle" }},
+		{"blank holder", func(d *Document) { d.Records[0].Holder = " " }},
 		{"disposed date missing", func(d *Document) { d.Records[0].Disposition = "sold" }},
 		{"long note", func(d *Document) { d.Records[0].Note = strings.Repeat("金", 2001) }},
 		{"long brand", func(d *Document) { d.Records[0].Brand = strings.Repeat("金", 201) }},
@@ -87,6 +89,13 @@ func TestDocumentValidation(t *testing.T) {
 	d.Records[0].DisposedAt = &date
 	if err := d.Validate(); err != nil {
 		t.Fatal(err)
+	}
+	for _, holder := range []string{"", "mother", "father", "husband", "wife", "child", "grandfather", "grandmother"} {
+		d = validDocument()
+		d.Records[0].Holder = holder
+		if err := d.Validate(); err != nil {
+			t.Fatalf("valid holder %q rejected: %v", holder, err)
+		}
 	}
 }
 

@@ -30,4 +30,31 @@ func TestDocumentJSONContractRoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(want, actual) {
 		t.Fatalf("JSON contract changed: %s", got)
 	}
+
+	rawWithHolder := []byte(`{"schemaVersion":1,"books":["默认账本"],"records":[{"id":"ABCDEF01-2345-6789-ABCD-0123456789AB","grams":2,"unitPriceCNY":700,"timestamp":1700000000000.25,"note":"记录","createdAt":1700000000000.5,"brand":"周大福","bookName":"默认账本","disposition":"holding","disposalAmount":0,"extraFee":0,"purchaseChannel":"","counterparty":"","assetType":"金饰","purity":0.999,"laborFee":0,"recoveryDeduction":0,"recoveryDiscount":0,"recoveryFixedFee":0,"holder":"mother","alerts":[]}]}`)
+	var dtoWithHolder documentDTO
+	if err := json.Unmarshal(rawWithHolder, &dtoWithHolder); err != nil {
+		t.Fatal(err)
+	}
+	dWithHolder := dtoWithHolder.toDomain()
+	if dWithHolder.Records[0].Holder != "mother" {
+		t.Fatalf("expected holder mother, got %q", dWithHolder.Records[0].Holder)
+	}
+	if err := dWithHolder.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	gotWithHolder, err := json.Marshal(documentFromDomain(dWithHolder))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wantH, actualH any
+	if err := json.Unmarshal(rawWithHolder, &wantH); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(gotWithHolder, &actualH); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(wantH, actualH) {
+		t.Fatalf("holder JSON contract changed: %s", gotWithHolder)
+	}
 }

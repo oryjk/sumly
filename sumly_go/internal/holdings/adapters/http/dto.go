@@ -37,6 +37,7 @@ type recordDTO struct {
 	RecoveryDeduction     float64    `json:"recoveryDeduction"`
 	RecoveryDiscount      float64    `json:"recoveryDiscount"`
 	RecoveryFixedFee      float64    `json:"recoveryFixedFee"`
+	Holder                *string    `json:"holder,omitempty"`
 	Alerts                []alertDTO `json:"alerts"`
 }
 type alertDTO struct {
@@ -75,6 +76,11 @@ func recordFromDomain(r domain.Record) recordDTO {
 			alerts[i] = alertDTO(a)
 		}
 	}
+	var holder *string
+	if r.Holder != "" {
+		v := r.Holder
+		holder = &v
+	}
 	return recordDTO{
 		ID:                    r.ID,
 		Grams:                 r.Grams,
@@ -98,6 +104,7 @@ func recordFromDomain(r domain.Record) recordDTO {
 		RecoveryDeduction:     r.RecoveryDeduction,
 		RecoveryDiscount:      r.RecoveryDiscount,
 		RecoveryFixedFee:      r.RecoveryFixedFee,
+		Holder:                holder,
 		Alerts:                alerts,
 	}
 }
@@ -108,6 +115,10 @@ func (r recordDTO) toDomain() domain.Record {
 		for i, a := range r.Alerts {
 			alerts[i] = domain.Alert(a)
 		}
+	}
+	var holder string
+	if r.Holder != nil {
+		holder = *r.Holder
 	}
 	return domain.Record{
 		ID:                    r.ID,
@@ -132,6 +143,7 @@ func (r recordDTO) toDomain() domain.Record {
 		RecoveryDeduction:     r.RecoveryDeduction,
 		RecoveryDiscount:      r.RecoveryDiscount,
 		RecoveryFixedFee:      r.RecoveryFixedFee,
+		Holder:                holder,
 		Alerts:                alerts,
 	}
 }
