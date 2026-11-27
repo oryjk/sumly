@@ -191,12 +191,11 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
 
 @Test func realtimeWindowKeepsFullContinuousSessionAndExcludesPriorSessionOrOver12hHistory() {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    // Prior session separated by a 4.5h day/night break must be excluded.
+    // Overnight break (>6h, e.g. 02:30 -> 09:00 = 6.5h) must be excluded.
     let priorSession = [
-        MarketChartPoint(date: now.addingTimeInterval(-9 * 3600), price: 880, intervalSeconds: 60),
-        MarketChartPoint(date: now.addingTimeInterval(-6 * 3600), price: 885, intervalSeconds: 60)
+        MarketChartPoint(date: now.addingTimeInterval(-10 * 3600), price: 880, intervalSeconds: 60),
+        MarketChartPoint(date: now.addingTimeInterval(-7.5 * 3600), price: 885, intervalSeconds: 60)
     ]
-    // Current session spans 1.5h with a 2h lunch-like break? Here continuous 25m of 5s samples.
     let currentSamples = (0..<300).map {
         MarketChartPoint(date: now.addingTimeInterval(Double(-$0 * 5)), price: Double(900 + $0))
     }
@@ -206,27 +205,31 @@ private struct BasisSwitchFixture: GoldPriceServicing, GoldQuoteServicing, GoldR
     #expect(window.last?.price == 900)
     #expect(window.last?.date == now)
 
-    // Continuous 15-hour stream without gaps is capped at 12 hours.
-    let longStream = (0...180).map {
-        MarketChartPoint(date: now.addingTimeInterval(Double($0 - 180) * 300), price: 910, intervalSeconds: 60)
+    // Continuous 28-hour stream without gaps is capped at 24 hours.
+    let longStream = (0...336).map {
+        MarketChartPoint(date: now.addingTimeInterval(Double($0 - 336) * 300), price: 910, intervalSeconds: 60)
     }
     let capped = MarketHomeViewModel.realtimeWindow(longStream, now: now)
-    #expect(capped.first?.date == now.addingTimeInterval(-12 * 3600))
+    #expect(capped.first?.date == now.addingTimeInterval(-24 * 3600))
     #expect(capped.last?.date == now)
 
-    // SGE day session 2h lunch break (11:30–13:30) stays intact as one session.
-    let dayStart = now.addingTimeInterval(-6.5 * 3600)
+    // SGE day + night session (2h lunch + 4.5h afternoon-to-night break <= 6h) stays intact as one continuous trading day.
+    let dayStart = now.addingTimeInterval(-13.5 * 3600)
     let dayMorning = [
         MarketChartPoint(date: dayStart, price: 920, intervalSeconds: 60),
         MarketChartPoint(date: dayStart.addingTimeInterval(2.5 * 3600), price: 922, intervalSeconds: 60)
     ]
     let dayAfternoon = [
         MarketChartPoint(date: dayStart.addingTimeInterval(4.5 * 3600), price: 923, intervalSeconds: 60),
-        MarketChartPoint(date: now, price: 925, intervalSeconds: 60)
+        MarketChartPoint(date: dayStart.addingTimeInterval(6.5 * 3600), price: 925, intervalSeconds: 60)
     ]
-    let daySession = MarketHomeViewModel.realtimeWindow(dayMorning + dayAfternoon, now: now)
-    #expect(daySession.count == 4)
-    #expect(daySession.first?.date == dayStart)
+    let nightSession = [
+        MarketChartPoint(date: dayStart.addingTimeInterval(11.0 * 3600), price: 926, intervalSeconds: 60),
+        MarketChartPoint(date: now, price: 928, intervalSeconds: 60)
+    ]
+    let fullDay = MarketHomeViewModel.realtimeWindow(dayMorning + dayAfternoon + nightSession, now: now)
+    #expect(fullDay.count == 6)
+    #expect(fullDay.first?.date == dayStart)
 }
 
 @Test func realtimeWindowDoesNotSynthesizeMissingSamples() {

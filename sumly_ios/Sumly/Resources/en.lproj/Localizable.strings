@@ -1823,3 +1823,10 @@
 "在谁手上" = "Held By";
 "自己持有" = "Held by Me";
 "自己" = "Me";
+"午休" = "Break";
+"20:00 夜盘" = "20:00 Night";
+"昨收 %@" = "Prev %@";
+"高 %@" = "H %@";
+"低 %@" = "L %@";
+"较昨收 %@ 元/克（%@%%）" = "vs Prev %@ CNY/g (%@%%)";
+"实时页展示当日完整分时走势（国内连贯展示当日日盘 09:00–15:30 与夜盘 20:00–次日 02:30，国际展示完整 23 小时交易日），并以昨收虚线区分红涨绿跌。休市或非交易时段保留收盘前真实走势与时间，不补造价格。" = "Live view shows the full trading day intraday trend (domestic seamlessly links 09:00–15:30 day and 20:00–02:30 night sessions; international covers the full 23-hour day), colored against the previous close baseline. Closed periods keep actual pre-close prices without synthetic fills.";

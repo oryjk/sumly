@@ -1823,3 +1823,10 @@
 "在谁手上" = "¿Quién lo tiene?";
 "自己持有" = "Conmigo";
 "自己" = "Yo";
+"午休" = "Pausa";
+"20:00 夜盘" = "20:00 Noche";
+"昨收 %@" = "Cierre %@";
+"高 %@" = "Máx %@";
+"低 %@" = "Mín %@";
+"较昨收 %@ 元/克（%@%%）" = "vs Cierre %@ CNY/g (%@%%)";
+"实时页展示当日完整分时走势（国内连贯展示当日日盘 09:00–15:30 与夜盘 20:00–次日 02:30，国际展示完整 23 小时交易日），并以昨收虚线区分红涨绿跌。休市或非交易时段保留收盘前真实走势与时间，不补造价格。" = "La vista en vivo muestra la jornada completa intradía (nacional une 09:00–15:30 y 20:00–02:30 sin huecos; internacional cubre las 23 horas), coloreada respecto al cierre anterior. En cierres conserva precios reales sin rellenos.";

@@ -258,12 +258,13 @@ final class MarketHomeViewModel {
     }
 
     nonisolated static let realtimeMinimumSpan: TimeInterval = 1200
-    nonisolated static let realtimeMaximumSpan: TimeInterval = 12 * 3600
-    nonisolated static let realtimeSessionGap: TimeInterval = 3 * 3600
+    nonisolated static let realtimeMaximumSpan: TimeInterval = 24 * 3600
+    nonisolated static let realtimeSessionGap: TimeInterval = 6 * 3600
     static let livePollInterval: Duration = .seconds(5)
     static let pausedPollInterval: Duration = .seconds(30)
 
-    /// 保留完整当前交易时段分时（限制最大 12 小时且不跨日盘/夜盘或周末长停盘跳空）。
+    /// 保留完整当日交易分时（限制最大 24 小时：容纳国际 23h 全天与国内日盘+夜盘 4.5h 闭市连贯，
+    /// 超过 6h 视为隔夜 02:30–09:00 或周末长停盘自动截断）。
     nonisolated static func realtimeWindow(_ points: [MarketChartPoint], now: Date) -> [MarketChartPoint] {
         let valid = points.filter { $0.date <= now && $0.price.isFinite && $0.price > 0 }
             .sorted { $0.date < $1.date }
@@ -324,6 +325,24 @@ final class MarketHomeViewModel {
         let center = (low + high) / 2
         let span = max((high - low) * 1.5, 1)
         return (floor((center - span / 2) * 2) / 2)...(ceil((center + span / 2) * 2) / 2)
+    }
+
+    var realtimeReferenceClose: Double? {
+        RealtimeIntradayAxis.resolveReferenceClose(
+            basis: basis,
+            quote: quote,
+            points: points,
+            daily: daily
+        )
+    }
+
+    var realtimeIntradayAxis: RealtimeIntradayAxis {
+        let anchor = points.last?.date ?? quote?.asOf ?? nowProvider()
+        return RealtimeIntradayAxis.make(basis: basis, anchorDate: anchor)
+    }
+
+    var realtimeProjectedPoints: [ProjectedIntradayPoint] {
+        realtimeIntradayAxis.project(visiblePoints)
     }
 
     var selectedPoint: MarketChartPoint? {
@@ -579,8 +598,27 @@ final class MarketHomeViewModel {
     func accessibleZoom(_ scale: Double) { beginChartGesture(); transformChart(scale: scale, anchor: 0.5, translation: 0); endChartGesture() }
     func selectChart(at fraction: Double) {
         guard gestureViewport == nil else { return }
-        let domain = xDomain
-        selectedDate = domain.lowerBound.addingTimeInterval(domain.upperBound.timeIntervalSince(domain.lowerBound) * min(1, max(0, fraction)))
+        let clamped = min(1, max(0, fraction))
+        if range == .realtime {
+            let projected = realtimeProjectedPoints
+            let axis = realtimeIntradayAxis
+            let slotRange: ClosedRange<Double> = {
+                if canReset, let first = projected.first?.slot, let last = projected.last?.slot, last > first {
+                    return first...last
+                }
+                return 0...max(1, axis.totalSlots)
+            }()
+            let targetSlot = slotRange.lowerBound + (slotRange.upperBound - slotRange.lowerBound) * clamped
+            if let hit = RealtimeIntradayAxis.nearestPoint(in: projected, toSlot: targetSlot) {
+                selectedDate = hit.date
+            } else {
+                let domain = xDomain
+                selectedDate = domain.lowerBound.addingTimeInterval(domain.upperBound.timeIntervalSince(domain.lowerBound) * clamped)
+            }
+        } else {
+            let domain = xDomain
+            selectedDate = domain.lowerBound.addingTimeInterval(domain.upperBound.timeIntervalSince(domain.lowerBound) * clamped)
+        }
         selectionExpiryTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .seconds(5)) }
             catch { return }

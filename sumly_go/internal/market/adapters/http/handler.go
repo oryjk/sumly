@@ -132,20 +132,22 @@ func (h *Handler) GoldIntraday(c *gin.Context) {
 }
 
 // GoldRealtime 返回最后可用窗口，interval_seconds 标明实际五秒采样或分钟回退。
-// 支持可选查询参数 ?window=20m（默认，向后兼容老客户端）与 ?window=session（国际最近 6 小时完整分时）。
+// 支持可选查询参数 ?window=20m（默认，向后兼容老客户端）、?window=session（最近 6 小时分时）与 ?window=day（完整当日分时）。
 func (h *Handler) GoldRealtime(c *gin.Context) {
 	mode, ok := domain.ParseRealtimeWindowMode(c.Query("window"))
 	if !ok {
-		sharedhttpapi.WriteError(c, sharederror.New(sharederror.KindValidation, "invalid window; allowed: 20m, session"))
+		sharedhttpapi.WriteError(c, sharederror.New(sharederror.KindValidation, "invalid window; allowed: 20m, session, day"))
 		return
 	}
 	var (
 		points        []domain.RealtimePoint
 		interval      int
 		windowSeconds int
+		windowStart   string
+		windowEnd     string
 		err           error
 	)
-	if mode == domain.RealtimeWindowModeSession {
+	if mode == domain.RealtimeWindowModeSession || mode == domain.RealtimeWindowModeDay {
 		window, winErr := h.goldMarket.GetGoldRealtimeWindow(c.Request.Context(), mode)
 		if winErr != nil {
 			sharedhttpapi.WriteError(c, winErr)
@@ -154,6 +156,10 @@ func (h *Handler) GoldRealtime(c *gin.Context) {
 		points = window.Points
 		interval = window.IntervalSeconds
 		windowSeconds = window.WindowSeconds
+		if !window.End.IsZero() {
+			windowStart = formatBeijingRFC3339(window.Start)
+			windowEnd = formatBeijingRFC3339(window.End)
+		}
 	} else {
 		points, interval, err = h.goldMarket.GetGoldRealtime(c.Request.Context())
 		if err != nil {
@@ -172,8 +178,10 @@ func (h *Handler) GoldRealtime(c *gin.Context) {
 		Unit            string          `json:"unit"`
 		IntervalSeconds int             `json:"interval_seconds"`
 		WindowSeconds   int             `json:"window_seconds"`
+		WindowStart     string          `json:"window_start,omitempty"`
+		WindowEnd       string          `json:"window_end,omitempty"`
 		Points          []pointResponse `json:"points"`
-	}{Symbol: "XAUUSD", Unit: "CNY/g", IntervalSeconds: interval, WindowSeconds: windowSeconds, Points: make([]pointResponse, 0, len(points))}
+	}{Symbol: "XAUUSD", Unit: "CNY/g", IntervalSeconds: interval, WindowSeconds: windowSeconds, WindowStart: windowStart, WindowEnd: windowEnd, Points: make([]pointResponse, 0, len(points))}
 	for _, p := range points {
 		response.Points = append(response.Points, pointResponse{
 			Time:       formatBeijingRFC3339(p.Time),

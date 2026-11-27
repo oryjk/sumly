@@ -19,7 +19,7 @@ import (
 const (
 	defaultEndpoint = "https://api.jijinhao.com/quoteCenter/history.htm"
 	defaultCode     = "JO_71" // 上海黄金交易所 Au99.99
-	defaultPageSize = 480
+	defaultPageSize = 800
 	defaultTimeout  = 10 * time.Second
 	maxBodyBytes    = 8 << 20
 	userAgent       = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"

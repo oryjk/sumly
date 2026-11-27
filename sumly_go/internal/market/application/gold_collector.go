@@ -49,6 +49,7 @@ func (c *GoldCollector) Sample(ctx context.Context) error {
 	}
 	return c.store.PruneRealtime(ctx)
 }
+
 const (
 	intradayActiveInterval = time.Minute
 	intradayIdleInterval   = 5 * time.Minute

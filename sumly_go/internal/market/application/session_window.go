@@ -13,10 +13,14 @@ import (
 
 const (
 	sgeSessionDuration  = 6*time.Hour + 30*time.Minute
+	sgeDaySpanDuration  = 17*time.Hour + 30*time.Minute // 09:00 ~ 次日 02:30
 	sgeCloseAnchorGrace = 5 * time.Minute
 )
 
-var shanghaiZone = loadShanghaiZone()
+var (
+	shanghaiZone = loadShanghaiZone()
+	newYorkZone  = loadNewYorkZone()
+)
 
 func loadShanghaiZone() *time.Location {
 	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil {
@@ -25,7 +29,14 @@ func loadShanghaiZone() *time.Location {
 	return time.FixedZone("CST", 8*3600)
 }
 
-// GetGoldRealtimeWindow 按 mode 返回默认 20 分钟滚动窗或完整最近交易时段分时窗口。
+func loadNewYorkZone() *time.Location {
+	if loc, err := time.LoadLocation("America/New_York"); err == nil {
+		return loc
+	}
+	return time.FixedZone("EST", -5*3600)
+}
+
+// GetGoldRealtimeWindow 按 mode 返回默认 20 分钟滚动窗、最近交易时段分时或完整当日分时窗口。
 // mode 为空或 20m 时完全复用 GetGoldRealtime，保持老版本客户端 100% 向后兼容。
 func (s *GoldQuery) GetGoldRealtimeWindow(ctx context.Context, mode domain.RealtimeWindowMode) (domain.GoldWindow, error) {
 	return s.getGoldRealtimeWindow(ctx, mode, false)
@@ -36,10 +47,10 @@ func (s *GoldQuery) getGoldRealtimeWindowForInstrument(ctx context.Context, inst
 }
 
 func (s *GoldQuery) getGoldRealtimeWindow(ctx context.Context, mode domain.RealtimeWindowMode, forceDomestic bool) (domain.GoldWindow, error) {
-	if mode != domain.RealtimeWindowModeSession {
+	if mode != domain.RealtimeWindowModeSession && mode != domain.RealtimeWindowModeDay {
 		return s.getDefaultRealtimeWindow(ctx)
 	}
-	return s.getSessionRealtimeWindow(ctx, forceDomestic)
+	return s.getSessionRealtimeWindow(ctx, mode, forceDomestic)
 }
 
 func (s *GoldQuery) getDefaultRealtimeWindow(ctx context.Context) (domain.GoldWindow, error) {
@@ -59,7 +70,7 @@ func (s *GoldQuery) getDefaultRealtimeWindow(ctx context.Context) (domain.GoldWi
 	return window, nil
 }
 
-func (s *GoldQuery) getSessionRealtimeWindow(ctx context.Context, forceDomestic bool) (domain.GoldWindow, error) {
+func (s *GoldQuery) getSessionRealtimeWindow(ctx context.Context, mode domain.RealtimeWindowMode, forceDomestic bool) (domain.GoldWindow, error) {
 	rawPoints, err := s.store.LoadRealtime(ctx)
 	if err != nil {
 		return domain.GoldWindow{}, err
@@ -103,12 +114,24 @@ func (s *GoldQuery) getSessionRealtimeWindow(ctx context.Context, forceDomestic 
 
 	domestic := forceDomestic || (s.native && hasQuote && isDomesticSGEQuote(quote))
 	if domestic {
-		if window, ok := buildDomesticSGESessionWindow(minutes, realtime, quotePoint, live); ok {
-			return window, nil
+		if mode == domain.RealtimeWindowModeDay {
+			if window, ok := buildDomesticSGEDayWindow(minutes, realtime, quotePoint, live); ok {
+				return window, nil
+			}
+		} else {
+			if window, ok := buildDomesticSGESessionWindow(minutes, realtime, quotePoint, live); ok {
+				return window, nil
+			}
 		}
 	} else {
-		if window, ok := buildInternationalSessionWindow(minutes, realtime, quotePoint, live); ok {
-			return window, nil
+		if mode == domain.RealtimeWindowModeDay {
+			if window, ok := buildInternationalDayWindow(minutes, realtime, quotePoint, live); ok {
+				return window, nil
+			}
+		} else {
+			if window, ok := buildInternationalSessionWindow(minutes, realtime, quotePoint, live); ok {
+				return window, nil
+			}
 		}
 	}
 
@@ -142,6 +165,28 @@ func domesticSGESessionStart(end time.Time) time.Time {
 	default:
 		return time.Date(y, m, d, 9, 0, 0, 0, shanghaiZone)
 	}
+}
+
+// domesticSGEDayStart 将国内上金所当日的日盘（09:00~15:30）与当晚夜盘（20:00~次日 02:30）归为同一连续自然日：
+//   - 北京时间 09:00 ~ 23:59：当日 09:00
+//   - 北京时间 00:00 ~ 08:59：前一日 09:00
+func domesticSGEDayStart(end time.Time) time.Time {
+	bj := end.In(shanghaiZone)
+	if bj.Hour() < 9 {
+		prev := bj.AddDate(0, 0, -1)
+		return time.Date(prev.Year(), prev.Month(), prev.Day(), 9, 0, 0, 0, shanghaiZone)
+	}
+	return time.Date(bj.Year(), bj.Month(), bj.Day(), 9, 0, 0, 0, shanghaiZone)
+}
+
+// internationalDayStart 按美东 18:00 交易日切换点计算国际伦敦金当日开盘时刻（自动适配美国夏/冬令时）。
+func internationalDayStart(end time.Time) time.Time {
+	ny := end.In(newYorkZone)
+	if ny.Hour() < 18 {
+		prev := ny.AddDate(0, 0, -1)
+		return time.Date(prev.Year(), prev.Month(), prev.Day(), 18, 0, 0, 0, newYorkZone).In(shanghaiZone)
+	}
+	return time.Date(ny.Year(), ny.Month(), ny.Day(), 18, 0, 0, 0, newYorkZone).In(shanghaiZone)
 }
 
 func clampWindowSeconds(seconds int) int {
@@ -366,6 +411,114 @@ func buildInternationalSessionWindow(minutes, realtime []domain.RealtimePoint, q
 
 	end := combined[len(combined)-1].Time
 	cutoff := end.Add(-domain.InternationalSessionSpan)
+	sliced := make([]domain.RealtimePoint, 0, len(combined))
+	for _, p := range combined {
+		if !p.Time.Before(cutoff) && !p.Time.After(end) {
+			sliced = append(sliced, p)
+		}
+	}
+	if len(sliced) == 0 {
+		return domain.GoldWindow{}, false
+	}
+
+	cutIdx := 0
+	for i := 1; i < len(sliced); i++ {
+		if sliced[i].Time.Sub(sliced[i-1].Time) > domain.SessionGapThreshold {
+			cutIdx = i
+		}
+	}
+	sliced = sliced[cutIdx:]
+
+	start := sliced[0].Time
+	actualEnd := sliced[len(sliced)-1].Time
+	windowSeconds := clampWindowSeconds(int(actualEnd.Sub(start).Seconds()))
+	return domain.GoldWindow{
+		Points:          sliced,
+		IntervalSeconds: 60,
+		WindowSeconds:   windowSeconds,
+		Start:           start,
+		End:             actualEnd,
+	}, true
+}
+
+func buildDomesticSGEDayWindow(minutes, realtime []domain.RealtimePoint, quotePoint *domain.RealtimePoint, live bool) (domain.GoldWindow, bool) {
+	if len(minutes) == 0 {
+		return domain.GoldWindow{}, false
+	}
+	lastMin := minutes[len(minutes)-1]
+	tail := latestTailCandidate(realtime, quotePoint)
+
+	end := lastMin.Time
+	mergeTail := false
+	if tail != nil && tail.Time.After(lastMin.Time) {
+		minDayStart := domesticSGEDayStart(lastMin.Time)
+		tailDayStart := domesticSGEDayStart(tail.Time)
+		if tailDayStart.Equal(minDayStart) {
+			dayClose := minDayStart.Add(sgeDaySpanDuration)
+			if live ||
+				tail.Time.Sub(lastMin.Time) <= maxMinuteCarryGap ||
+				!tail.Time.After(dayClose.Add(sgeCloseAnchorGrace)) {
+				end = tail.Time
+				mergeTail = true
+			}
+		} else if tailDayStart.After(minDayStart) {
+			return domain.GoldWindow{}, false
+		}
+	}
+
+	dayStart := domesticSGEDayStart(end)
+	sliced := make([]domain.RealtimePoint, 0, len(minutes)+2)
+	for _, p := range minutes {
+		if !p.Time.Before(dayStart) && !p.Time.After(end) {
+			sliced = append(sliced, p)
+		}
+	}
+	if len(sliced) == 0 {
+		return domain.GoldWindow{}, false
+	}
+
+	if mergeTail {
+		sliced = appendNewerRealtimeTail(sliced, realtime, quotePoint, end)
+	} else if quotePoint != nil && quotePoint.Time.Equal(sliced[len(sliced)-1].Time) {
+		sliced[len(sliced)-1] = *quotePoint
+	}
+
+	actualEnd := sliced[len(sliced)-1].Time
+	windowSeconds := clampWindowSeconds(int(actualEnd.Sub(dayStart).Seconds()))
+	return domain.GoldWindow{
+		Points:          sliced,
+		IntervalSeconds: 60,
+		WindowSeconds:   windowSeconds,
+		Start:           dayStart,
+		End:             actualEnd,
+	}, true
+}
+
+func buildInternationalDayWindow(minutes, realtime []domain.RealtimePoint, quotePoint *domain.RealtimePoint, live bool) (domain.GoldWindow, bool) {
+	if len(minutes) == 0 {
+		return domain.GoldWindow{}, false
+	}
+	lastMin := minutes[len(minutes)-1]
+	tail := latestTailCandidate(realtime, quotePoint)
+
+	combined := minutes
+	if tail != nil && tail.Time.After(lastMin.Time) {
+		if tail.Time.Sub(lastMin.Time) > domain.SessionGapThreshold {
+			return domain.GoldWindow{}, false
+		}
+		combined = appendNewerRealtimeTail(minutes, realtime, quotePoint, tail.Time)
+	} else if quotePoint != nil && quotePoint.Time.Equal(lastMin.Time) {
+		combined = append([]domain.RealtimePoint(nil), minutes...)
+		combined[len(combined)-1] = *quotePoint
+	}
+
+	end := combined[len(combined)-1].Time
+	cutoff := internationalDayStart(end)
+	minCutoff := end.Add(-domain.InternationalDaySpan)
+	if minCutoff.After(cutoff) {
+		cutoff = minCutoff
+	}
+
 	sliced := make([]domain.RealtimePoint, 0, len(combined))
 	for _, p := range combined {
 		if !p.Time.Before(cutoff) && !p.Time.After(end) {

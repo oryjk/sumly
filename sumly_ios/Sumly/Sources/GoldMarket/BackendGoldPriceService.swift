@@ -183,6 +183,10 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
         instrumentID.map { "app/market/gold/instruments/\($0)/realtime?window=session" } ?? "app/market/gold/realtime?window=session"
     }
 
+    static func realtimeDayPath(instrumentID: String?) -> String {
+        instrumentID.map { "app/market/gold/instruments/\($0)/realtime?window=day" } ?? "app/market/gold/realtime?window=day"
+    }
+
     static func requestURL(baseURL: URL, path: String) -> URL {
         guard let queryIndex = path.firstIndex(of: "?") else {
             return baseURL.appending(path: path)
@@ -195,8 +199,48 @@ struct BackendGoldPriceService: GoldPriceServicing, GoldQuoteServicing, GoldIntr
     }
 
     func fetchRealtime() async throws -> [MarketChartPoint] {
-        let dto: RealtimeDTO = try await get(Self.realtimePath(instrumentID: instrumentID))
-        return try Self.decodeRealtime(dto, instrumentID: instrumentID)
+        do {
+            let dto: RealtimeDTO = try await get(Self.realtimeDayPath(instrumentID: instrumentID))
+            return try Self.decodeRealtime(dto, instrumentID: instrumentID)
+        } catch ServiceError.httpStatus(400), ServiceError.httpStatus(422) {
+            // 兼容尚未升级 window=day 的线上旧后端：
+            // 国际金价自动拉取全天 /intraday + 实时汇率 + /realtime?window=session 尾点拼出完整当日分时；
+            // 国内金价平滑回退至 /realtime?window=session。
+            if instrumentID == nil, let assembled = try? await fetchInternationalDayFallback() {
+                return assembled
+            }
+            let dto: RealtimeDTO = try await get(Self.realtimePath(instrumentID: instrumentID))
+            return try Self.decodeRealtime(dto, instrumentID: instrumentID)
+        }
+    }
+
+    /// 旧后端回退合成：复用线上已有的完整全天 USD 分钟线 + 实时汇率 + 最近实时尾点，确保国际当日大涨走势立即完整可见。
+    private func fetchInternationalDayFallback() async throws -> [MarketChartPoint] {
+        async let intradayFetch = fetchIntraday()
+        async let quoteFetch = fetchQuote()
+        async let sessionFetch: RealtimeDTO? = try? get(Self.realtimePath(instrumentID: nil))
+
+        let usdMinutes = try await intradayFetch
+        let quote = try await quoteFetch
+        guard quote.usdCNY.isFinite, quote.usdCNY > 0 else { throw ServiceError.malformedPayload }
+        let factor = quote.usdCNY / 31.1034768
+
+        var combined: [MarketChartPoint] = usdMinutes.compactMap { p in
+            let cny = p.price * factor
+            guard cny.isFinite, cny > 0 else { return nil }
+            return MarketChartPoint(date: p.date, price: cny, granularity: .realtime, intervalSeconds: 60)
+        }
+        if let sessionDTO = await sessionFetch,
+           let sessionPoints = try? Self.decodeRealtime(sessionDTO, instrumentID: nil) {
+            let lastMinute = combined.last?.date ?? .distantPast
+            combined.append(contentsOf: sessionPoints.filter { $0.date > lastMinute })
+        }
+        if quote.cnyPerGram.isFinite, quote.cnyPerGram > 0,
+           let lastDate = combined.last?.date, quote.asOf > lastDate {
+            combined.append(MarketChartPoint(date: quote.asOf, price: quote.cnyPerGram, granularity: .realtime, intervalSeconds: 60))
+        }
+        guard !combined.isEmpty else { throw ServiceError.emptyData }
+        return combined.sorted { $0.date < $1.date }
     }
 
     static func decodeRealtime(_ dto: RealtimeDTO, instrumentID: String?) throws -> [MarketChartPoint] {

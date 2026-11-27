@@ -510,3 +510,121 @@ func TestInstrumentsRealtimeWindowRoutesDomesticAndInternationalSessions(t *test
 		t.Fatalf("unexpected xauusd native session: interval=%d window=%d points=%+v", intlWin.IntervalSeconds, intlWin.WindowSeconds, intlWin.Points)
 	}
 }
+
+func TestDomesticAU9999DayWindowBridgesDayAndNightContinuously(t *testing.T) {
+	tz := time.FixedZone("CST", 8*3600)
+	dayStart := time.Date(2026, 11, 27, 9, 0, 0, 0, tz)
+	nightOpen := time.Date(2026, 11, 27, 20, 0, 0, 0, tz)
+	nightNow := time.Date(2026, 11, 27, 22, 34, 0, 0, tz)
+
+	minutes := []domain.IntradayPoint{
+		// 前一日夜盘（应被排除）
+		{Time: time.Date(2026, 11, 27, 2, 20, 0, 0, tz), Price: 762.0},
+		// 当天日盘 09:00 ~ 15:30（大涨）
+		{Time: dayStart, Price: 765.0},
+		{Time: time.Date(2026, 11, 27, 11, 30, 0, 0, tz), Price: 776.5},
+		{Time: time.Date(2026, 11, 27, 13, 30, 0, 0, tz), Price: 781.2},
+		{Time: time.Date(2026, 11, 27, 15, 30, 0, 0, tz), Price: 784.0},
+		// 当晚夜盘 20:00 ~ 22:33
+		{Time: nightOpen, Price: 785.0},
+		{Time: time.Date(2026, 11, 27, 22, 33, 0, 0, tz), Price: 779.2},
+	}
+
+	store := &readOnlyMarket{
+		found: true,
+		quote: domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 779.0, AsOf: nightNow},
+		points: []domain.RealtimePoint{
+			{Time: nightNow, SourceTime: nightNow, Price: 779.0},
+		},
+		minutes: minutes,
+	}
+	q := NewNativeGoldQuery(store)
+	q.now = func() time.Time { return nightNow.Add(5 * time.Second) }
+
+	window, err := q.GetGoldRealtimeWindow(context.Background(), domain.RealtimeWindowModeDay)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if window.IntervalSeconds != 60 {
+		t.Fatalf("interval = %d, want 60", window.IntervalSeconds)
+	}
+	if !window.Start.Equal(dayStart) || !window.End.Equal(nightNow) {
+		t.Fatalf("window = [%v, %v], want [%v, %v]", window.Start, window.End, dayStart, nightNow)
+	}
+	// 排除凌晨 02:20 前一夜盘，保留当天 09:00 日盘 + 20:00 夜盘 + 22:34 尾点 = 7 点
+	if len(window.Points) != 7 {
+		t.Fatalf("points len = %d, want 7: %+v", len(window.Points), window.Points)
+	}
+	if !window.Points[0].Time.Equal(dayStart) || window.Points[0].Price != 765.0 {
+		t.Fatalf("first point = %+v, want 09:00 @ 765.0", window.Points[0])
+	}
+	if last := window.Points[len(window.Points)-1]; !last.Time.Equal(nightNow) || last.Price != 779.0 {
+		t.Fatalf("last point = %+v, want 22:34 @ 779.0", last)
+	}
+
+	// 夜盘刚开盘 2 分钟（夜盘分钟线尚未落地）时，仍保留当天白天日盘并拼接夜盘最新 5s/报价尾点
+	justOpened := time.Date(2026, 11, 27, 20, 2, 0, 0, tz)
+	storeOpening := &readOnlyMarket{
+		found: true,
+		quote: domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 785.5, AsOf: justOpened},
+		points: []domain.RealtimePoint{
+			{Time: nightOpen.Add(30 * time.Second), SourceTime: nightOpen.Add(30 * time.Second), Price: 785.0},
+			{Time: justOpened, SourceTime: justOpened, Price: 785.5},
+		},
+		minutes: minutes[:5], // 仅有凌晨 02:20 + 当天日盘 09:00..15:30
+	}
+	qOpening := NewNativeGoldQuery(storeOpening)
+	qOpening.now = func() time.Time { return justOpened.Add(5 * time.Second) }
+	openWin, err := qOpening.GetGoldRealtimeWindow(context.Background(), domain.RealtimeWindowModeDay)
+	if err != nil {
+		t.Fatalf("opening error: %v", err)
+	}
+	if !openWin.Start.Equal(dayStart) || !openWin.End.Equal(justOpened) {
+		t.Fatalf("opening window = [%v, %v], want [%v, %v]", openWin.Start, openWin.End, dayStart, justOpened)
+	}
+	if len(openWin.Points) < 5 || !openWin.Points[0].Time.Equal(dayStart) {
+		t.Fatalf("opening should preserve day session points, got %+v", openWin.Points)
+	}
+}
+
+func TestInternationalXAUUSDDayWindowCoversFullTradingDayUpTo23Hours(t *testing.T) {
+	tz := time.FixedZone("CST", 8*3600)
+	// 冬令时：北京时间 07:00 开盘（美东前日 18:00），至当晚 22:35（共 15h35m）
+	prevDayTail := time.Date(2026, 11, 27, 5, 55, 0, 0, tz)
+	openAt := time.Date(2026, 11, 27, 7, 0, 0, 0, tz)
+	lastBar := time.Date(2026, 11, 27, 22, 34, 0, 0, tz)
+	quoteAt := time.Date(2026, 11, 27, 22, 35, 0, 0, tz)
+
+	minutes := []domain.IntradayPoint{
+		{Time: prevDayTail, Price: 3566.0}, // 上一交易日尾点，应被切掉
+	}
+	for ts := openAt; !ts.After(lastBar); ts = ts.Add(time.Minute) {
+		minutes = append(minutes, domain.IntradayPoint{Time: ts, Price: 3565.0 + float64(ts.Sub(openAt)/time.Minute)*0.08})
+	}
+
+	store := &readOnlyMarket{
+		found:   true,
+		quote:   domain.GoldQuote{Symbol: "XAUUSD", Currency: "USD", Price: 3638.0, USDCNY: 6.6547, AsOf: quoteAt},
+		minutes: minutes,
+	}
+	q := NewGoldQuery(store)
+	q.now = func() time.Time { return quoteAt.Add(5 * time.Second) }
+
+	window, err := q.GetGoldRealtimeWindow(context.Background(), domain.RealtimeWindowModeDay)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if window.IntervalSeconds != 60 {
+		t.Fatalf("interval = %d, want 60", window.IntervalSeconds)
+	}
+	if !window.Start.Equal(openAt) || !window.End.Equal(quoteAt) {
+		t.Fatalf("window = [%v, %v], want [%v, %v]", window.Start, window.End, openAt, quoteAt)
+	}
+	// 07:00..22:34 共 935 根分钟线 + 22:35 实时尾点 = 936 点
+	if len(window.Points) != 936 {
+		t.Fatalf("points len = %d, want 936", len(window.Points))
+	}
+	if window.Points[0].Time.Before(openAt) {
+		t.Fatalf("leaked prior trading day point: %+v", window.Points[0])
+	}
+}

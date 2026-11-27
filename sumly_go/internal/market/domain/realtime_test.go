@@ -50,8 +50,10 @@ func TestParseRealtimeWindowMode(t *testing.T) {
 		{"20M", RealtimeWindowMode20m, true},
 		{"session", RealtimeWindowModeSession, true},
 		{" SESSION ", RealtimeWindowModeSession, true},
+		{"day", RealtimeWindowModeDay, true},
+		{" DAY ", RealtimeWindowModeDay, true},
 		{"1h", "", false},
-		{"day", "", false},
+		{"week", "", false},
 	}
 	for _, tc := range cases {
 		got, ok := ParseRealtimeWindowMode(tc.raw)

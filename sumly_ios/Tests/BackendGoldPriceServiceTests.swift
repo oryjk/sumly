@@ -102,6 +102,9 @@ import Foundation
     #expect(internationalURL.absoluteString == "https://oryjk.cn/sumly/api/v1/app/market/gold/realtime?window=session")
     #expect(URLComponents(url: domesticURL, resolvingAgainstBaseURL: false)?.queryItems == [URLQueryItem(name: "window", value: "session")])
     #expect(URLComponents(url: internationalURL, resolvingAgainstBaseURL: false)?.queryItems == [URLQueryItem(name: "window", value: "session")])
+
+    #expect(BackendGoldPriceService.realtimeDayPath(instrumentID: "au9999") == "app/market/gold/instruments/au9999/realtime?window=day")
+    #expect(BackendGoldPriceService.realtimeDayPath(instrumentID: nil) == "app/market/gold/realtime?window=day")
 }
 
 @Test func realtimeDecodePreservesCadenceAndValidatesContract() throws {

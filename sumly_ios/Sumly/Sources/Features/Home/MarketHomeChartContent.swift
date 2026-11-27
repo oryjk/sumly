@@ -58,7 +58,23 @@ struct MarketHomeChartContent: View {
             VStack(alignment: .leading, spacing: 6) {
                 chartCaption
                 HStack(spacing: 6) {
-                    ChartWindowSummary(statistics: model.windowStatistics)
+                    if model.range == .realtime, !model.canReset,
+                       let ref = model.realtimeReferenceClose,
+                       let latestPrice = model.windowPoints.last?.price {
+                        let diff = latestPrice - ref
+                        let pct = diff / ref * 100
+                        let roundedDiff = (diff * 100).rounded() / 100
+                        let roundedPct = (pct * 100).rounded() / 100
+                        let diffText = (roundedDiff > 0 ? "+" : "") + String(format: "%.2f", roundedDiff == 0 ? 0 : roundedDiff)
+                        let pctText = (roundedPct > 0 ? "+" : "") + String(format: "%.2f", roundedPct == 0 ? 0 : roundedPct)
+                        Text(L10n.fmt("较昨收 %@ 元/克（%@%%）", diffText, pctText))
+                            .font(.system(size: 13, weight: .semibold)).monospacedDigit()
+                            .foregroundStyle(diff > 0 ? GoldTheme.up : diff < 0 ? GoldTheme.down : GoldTheme.textSecondary)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .accessibilityIdentifier("chart.windowChange")
+                    } else {
+                        ChartWindowSummary(statistics: model.windowStatistics)
+                    }
                     if showHoldingOverlay, let breakEven = holdingOverlay?.breakEvenPrice {
                         Text(L10n.fmt("· 保本 ¥%@", breakEven.moneyText))
                             .font(.system(size: 12, weight: .medium)).monospacedDigit()
@@ -91,7 +107,10 @@ struct MarketHomeChartContent: View {
                 .minimumScaleFactor(0.82)
             }.frame(maxWidth: .infinity, alignment: .leading)
 
-            if model.range == .realtime || model.range.dateBounds() != nil {
+            if model.range == .realtime {
+                realtimeIntradayChart
+                    .accessibilityLabel(L10n.fmt("%@黄金价格走势图，当前区间%lld个行情点", rangeTitle(model.range), Int64(model.windowPoints.count)))
+            } else if model.range.dateBounds() != nil {
                 trendChart(data: visibleData, domain: priceDomain, resolvedMarkers: resolvedMarkers)
                     .accessibilityLabel(L10n.fmt("%@黄金价格走势图，当前区间%lld个行情点", rangeTitle(model.range), Int64(model.windowPoints.count)))
             } else {
@@ -376,6 +395,41 @@ struct MarketHomeChartContent: View {
             }.accessibilityLabel(L10n.tr("行情数据说明"))
         }.font(.system(size: 11)).foregroundStyle(GoldTheme.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var realtimeIntradayChart: some View {
+        let projected = model.realtimeProjectedPoints
+        let axis = model.realtimeIntradayAxis
+        let selectedProjected: ProjectedIntradayPoint? = {
+            guard let sel = model.selectedPoint else { return nil }
+            let slot = axis.slot(for: sel.date)
+            return RealtimeIntradayAxis.nearestPoint(in: projected, toSlot: slot)
+        }()
+        return ZStack {
+            RealtimeIntradayChartView(
+                points: projected,
+                axis: axis,
+                referenceClose: model.realtimeReferenceClose,
+                priceScale: model.priceScale,
+                isZoomed: model.canReset,
+                isLive: model.realtimeTiming.state == .live,
+                selectedPoint: selectedProjected,
+                breakEvenPrice: showHoldingOverlay ? holdingOverlay?.breakEvenPrice : nil,
+                onBeginGesture: model.beginChartGesture,
+                onTransform: model.transformChart,
+                onEndGesture: model.endChartGesture,
+                onSelectSlotFraction: model.selectChart,
+                onReset: model.resetViewport,
+                pointTimeLabel: { date in
+                    model.realtimeTiming.timestamp(date)
+                }
+            )
+            if projected.isEmpty {
+                Text(model.chartLoading ? L10n.tr("正在加载走势…") : L10n.tr("暂无最新走势"))
+                    .font(.caption)
+                    .foregroundStyle(GoldTheme.textSecondary)
+            }
+        }
     }
 
     private func trendChart(

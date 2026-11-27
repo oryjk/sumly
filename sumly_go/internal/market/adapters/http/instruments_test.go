@@ -258,7 +258,37 @@ func TestRealtimeRoutesWindowQueryParamContract(t *testing.T) {
 		}
 	}
 
-	// 4. 非法 window 参数返回 422 (KindValidation)
+	// 4. 完整当日分时 ?window=day：国内连贯日+夜盘 & 国际完整交易日
+	{
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/app/market/gold/instruments/au9999/realtime?window=day", nil))
+		if w.Code != 200 {
+			t.Fatalf("au9999 day status=%d body=%s", w.Code, w.Body.String())
+		}
+		var resp realtimeResp
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		if resp.Code != 0 || resp.Data.IntervalSeconds != 60 || len(resp.Data.Points) <= 196 {
+			t.Fatalf("au9999 day should include day session + night session, got %d points: %s", len(resp.Data.Points), w.Body.String())
+		}
+	}
+	{
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/app/market/gold/realtime?window=day", nil))
+		if w.Code != 200 {
+			t.Fatalf("xauusd day status=%d body=%s", w.Code, w.Body.String())
+		}
+		var resp realtimeResp
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		if resp.Code != 0 || resp.Data.IntervalSeconds != 60 || len(resp.Data.Points) <= 361 {
+			t.Fatalf("xauusd day should cover full day (>6h), got %d points: %s", len(resp.Data.Points), w.Body.String())
+		}
+	}
+
+	// 5. 非法 window 参数返回 422 (KindValidation)
 	for _, path := range []string{
 		"/api/v1/app/market/gold/instruments/au9999/realtime?window=invalid",
 		"/api/v1/app/market/gold/realtime?window=invalid",

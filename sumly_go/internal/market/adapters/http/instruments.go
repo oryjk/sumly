@@ -76,7 +76,7 @@ func (h *InstrumentsHandler) Daily(c *gin.Context) {
 func (h *InstrumentsHandler) Realtime(c *gin.Context) {
 	mode, ok := domain.ParseRealtimeWindowMode(c.Query("window"))
 	if !ok {
-		shared.WriteError(c, sharederror.New(sharederror.KindValidation, "invalid window; allowed: 20m, session"))
+		shared.WriteError(c, sharederror.New(sharederror.KindValidation, "invalid window; allowed: 20m, session, day"))
 		return
 	}
 	var (
@@ -84,7 +84,7 @@ func (h *InstrumentsHandler) Realtime(c *gin.Context) {
 		window domain.GoldWindow
 		e      error
 	)
-	if mode == domain.RealtimeWindowModeSession {
+	if mode == domain.RealtimeWindowModeSession || mode == domain.RealtimeWindowModeDay {
 		i, window, e = h.service.RealtimeWindow(c.Request.Context(), c.Param("instrument"), mode)
 	} else {
 		i, window, e = h.service.Realtime(c.Request.Context(), c.Param("instrument"))

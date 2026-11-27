@@ -76,7 +76,7 @@ func TestParseIntradayRejectsInvalidPayload(t *testing.T) {
 }
 
 func TestFetchGoldIntradayBuildsExpectedRequestAndChecksStatus(t *testing.T) {
-	wantURL := "https://api.jijinhao.com/quoteCenter/history.htm?code=JO_71&style=0&pageSize=480"
+	wantURL := "https://api.jijinhao.com/quoteCenter/history.htm?code=JO_71&style=0&pageSize=800"
 	ts := time.Date(2026, 11, 21, 2, 28, 0, 0, time.FixedZone("CST", 8*3600)).UnixMilli()
 	client := NewClient(&http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodGet {

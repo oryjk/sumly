@@ -64,7 +64,7 @@ func (s *Instruments) RealtimeWindow(ctx context.Context, id string, mode domain
 	if e != nil {
 		return domain.Instrument{}, domain.GoldWindow{}, e
 	}
-	if mode != domain.RealtimeWindowModeSession {
+	if mode != domain.RealtimeWindowModeSession && mode != domain.RealtimeWindowModeDay {
 		points, interval, e := m.Service.GetGoldRealtime(ctx)
 		window := domain.GoldWindow{Points: points, IntervalSeconds: interval, WindowSeconds: int(RealtimeWindow.Seconds())}
 		if len(points) > 0 {

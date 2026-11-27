@@ -13,15 +13,17 @@ const (
 	MinRealtimeWindowSeconds = 1200
 	MaxRealtimeWindowSeconds = 86400
 	InternationalSessionSpan = 6 * time.Hour
+	InternationalDaySpan     = 23 * time.Hour
 	SessionGapThreshold      = 2 * time.Hour
 )
 
-// RealtimeWindowMode 控制实时分时接口返回 20 分钟滚动窗还是完整最近交易时段。
+// RealtimeWindowMode 控制实时分时接口返回 20 分钟滚动窗、最近交易时段还是完整当日分时。
 type RealtimeWindowMode string
 
 const (
 	RealtimeWindowMode20m     RealtimeWindowMode = "20m"
 	RealtimeWindowModeSession RealtimeWindowMode = "session"
+	RealtimeWindowModeDay     RealtimeWindowMode = "day"
 )
 
 // ParseRealtimeWindowMode 解析查询参数 window；空值或 20m 保持默认向后兼容行为。
@@ -31,6 +33,8 @@ func ParseRealtimeWindowMode(raw string) (RealtimeWindowMode, bool) {
 		return RealtimeWindowMode20m, true
 	case string(RealtimeWindowModeSession):
 		return RealtimeWindowModeSession, true
+	case string(RealtimeWindowModeDay):
+		return RealtimeWindowModeDay, true
 	default:
 		return "", false
 	}
