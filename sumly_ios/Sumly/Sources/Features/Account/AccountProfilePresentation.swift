@@ -430,7 +430,7 @@ struct AccountCloudStatusBadge: Equatable, Sendable {
         guard let cloud else {
             return resolve(isSignedIn: signedIn)
         }
-        let hasPending = cloud.userID != nil && ((try? cloud.document()) != cloud.base.document)
+        let hasPending = cloud.userID != nil && cloud.hasPendingLocalChanges
         return resolve(
             isSignedIn: signedIn,
             isSyncing: cloud.isSyncing,

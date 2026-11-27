@@ -55,7 +55,7 @@ const (
 	intradayIdleInterval   = 5 * time.Minute
 	intradayMaxBackoff     = 5 * time.Minute
 	intradayStaleThreshold = 10 * time.Minute
-	intradayTimeout        = 10 * time.Second
+	intradayTimeout        = 15 * time.Second
 )
 
 func (c *GoldCollector) SyncIntraday(ctx context.Context) error {

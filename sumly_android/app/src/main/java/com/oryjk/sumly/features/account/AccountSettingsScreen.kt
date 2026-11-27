@@ -31,7 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,12 +61,19 @@ data class AccountHoldingsUi(
     val onUseRemote: (Long) -> Unit,
 )
 
+@Stable
+interface AccountHoldingsSource {
+    @Composable
+    fun collectUi(): AccountHoldingsUi
+}
+
 @Composable
 internal fun AccountSettingsScreen(
     viewModel: AccountViewModel,
     session: AccountSessionState,
     actions: AccountActions,
     holdingsSync: AccountHoldingsUi?,
+    holdingsSyncSource: AccountHoldingsSource? = null,
     onClose: () -> Unit,
     onClearMarketCache: (suspend () -> Unit)?,
 ) {
@@ -93,14 +102,15 @@ internal fun AccountSettingsScreen(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            val status = if (identity == null) {
-                "游客记录保存在此设备。"
+            if (identity == null) {
+                Notice("游客记录保存在此设备。")
             } else {
-                holdingsSync?.status?.ifBlank { "等待同步。" } ?: "当前无法读取同步状态。"
-            }
-            Notice(status)
-            if (identity != null && holdingsSync != null) {
-                HoldingsSyncSettings(holdingsSync, identity, actions.busy)
+                HoldingsSyncSection(
+                    identity = identity,
+                    holdingsSync = holdingsSync,
+                    holdingsSyncSource = holdingsSyncSource,
+                    accountBusy = actions.busy,
+                )
             }
         }
         if (identity != null) {
@@ -163,6 +173,21 @@ internal fun AccountSettingsScreen(
                 marketCacheNotice?.let { Notice(it, isError = marketCacheFailed) }
             }
         }
+    }
+}
+
+@Composable
+private fun HoldingsSyncSection(
+    identity: AccountIdentity,
+    holdingsSync: AccountHoldingsUi?,
+    holdingsSyncSource: AccountHoldingsSource?,
+    accountBusy: Boolean,
+) {
+    val resolved = key(identity) { holdingsSyncSource?.collectUi() } ?: holdingsSync
+    val status = resolved?.status?.ifBlank { "等待同步。" } ?: "当前无法读取同步状态。"
+    Notice(status)
+    if (resolved != null) {
+        HoldingsSyncSettings(resolved, identity, accountBusy)
     }
 }
 

@@ -76,7 +76,12 @@ enum MarketRange: String, CaseIterable {
 
 @MainActor @Observable
 final class MarketHomeViewModel {
-    var range: MarketRange = .quarter { didSet { resetViewport() } }
+    var range: MarketRange = .quarter {
+        didSet {
+            resetViewport()
+            syncShowsInitialLoading()
+        }
+    }
     var selectedDate: Date? {
         didSet {
             selectionExpiryTask?.cancel()
@@ -100,8 +105,16 @@ final class MarketHomeViewModel {
         didSet { if daily != oldValue { historyRevision &+= 1 } }
     }
     private(set) var realtime: [MarketChartPoint] = [] {
-        didSet { if realtime != oldValue { realtimeRevision &+= 1 } }
+        didSet {
+            if realtime != oldValue {
+                realtimeRevision &+= 1
+                syncDomesticDayPlusNightAnchor()
+            }
+        }
     }
+    /// 当国内分时曲线同时包含今日连续日盘（09:00–15:30）与当晚夜盘（20:00 起）时，缓存该自然日 00:00 锚点。
+    /// 仅在跨入日+夜联合态时变更一次，避免非实时视图为统一昨收基准而订阅每 5 秒 `realtime` 变化。
+    private(set) var domesticDayPlusNightAnchor: Date?
     private var quoteLoading = true
     private var dailyLoading = true
     private var realtimeLoading = true
@@ -109,8 +122,10 @@ final class MarketHomeViewModel {
     private var dailyRequest: UUID?
     private var realtimeRequest: UUID?
     private var historyRequest: UUID?
+    /// Stored initial-loading flag so `HomeView.body` does not subscribe to high-frequency `quote` or `loading` churn after initial load.
+    private(set) var showsInitialLoading = true
     var chartLoading: Bool { range == .realtime ? realtimeLoading : (dailyLoading || historyLoading) }
-    var loading: Bool { (quoteLoading && quote == nil) || (chartLoading && points.isEmpty) }
+    var loading: Bool { (quote == nil && quoteLoading) || (points.isEmpty && chartLoading) }
     private var quoteFailed = false
     private var dailyFailed = false
     private var realtimeFailed = false
@@ -122,6 +137,7 @@ final class MarketHomeViewModel {
     private let calendar: Calendar
     private var basisSwitchRequest: UUID?
     private(set) var isSwitchingBasis = false
+    @ObservationIgnored var onNetworkQuote: (@MainActor (GoldQuote, GoldMarketBasis) -> Void)?
 
     // Derived data is not observable state: filling this cache during a view read
     // must not schedule another SwiftUI render. Source properties remain observed.
@@ -145,7 +161,6 @@ final class MarketHomeViewModel {
         let basis: GoldMarketBasis
         let range: MarketRange
         let historyRevision: UInt
-        let realtimeRevision: UInt
         let usdCNY: Double
         let lower: Date
         let upper: Date
@@ -212,7 +227,12 @@ final class MarketHomeViewModel {
         return scopedPoints
     }
 
-    var showsInitialLoading: Bool { loading && price == nil && points.isEmpty }
+    private func syncShowsInitialLoading() {
+        let next = price == nil && points.isEmpty && loading
+        if showsInitialLoading != next {
+            showsInitialLoading = next
+        }
+    }
 
     var realtimeTiming: RealtimeChartTiming {
         let now = nowProvider()
@@ -244,15 +264,27 @@ final class MarketHomeViewModel {
         if range == .history && historyLoading { return L10n.tr("正在加载百年走势…") }
         if range == .history && historyFailed { return L10n.tr("历史走势加载失败 · 点击重试") }
         if range == .realtime ? realtimeFailed : (range == .history ? historyFailed : dailyFailed) { return L10n.tr("走势刷新失败 · 点击重试") }
-        let timing = realtimeTiming
-        if range == .realtime, timing.state == .paused, let date = quote?.asOf ?? timing.latestSample {
-            return timing.pausedMessage(for: date)
-        }
-        if let quote, timing.now.timeIntervalSince(quote.asOf) > 180 {
-            return timing.pausedMessage(for: quote.asOf)
-        }
         if range == .realtime {
+            let timing = realtimeTiming
+            if timing.state == .paused, let date = quote?.asOf ?? timing.latestSample {
+                return timing.pausedMessage(for: date)
+            }
+            if let quote, timing.now.timeIntervalSince(quote.asOf) > 180 {
+                return timing.pausedMessage(for: quote.asOf)
+            }
             if realtime.isEmpty { return L10n.tr("暂无最新走势，请稍后再试") }
+        } else if let quote {
+            let now = nowProvider()
+            if now.timeIntervalSince(quote.asOf) > 180 {
+                let timing = RealtimeChartTiming(
+                    latestSample: nil,
+                    latestQuote: quote.asOf,
+                    basis: basis,
+                    now: now,
+                    calendar: calendar
+                )
+                return timing.pausedMessage(for: quote.asOf)
+            }
         }
         return nil
     }
@@ -327,18 +359,40 @@ final class MarketHomeViewModel {
         return (floor((center - span / 2) * 2) / 2)...(ceil((center + span / 2) * 2) / 2)
     }
 
+    var quoteSnapshot: MarketQuoteSnapshot? {
+        guard let quote else { return nil }
+        let overrideClose: Double? = {
+            guard basis == .domestic, let dayAnchor = domesticDayPlusNightAnchor else { return nil }
+            return RealtimeIntradayAxis.priorTradingDayClose(before: dayAnchor, in: daily)
+        }()
+        return MarketQuoteSnapshot.make(from: quote, basis: basis, referenceCloseOverride: overrideClose)
+    }
+
     var realtimeReferenceClose: Double? {
-        RealtimeIntradayAxis.resolveReferenceClose(
+        let intradayPoints = Self.realtimeWindow(realtime, now: nowProvider())
+        return RealtimeIntradayAxis.resolveReferenceClose(
             basis: basis,
             quote: quote,
-            points: points,
+            points: intradayPoints,
             daily: daily
         )
     }
 
     var realtimeIntradayAxis: RealtimeIntradayAxis {
-        let anchor = points.last?.date ?? quote?.asOf ?? nowProvider()
-        return RealtimeIntradayAxis.make(basis: basis, anchorDate: anchor)
+        let intradayPoints = range == .realtime ? points : Self.realtimeWindow(realtime, now: nowProvider())
+        let anchor = intradayPoints.last?.date ?? quote?.asOf ?? nowProvider()
+        return RealtimeIntradayAxis.make(basis: basis, anchorDate: anchor, points: intradayPoints)
+    }
+
+    private func syncDomesticDayPlusNightAnchor() {
+        let next: Date? = {
+            guard basis == .domestic else { return nil }
+            let intradayPoints = Self.realtimeWindow(realtime, now: nowProvider())
+            return RealtimeIntradayAxis.domesticDayPlusNightAnchor(for: intradayPoints)
+        }()
+        if domesticDayPlusNightAnchor != next {
+            domesticDayPlusNightAnchor = next
+        }
     }
 
     var realtimeProjectedPoints: [ProjectedIntradayPoint] {
@@ -373,16 +427,52 @@ final class MarketHomeViewModel {
         return dPrev <= dNext ? previous : next
     }
 
-    func start() async {
+    func start(includeQuotePolling: Bool = true) async {
         // Each stream owns its retry schedule: slow historical sync must not
         // prevent live prices recovering after a foreground/network transition.
-        async let quotes: Void = poll(interval: { self.liveStreamPollInterval }) { await self.loadQuote() }
-        async let realtime: Void = poll(interval: { self.liveStreamPollInterval }) { await self.loadRealtime() }
-        async let history: Void = poll(interval: { .seconds(60) }) {
-            await self.loadDaily()
-            if self.range != .realtime { await self.loadHistory() }
+        if includeQuotePolling {
+            async let quotes: Void = poll(interval: { self.liveStreamPollInterval }) { await self.loadQuote() }
+            async let realtime: Void = poll(interval: { self.realtimePollInterval }) { await self.loadRealtime() }
+            async let history: Void = poll(interval: { .seconds(60) }) {
+                await self.loadDaily()
+                if self.range != .realtime { await self.loadHistory() }
+            }
+            _ = await (quotes, realtime, history)
+        } else {
+            async let realtime: Void = poll(interval: { self.realtimePollInterval }) { await self.loadRealtime() }
+            async let history: Void = poll(interval: { .seconds(60) }) {
+                await self.loadDaily()
+                if self.range != .realtime { await self.loadHistory() }
+            }
+            _ = await (realtime, history)
         }
-        _ = await (quotes, realtime, history)
+    }
+
+    private var realtimePollInterval: Duration {
+        range == .realtime ? liveStreamPollInterval : Self.pausedPollInterval
+    }
+
+    /// 同步外部共享报价源，消除与 LiveGoldQuoteStore 的双重 5 秒轮询冗余。
+    func applyExternalQuote(_ externalQuote: GoldQuote?, failed: Bool) {
+        if let externalQuote, externalQuote.cnyPerGram.isFinite, externalQuote.cnyPerGram > 0 {
+            if let current = quote, current.asOf > externalQuote.asOf {
+                if quoteFailed { quoteFailed = false }
+                if quoteLoading { quoteLoading = false }
+                syncShowsInitialLoading()
+                return
+            }
+            if quote != externalQuote { quote = externalQuote }
+            if quoteFailed { quoteFailed = false }
+            if quoteLoading { quoteLoading = false }
+        } else if failed {
+            if !quoteFailed { quoteFailed = true }
+            if quoteLoading { quoteLoading = false }
+        }
+        syncShowsInitialLoading()
+    }
+
+    func refreshRealtimeIfNeeded() async {
+        await loadRealtime()
     }
 
     private func poll(interval: @MainActor () -> Duration, operation: @MainActor () async -> Void) async {
@@ -455,6 +545,7 @@ final class MarketHomeViewModel {
             realtime = fetchedRealtime
             daily = fetchedDaily
             history = fetchedHistory
+            syncDomesticDayPlusNightAnchor()
             quoteFailed = false
             realtimeFailed = fetchedRealtime.isEmpty
             dailyFailed = fetchedDaily.isEmpty && fetchedHistory.isEmpty
@@ -465,6 +556,8 @@ final class MarketHomeViewModel {
             historyLoading = false
             selectedDate = nil
             gestureViewport = nil
+            syncShowsInitialLoading()
+            onNetworkQuote?(fetchedQuote, newBasis)
             return true
         } catch {
             return false
@@ -502,6 +595,8 @@ final class MarketHomeViewModel {
         snapshot.realtimeFailed = realtimeFailed
         snapshot.historyFailed = historyFailed
         snapshot.historyRevision = historyRevision
+        snapshot.showsInitialLoading = showsInitialLoading
+        snapshot.domesticDayPlusNightAnchor = domesticDayPlusNightAnchor
         snapshot.preparedKey = preparedKey; snapshot.preparedPoints = preparedPoints
         snapshot.scopedKey = scopedKey; snapshot.scopedRange = scopedRange; snapshot.scopedPoints = scopedPoints
         return snapshot
@@ -538,7 +633,7 @@ final class MarketHomeViewModel {
         }
         let fx = basis == .international ? (quote?.usdCNY ?? 0) : 1
         let key = WindowCacheKey(basis: basis, range: range, historyRevision: historyRevision,
-                                 realtimeRevision: realtimeRevision, usdCNY: fx, lower: window.lowerBound, upper: window.upperBound)
+                                 usdCNY: fx, lower: window.lowerBound, upper: window.upperBound)
         if cachedWindowKey == key { return cachedWindowPoints }
         let filtered = points.filter { window.contains($0.date) }
         cachedWindowKey = key
@@ -600,8 +695,8 @@ final class MarketHomeViewModel {
         guard gestureViewport == nil else { return }
         let clamped = min(1, max(0, fraction))
         if range == .realtime {
-            let projected = realtimeProjectedPoints
             let axis = realtimeIntradayAxis
+            let projected = axis.project(windowPoints)
             let slotRange: ClosedRange<Double> = {
                 if canReset, let first = projected.first?.slot, let last = projected.last?.slot, last > first {
                     return first...last
@@ -632,16 +727,26 @@ final class MarketHomeViewModel {
         let request = UUID()
         historyRequest = request
         historyLoading = true
-        defer { if historyRequest == request { historyLoading = false } }
+        defer {
+            if historyRequest == request {
+                historyLoading = false
+                syncShowsInitialLoading()
+            }
+        }
         let generation = cacheGeneration
-        if let cached = await historyService.cachedHistory(), generation == cacheGeneration, historyRequest == request { history = cached }
+        if let cached = await historyService.cachedHistory(), generation == cacheGeneration, historyRequest == request {
+            if history != cached { history = cached }
+            syncShowsInitialLoading()
+        }
         guard generation == cacheGeneration, historyRequest == request, !Task.isCancelled else { return }
         do {
             let fetched = try await historyService.fetchHistory()
             guard generation == cacheGeneration, historyRequest == request, !Task.isCancelled else { return }
-            history = fetched; historyFailed = false
+            if history != fetched { history = fetched }
+            if historyFailed { historyFailed = false }
+            syncShowsInitialLoading()
         }
-        catch { if generation == cacheGeneration, historyRequest == request, !Task.isCancelled { historyFailed = true } }
+        catch { if generation == cacheGeneration, historyRequest == request, !Task.isCancelled, !historyFailed { historyFailed = true } }
     }
 
     func clearMarketCache() {
@@ -653,6 +758,7 @@ final class MarketHomeViewModel {
         cachedWindowKey = nil; cachedWindowPoints = []
         daily = []; history = []; realtime = []; quote = nil; selectedDate = nil
         resetViewport()
+        syncShowsInitialLoading()
     }
 
     private func loadQuote() async {
@@ -660,39 +766,65 @@ final class MarketHomeViewModel {
         let request = UUID()
         quoteRequest = request
         quoteLoading = true
-        defer { if quoteRequest == request { quoteLoading = false } }
+        defer {
+            if quoteRequest == request {
+                quoteLoading = false
+                syncShowsInitialLoading()
+            }
+        }
         let generation = cacheGeneration
-        if quote == nil, let cached = await quoteService.cachedQuote(), generation == cacheGeneration, quoteRequest == request { quote = cached }
+        if quote == nil, let cached = await quoteService.cachedQuote(), generation == cacheGeneration, quoteRequest == request {
+            quote = cached
+            syncShowsInitialLoading()
+        }
         guard generation == cacheGeneration, quoteRequest == request, !Task.isCancelled else { return }
         do {
             let fetched = try await quoteService.fetchQuote()
             guard generation == cacheGeneration, quoteRequest == request, !Task.isCancelled else { return }
-            quote = fetched; quoteFailed = false
+            if quote != fetched { quote = fetched }
+            if quoteFailed { quoteFailed = false }
+            syncShowsInitialLoading()
+            onNetworkQuote?(fetched, basis)
         }
-        catch { if generation == cacheGeneration, quoteRequest == request, !Task.isCancelled { quoteFailed = true } }
+        catch { if generation == cacheGeneration, quoteRequest == request, !Task.isCancelled, !quoteFailed { quoteFailed = true } }
     }
     private func loadDaily() async {
         guard !Task.isCancelled else { return }
         let request = UUID()
         dailyRequest = request
         dailyLoading = true
-        defer { if dailyRequest == request { dailyLoading = false } }
+        defer {
+            if dailyRequest == request {
+                dailyLoading = false
+                syncShowsInitialLoading()
+            }
+        }
         let generation = cacheGeneration
-        if let cached = await dailyService.cachedDailyPrices(), generation == cacheGeneration, dailyRequest == request { daily = cached }
+        if let cached = await dailyService.cachedDailyPrices(), generation == cacheGeneration, dailyRequest == request {
+            if daily != cached { daily = cached }
+            syncShowsInitialLoading()
+        }
         guard generation == cacheGeneration, dailyRequest == request, !Task.isCancelled else { return }
         do {
             let fetched = try await dailyService.fetchDailyPrices()
             guard generation == cacheGeneration, dailyRequest == request, !Task.isCancelled else { return }
-            daily = fetched; dailyFailed = false
+            if daily != fetched { daily = fetched }
+            if dailyFailed { dailyFailed = false }
+            syncShowsInitialLoading()
         }
-        catch { if generation == cacheGeneration, dailyRequest == request, !Task.isCancelled { dailyFailed = true } }
+        catch { if generation == cacheGeneration, dailyRequest == request, !Task.isCancelled, !dailyFailed { dailyFailed = true } }
     }
     private func loadRealtime() async {
         guard !Task.isCancelled else { return }
         let request = UUID()
         realtimeRequest = request
         realtimeLoading = true
-        defer { if realtimeRequest == request { realtimeLoading = false } }
+        defer {
+            if realtimeRequest == request {
+                realtimeLoading = false
+                syncShowsInitialLoading()
+            }
+        }
         let generation = cacheGeneration
         guard generation == cacheGeneration, realtimeRequest == request, !Task.isCancelled else { return }
         do {
@@ -702,11 +834,13 @@ final class MarketHomeViewModel {
             let now = nowProvider()
             let merged = Self.mergeRealtimeSession(existing: realtime, incoming: fetched, now: now)
             guard !merged.isEmpty else {
-                realtimeFailed = true
+                if !realtimeFailed { realtimeFailed = true }
                 return
             }
-            realtime = merged; realtimeFailed = false
+            if realtime != merged { realtime = merged }
+            if realtimeFailed { realtimeFailed = false }
+            syncShowsInitialLoading()
         }
-        catch { if generation == cacheGeneration, realtimeRequest == request, !Task.isCancelled { realtimeFailed = true } }
+        catch { if generation == cacheGeneration, realtimeRequest == request, !Task.isCancelled, !realtimeFailed { realtimeFailed = true } }
     }
 }

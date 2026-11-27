@@ -7,6 +7,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -37,10 +38,15 @@ data class MarketUiState(
     internal val observations: List<MarketObservation> = emptyList(),
     internal val realtime: RealtimeWindow? = null,
 ) {
+    internal fun observedDate(zone: ZoneId): LocalDate = observedAt.atZone(zone).toLocalDate()
+
+    internal fun isRealtimePaused(): Boolean =
+        range == MarketRange.Realtime && isRealtimeWindowPaused(realtime, quote, observedAt)
+
     internal fun visiblePoints(zone: ZoneId): List<MarketChartPoint> = if (range == MarketRange.Realtime) {
         realtime?.points.orEmpty()
     } else {
-        MarketChartLogic.historicalPoints(observations, basis, range, quote?.usdCny, observedAt, zone)
+        MarketChartLogic.historicalPoints(observations, basis, range, quote?.usdCny, observedDate(zone), zone)
     }
 }
 
@@ -49,6 +55,7 @@ class MarketViewModel(
     private val clock: Clock = Clock.systemDefaultZone(),
     initialBasis: MarketBasis = MarketBasis.Domestic,
     private val onBasisSelected: (MarketBasis) -> Unit = {},
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(MarketUiState(basis = initialBasis, observedAt = clock.instant()))
     val uiState: StateFlow<MarketUiState> = mutableState.asStateFlow()
@@ -94,7 +101,7 @@ class MarketViewModel(
                     val chartRequest = async {
                         if (live) {
                             val window = service.fetchRealtime(basis)
-                            val usable = withContext(Dispatchers.Default) {
+                            val usable = withContext(computeDispatcher) {
                                 MarketChartLogic.mergeRealtime(null, window, clock.instant())
                             }
                             MarketUiState(realtime = usable)
@@ -182,14 +189,20 @@ class MarketViewModel(
         if (!request.tryLock()) return
         try {
             val quote = marketAttempt { service.fetchQuote(basis) }
+            val now = clock.instant()
             updateBasis(basis) { state ->
                 val existing = state.quote
                 val usable = quote?.takeIf { it.cnyPerGram != null && (existing == null || it.asOf >= existing.asOf) }
+                val nextQuote = when {
+                    usable != null -> if (usable == existing) existing else usable
+                    existing != null -> existing
+                    else -> quote
+                }
                 state.copy(
-                    quote = usable ?: existing ?: quote,
+                    quote = nextQuote,
                     quoteLoading = false,
                     quoteFailed = quote == null || usable == null && existing != null,
-                    observedAt = clock.instant(),
+                    observedAt = nextObservedAt(state, now, nextQuote, state.realtime),
                 )
             }
         } finally {
@@ -206,20 +219,46 @@ class MarketViewModel(
             val now = clock.instant()
             val previous = uiState.value.takeIf { it.basis == basis }?.realtime
             val usableRealtime = realtime?.let { window ->
-                withContext(Dispatchers.Default) { MarketChartLogic.mergeRealtime(previous, window, now) }
+                withContext(computeDispatcher) { MarketChartLogic.mergeRealtime(previous, window, now) }
             }
             updateBasis(basis) { state ->
-                if (live != (state.range == MarketRange.Realtime)) state else state.copy(
-                    realtime = usableRealtime ?: state.realtime,
-                    observations = history ?: state.observations,
-                    chartLoading = false,
-                    chartFailed = if (live) usableRealtime == null else history == null,
-                    observedAt = now,
-                )
+                if (live != (state.range == MarketRange.Realtime)) state else {
+                    val nextRealtime = when {
+                        usableRealtime == null -> state.realtime
+                        usableRealtime == state.realtime -> state.realtime
+                        else -> usableRealtime
+                    }
+                    val nextObservations = when {
+                        history == null -> state.observations
+                        history == state.observations -> state.observations
+                        else -> history
+                    }
+                    state.copy(
+                        realtime = nextRealtime,
+                        observations = nextObservations,
+                        chartLoading = false,
+                        chartFailed = if (live) usableRealtime == null else history == null,
+                        observedAt = nextObservedAt(state, now, state.quote, nextRealtime),
+                    )
+                }
             }
         } finally {
             request.unlock()
         }
+    }
+
+    private fun nextObservedAt(
+        state: MarketUiState,
+        now: Instant,
+        nextQuote: MarketQuote?,
+        nextRealtime: RealtimeWindow?,
+    ): Instant {
+        if (now.atZone(chartZone).toLocalDate() != state.observedDate(chartZone)) return now
+        if (state.range != MarketRange.Realtime) return state.observedAt
+        if (nextRealtime != state.realtime) return now
+        val pausedAtPrevious = isRealtimeWindowPaused(nextRealtime, nextQuote, state.observedAt)
+        val pausedNow = isRealtimeWindowPaused(nextRealtime, nextQuote, now)
+        return if (pausedAtPrevious != pausedNow) now else state.observedAt
     }
 
     private inline fun updateBasis(basis: MarketBasis, transform: (MarketUiState) -> MarketUiState) {
@@ -240,6 +279,12 @@ class MarketViewModel(
             delay(intervalMillis())
         }
     }
+}
+
+private fun isRealtimeWindowPaused(realtime: RealtimeWindow?, quote: MarketQuote?, at: Instant): Boolean {
+    val window = realtime ?: return false
+    val latest = window.points.lastOrNull()?.time ?: return false
+    return MarketChartLogic.isPaused(latest, quote?.asOf, window.intervalSeconds, at)
 }
 
 private suspend fun <T> marketAttempt(operation: suspend () -> T): T? = try {

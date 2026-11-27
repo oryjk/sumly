@@ -1,6 +1,7 @@
 package com.oryjk.sumly.bootstrap
 
 import android.content.Context
+import androidx.compose.runtime.Stable
 import com.oryjk.sumly.core.network.ApiClient
 import com.oryjk.sumly.features.account.AccountIdentity
 import com.oryjk.sumly.features.account.AuthSession
@@ -32,4 +33,5 @@ internal class HoldingsWorkspaces(context: Context, private val api: ApiClient) 
     }
 }
 
+@Stable
 internal class AccountWorkspace(val store: AccountHoldingsStore, val sync: HoldingsCloudSync)

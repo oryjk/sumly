@@ -15,7 +15,11 @@ struct MarketQuoteSnapshot: Equatable, Sendable {
     let usdCNY: Double?
     let asOf: Date
 
-    static func make(from quote: GoldQuote, basis: GoldMarketBasis) -> MarketQuoteSnapshot? {
+    static func make(
+        from quote: GoldQuote,
+        basis: GoldMarketBasis,
+        referenceCloseOverride: Double? = nil
+    ) -> MarketQuoteSnapshot? {
         guard quote.cnyPerGram.isFinite, quote.cnyPerGram > 0 else { return nil }
         let ratio: Double? = {
             switch basis {
@@ -38,7 +42,8 @@ struct MarketQuoteSnapshot: Equatable, Sendable {
             return value.isFinite && value > 0 ? value : nil
         }
 
-        let prevCloseCNY = convert(quote.prevClose)
+        let overrideClose = referenceCloseOverride.flatMap { ($0.isFinite && $0 > 0) ? $0 : nil }
+        let prevCloseCNY = overrideClose ?? convert(quote.prevClose)
         let changeCNY = prevCloseCNY.map { quote.cnyPerGram - $0 }
         let changePercent: Double? = {
             guard let prevCloseCNY, prevCloseCNY > 0, let changeCNY else { return nil }
@@ -87,11 +92,13 @@ struct GoldMarketSpread: Equatable, Sendable {
 @MainActor
 @Observable
 final class LiveGoldQuoteStore {
-    private(set) var quotes: [GoldMarketBasis: GoldQuote] = [:]
-    private(set) var failedBases: Set<GoldMarketBasis> = []
+    private(set) var domesticQuote: GoldQuote?
+    private(set) var internationalQuote: GoldQuote?
+    private(set) var domesticFailed = false
+    private(set) var internationalFailed = false
 
-    private let serviceFactory: (GoldMarketBasis) -> any GoldQuoteServicing
-    private var pollingTask: Task<Void, Never>?
+    @ObservationIgnored private let serviceFactory: (GoldMarketBasis) -> any GoldQuoteServicing
+    @ObservationIgnored private var pollingTask: Task<Void, Never>?
 
     init(serviceFactory: @escaping (GoldMarketBasis) -> any GoldQuoteServicing = {
         BackendGoldPriceService(instrumentID: $0.instrumentID)
@@ -99,42 +106,73 @@ final class LiveGoldQuoteStore {
         self.serviceFactory = serviceFactory
     }
 
+    var quotes: [GoldMarketBasis: GoldQuote] {
+        var result: [GoldMarketBasis: GoldQuote] = [:]
+        if let domesticQuote { result[.domestic] = domesticQuote }
+        if let internationalQuote { result[.international] = internationalQuote }
+        return result
+    }
+
+    var failedBases: Set<GoldMarketBasis> {
+        var result: Set<GoldMarketBasis> = []
+        if domesticFailed { result.insert(.domestic) }
+        if internationalFailed { result.insert(.international) }
+        return result
+    }
+
     func quote(for basis: GoldMarketBasis) -> GoldQuote? {
-        quotes[basis]
+        switch basis {
+        case .domestic: domesticQuote
+        case .international: internationalQuote
+        }
     }
 
     func isFailed(for basis: GoldMarketBasis) -> Bool {
-        failedBases.contains(basis)
+        switch basis {
+        case .domestic: domesticFailed
+        case .international: internationalFailed
+        }
     }
 
     func snapshot(for basis: GoldMarketBasis) -> MarketQuoteSnapshot? {
-        quotes[basis].flatMap { MarketQuoteSnapshot.make(from: $0, basis: basis) }
+        quote(for: basis).flatMap { MarketQuoteSnapshot.make(from: $0, basis: basis) }
     }
 
     var spread: GoldMarketSpread? {
-        GoldMarketSpread.calculate(domestic: quotes[.domestic], international: quotes[.international])
+        GoldMarketSpread.calculate(domestic: domesticQuote, international: internationalQuote)
     }
 
     /// 由其他页面（如行情主视图）拉到最新报价时回写，保持全局一致。
     func ingest(_ quote: GoldQuote, for basis: GoldMarketBasis) {
         guard quote.cnyPerGram.isFinite, quote.cnyPerGram > 0 else { return }
-        if let existing = quotes[basis], existing.asOf > quote.asOf { return }
-        quotes[basis] = quote
-        failedBases.remove(basis)
+        if let existing = self.quote(for: basis) {
+            if existing.asOf > quote.asOf { return }
+            if existing == quote {
+                setFailed(false, for: basis)
+                return
+            }
+        }
+        setQuote(quote, for: basis)
+        setFailed(false, for: basis)
     }
 
     func clearCache() {
-        quotes = [:]
-        failedBases = []
+        setQuote(nil, for: .domestic)
+        setQuote(nil, for: .international)
+        setFailed(false, for: .domestic)
+        setFailed(false, for: .international)
     }
 
-    func start(primaryBasis: @escaping @MainActor () -> GoldMarketBasis) async {
+    func start(
+        primaryBasis: @escaping @MainActor () -> GoldMarketBasis,
+        shouldRefreshSecondary: @escaping @MainActor () -> Bool = { true }
+    ) async {
         await loadCachedQuotes()
         var tick = 0
         while !Task.isCancelled {
             let primary = primaryBasis()
             await refresh(basis: primary)
-            if tick % 3 == 0 {
+            if tick % 3 == 0, shouldRefreshSecondary() {
                 let secondary: GoldMarketBasis = primary == .domestic ? .international : .domestic
                 await refresh(basis: secondary)
             }
@@ -151,33 +189,55 @@ final class LiveGoldQuoteStore {
 
     func refresh(basis: GoldMarketBasis) async {
         let service = serviceFactory(basis)
-        if quotes[basis] == nil, let cached = await service.cachedQuote() {
+        if quote(for: basis) == nil, let cached = await service.cachedQuote() {
             if !Task.isCancelled, cached.cnyPerGram.isFinite, cached.cnyPerGram > 0 {
-                quotes[basis] = cached
+                setQuote(cached, for: basis)
             }
         }
         do {
             let fetched = try await service.fetchQuote()
             guard !Task.isCancelled else { return }
             guard fetched.cnyPerGram.isFinite, fetched.cnyPerGram > 0 else {
-                failedBases.insert(basis)
+                setFailed(true, for: basis)
                 return
             }
-            quotes[basis] = fetched
-            failedBases.remove(basis)
+            setQuote(fetched, for: basis)
+            setFailed(false, for: basis)
         } catch {
             if !Task.isCancelled {
-                failedBases.insert(basis)
+                setFailed(true, for: basis)
             }
         }
     }
 
     private func loadCachedQuotes() async {
         for basis in GoldMarketBasis.allCases {
-            if quotes[basis] == nil, let cached = await serviceFactory(basis).cachedQuote(),
+            if quote(for: basis) == nil, let cached = await serviceFactory(basis).cachedQuote(),
                cached.cnyPerGram.isFinite, cached.cnyPerGram > 0 {
-                quotes[basis] = cached
+                setQuote(cached, for: basis)
             }
+        }
+    }
+
+    private func setQuote(_ incoming: GoldQuote?, for basis: GoldMarketBasis) {
+        switch basis {
+        case .domestic:
+            guard domesticQuote != incoming else { return }
+            domesticQuote = incoming
+        case .international:
+            guard internationalQuote != incoming else { return }
+            internationalQuote = incoming
+        }
+    }
+
+    private func setFailed(_ failed: Bool, for basis: GoldMarketBasis) {
+        switch basis {
+        case .domestic:
+            guard domesticFailed != failed else { return }
+            domesticFailed = failed
+        case .international:
+            guard internationalFailed != failed else { return }
+            internationalFailed = failed
         }
     }
 }

@@ -36,5 +36,6 @@ enum HoldingDisposal {
         record.resetAlertBaselines()
         try disposed.setAlerts([])
         try context.save()
+        NotificationCenter.default.post(name: .holdingsLocalDataDidChange, object: nil)
     }
 }

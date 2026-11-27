@@ -5,7 +5,35 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
+
+func TestNewClientDefaultsNilHTTPClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Query().Get("js_code") != "wx-code" {
+			t.Errorf("expected wx-code query")
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"errcode":0,"errmsg":"ok","openid":"openid-nil","session_key":"session-nil"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(nil, server.URL, "app-id", "app-secret")
+	if client.httpClient == nil {
+		t.Fatal("expected non-nil default httpClient")
+	}
+	if client.httpClient.Timeout != 10*time.Second {
+		t.Fatalf("default timeout = %v, want %v", client.httpClient.Timeout, 10*time.Second)
+	}
+
+	identity, err := client.ExchangeCode(context.Background(), "wx-code")
+	if err != nil {
+		t.Fatalf("exchange code with default httpClient: %v", err)
+	}
+	if identity.OpenID != "openid-nil" || identity.SessionKey != "session-nil" {
+		t.Fatalf("unexpected identity: %+v", identity)
+	}
+}
 
 func TestExchangeCodeAcceptsWechatErrcodeZeroResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {

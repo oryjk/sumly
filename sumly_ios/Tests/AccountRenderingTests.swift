@@ -44,6 +44,7 @@ private struct AccountRenderService: AuthServicing {
     window.makeKeyAndVisible()
     defer {
         window.isHidden = true
+        window.rootViewController = nil
         previousKeyWindow?.makeKey()
     }
     // These are rendering artifacts, not timing-sensitive auth assertions. Allow

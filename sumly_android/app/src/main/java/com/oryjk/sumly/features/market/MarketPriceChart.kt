@@ -41,7 +41,14 @@ import kotlinx.coroutines.delay
 
 @Composable
 internal fun MarketPriceChart(
-    state: MarketUiState,
+    basis: MarketBasis,
+    range: MarketRange,
+    scale: ChartScale,
+    chartLoading: Boolean,
+    chartFailed: Boolean,
+    observedDate: LocalDate,
+    realtimeIntervalSeconds: Int?,
+    realtimePaused: Boolean,
     observations: List<MarketChartPoint>,
     zone: ZoneId,
     overlay: MarketHoldingOverlay?,
@@ -50,11 +57,11 @@ internal fun MarketPriceChart(
     onSources: () -> Unit,
     onRetry: () -> Unit,
 ) {
-    val live = state.range == MarketRange.Realtime
-    var window by remember(state.basis, state.range, resetRevision) { mutableStateOf(0f..1f) }
-    var selection by remember(state.basis, state.range, resetRevision) { mutableStateOf<Instant?>(null) }
-    var selectedMarkerDay by remember(state.basis, state.range, resetRevision, overlay) { mutableStateOf<LocalDate?>(null) }
-    var showDates by remember(state.basis, state.range) { mutableStateOf(false) }
+    val live = range == MarketRange.Realtime
+    var window by remember(basis, range, resetRevision) { mutableStateOf(0f..1f) }
+    var selection by remember(basis, range, resetRevision) { mutableStateOf<Instant?>(null) }
+    var selectedMarkerDay by remember(basis, range, resetRevision, overlay) { mutableStateOf<LocalDate?>(null) }
+    var showDates by remember(basis, range) { mutableStateOf(false) }
 
     LaunchedEffect(selection) {
         if (selection != null) {
@@ -64,30 +71,36 @@ internal fun MarketPriceChart(
     }
     val first = observations.firstOrNull()?.time
     val last = observations.lastOrNull()?.time
-    val interval = if (live) state.realtime?.intervalSeconds ?: 5 else null
-    val timing = interval?.let { RealtimeChartTiming(first, last, state.quote?.asOf, it, state.observedAt, zone) }
-    val full = when {
-        first == null || last == null -> null
-        live -> MarketTimeBounds(minOf(first, last.minusSeconds(MarketChartLogic.REALTIME_WINDOW_SECONDS)), last)
-        state.range == MarketRange.History && state.basis == MarketBasis.Domestic -> MarketTimeBounds(first, last)
-        else -> state.range.dateBounds(state.observedAt.atZone(zone).toLocalDate())?.let { dates ->
-            MarketTimeBounds(dates.start.atMarketNoon(zone), dates.endInclusive.atMarketNoon(zone))
+    val interval = if (live) realtimeIntervalSeconds ?: 5 else null
+    val timing = remember(live, first, last, realtimePaused, observedDate, zone) {
+        if (live) RealtimeChartTiming(first, last, realtimePaused, observedDate, zone) else null
+    }
+    val full = remember(first, last, live, range, basis, observedDate, zone) {
+        when {
+            first == null || last == null -> null
+            live -> MarketTimeBounds(minOf(first, last.minusSeconds(MarketChartLogic.REALTIME_WINDOW_SECONDS)), last)
+            range == MarketRange.History && basis == MarketBasis.Domestic -> MarketTimeBounds(first, last)
+            else -> range.dateBounds(observedDate)?.let { dates ->
+                MarketTimeBounds(dates.start.atMarketNoon(zone), dates.endInclusive.atMarketNoon(zone))
+            }
         }
     }
-    val viewport = full?.subrange(window)?.let {
-        if (live) it else MarketTimeBounds(
-            it.start.atZone(zone).toLocalDate().atMarketNoon(zone),
-            it.end.atZone(zone).toLocalDate().atMarketNoon(zone),
-        )
+    val viewport = remember(full, window, live, zone) {
+        full?.subrange(window)?.let {
+            if (live) it else MarketTimeBounds(
+                it.start.atZone(zone).toLocalDate().atMarketNoon(zone),
+                it.end.atZone(zone).toLocalDate().atMarketNoon(zone),
+            )
+        }
     }
     val points = remember(observations, viewport) {
         if (viewport == null) emptyList() else observations.filter { it.time in viewport.start..viewport.end }
     }
-    val projection = remember(points, state.scale) { if (points.isEmpty()) null else PriceProjection.forPoints(points, state.scale) }
+    val projection = remember(points, scale) { if (points.isEmpty()) null else PriceProjection.forPoints(points, scale) }
     val selected = selection?.let { MarketChartLogic.nearestPoint(points, it) }
     val activeOverlay = overlay?.takeIf { projection != null }
     val breakEven = activeOverlay?.breakEvenCnyPerGram
-    val markers = remember(activeOverlay, viewport, observations, projection, live) {
+    val markers = remember(activeOverlay, viewport, observations, projection, live, zone) {
         if (live || viewport == null || projection == null) emptyList() else activeOverlay?.purchases.orEmpty()
             .asSequence()
             .filter { projection.contains(it.costCnyPerGram) && it.count > 0 }
@@ -107,7 +120,7 @@ internal fun MarketPriceChart(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
         val caption = when {
             timing != null -> timing.caption
-            state.basis == MarketBasis.Domestic -> "截至昨天 · 元/克 · Au99.99"
+            basis == MarketBasis.Domestic -> "截至昨天 · 元/克 · Au99.99"
             else -> "截至昨天 · 元/克 · 按最新汇率折算"
         }
         Row(
@@ -127,14 +140,14 @@ internal fun MarketPriceChart(
             } else marketTime(selected.time, zone, dateFormat)
             Text("$whenText  ${marketMoney(selected.price)} 元/克", color = GoldColors.GoldSoft, style = MaterialTheme.typography.labelMedium)
         }
-        if (points.isEmpty() || viewport == null || projection == null) {
+        if (points.isEmpty() || full == null || viewport == null || projection == null) {
             Box(Modifier.fillMaxWidth().height(230.dp), contentAlignment = Alignment.Center) {
                 when {
-                    state.chartLoading -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    chartLoading -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                         Text("正在加载走势…", color = GoldColors.Muted)
                     }
-                    state.chartFailed -> TextButton(onClick = onRetry) { Text("走势加载失败 · 重试") }
+                    chartFailed -> TextButton(onClick = onRetry) { Text("走势加载失败 · 重试") }
                     else -> Text("暂无所选区间走势", color = GoldColors.Muted)
                 }
             }
@@ -186,7 +199,7 @@ internal fun MarketPriceChart(
                 Text("${points.size} 个点", color = GoldColors.Muted, style = MaterialTheme.typography.labelMedium)
             }
             if (full.start < full.end) {
-                MarketChartNavigator(observations, full, state.scale, window, full.minimumFraction(live), interval, changeWindow)
+                MarketChartNavigator(observations, full, scale, window, full.minimumFraction(live), interval, changeWindow)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     val dates = full.start..full.end
                     for (boundary in listOf(full.start, full.end)) {
@@ -204,12 +217,12 @@ internal fun MarketPriceChart(
                 }
             }
         }
-        if (state.chartFailed && observations.isNotEmpty()) {
+        if (chartFailed && observations.isNotEmpty()) {
             TextButton(onClick = onRetry) { Text("走势刷新失败 · 显示上次结果") }
         }
     }
     markers.firstOrNull { it.marker.date == selectedMarkerDay }?.let {
-        MarketPurchaseMarkerSheet(it, state.basis, zone, onDismiss = { selectedMarkerDay = null })
+        MarketPurchaseMarkerSheet(it, basis, zone, onDismiss = { selectedMarkerDay = null })
     }
 }
 
@@ -263,7 +276,7 @@ internal data class MarketTimeBounds(val start: Instant, val end: Instant) {
     }
 }
 
-internal class PriceProjection(private val scale: ChartScale, private val low: Double, private val high: Double) {
+internal data class PriceProjection(private val scale: ChartScale, private val low: Double, private val high: Double) {
     fun fraction(price: Double): Float = ((high - scale.value(price)) / (high - low)).toFloat()
     fun contains(price: Double): Boolean = price.isFinite() && price > 0 && scale.value(price) in low..high
 

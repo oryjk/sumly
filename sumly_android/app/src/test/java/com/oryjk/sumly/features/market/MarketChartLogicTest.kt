@@ -173,6 +173,82 @@ class MarketChartLogicTest {
             .merge(MarketBasis.Domestic, null)
     }
 
+    @Test
+    fun `historical points depend only on calendar date and ignore intra-day clock advances`() {
+        val zone = ZoneOffset.ofHours(8)
+        val observations = listOf(observation("2026-11-19", 610.0), observation("2026-11-20", 620.0))
+        val morning = MarketChartLogic.historicalPoints(
+            observations, MarketBasis.Domestic, MarketRange.Month, null, instant("2026-11-21T01:00:00Z"), zone,
+        )
+        val evening = MarketChartLogic.historicalPoints(
+            observations, MarketBasis.Domestic, MarketRange.Month, null, instant("2026-11-21T15:59:55Z"), zone,
+        )
+        val byDate = MarketChartLogic.historicalPoints(
+            observations, MarketBasis.Domestic, MarketRange.Month, null, LocalDate.of(2026, 11, 21), zone,
+        )
+
+        assertEquals(morning, evening)
+        assertEquals(byDate, morning)
+    }
+
+    @Test
+    fun `realtime chart timing with LocalDate matches Instant constructor and PriceProjection supports structural equality`() {
+        val previous = instant("2026-11-20T22:00:00Z")
+        val latest = instant("2026-11-21T01:00:00Z")
+        val fromInstant = RealtimeChartTiming(previous, latest, null, 60, latest.plusSeconds(250), ZoneOffset.UTC)
+        val fromDate = RealtimeChartTiming(previous, latest, paused = true, today = LocalDate.of(2026, 11, 21), zone = ZoneOffset.UTC)
+
+        assertEquals(fromInstant.paused, fromDate.paused)
+        assertEquals(fromInstant.caption, fromDate.caption)
+        assertEquals(fromInstant.axisLabel(previous, previous..latest), fromDate.axisLabel(previous, previous..latest))
+        assertEquals(fromInstant.boundaryLabel(latest, previous..latest), fromDate.boundaryLabel(latest, previous..latest))
+        assertEquals(fromInstant.windowLabel(previous..latest), fromDate.windowLabel(previous..latest))
+
+        val points = listOf(chartPoint("2026-11-20T00:00:00Z", 610.0), chartPoint("2026-11-21T00:00:00Z", 620.0))
+        assertEquals(
+            PriceProjection.forPoints(points, ChartScale.Linear),
+            PriceProjection.forPoints(points.toList(), ChartScale.Linear),
+        )
+    }
+
+    @Test
+    fun `domestic full day keeps continuous day session and night session across afternoon break while cutting prior overnight`() {
+        // Beijing time (UTC+8):
+        // Previous night close: 2026-11-27 02:30 (+08:00) = 2026-11-26T18:30:00Z (6.5h before 09:00)
+        // Day session (continuous 09:00-15:30, no lunch break): 01:00Z .. 07:30Z
+        // Afternoon break: 15:30-20:00 (4.5h)
+        // Night session (20:00-02:30 next day): 12:00Z .. 18:30Z (total natural-day span 17.5h)
+        val previousNight = chartPoint("2026-11-26T18:30:00Z", 775.0)
+        val dayOpen = chartPoint("2026-11-27T01:00:00Z", 780.0)
+        val midday = chartPoint("2026-11-27T04:15:00Z", 782.0) // 12:15 Beijing (inside continuous day session)
+        val dayClose = chartPoint("2026-11-27T07:30:00Z", 784.0)
+        val nightOpen = chartPoint("2026-11-27T12:00:00Z", 785.0)
+        val nightMid = chartPoint("2026-11-27T15:15:00Z", 786.5) // 23:15 Beijing
+        val nightClose = chartPoint("2026-11-27T18:30:00Z", 788.0)
+
+        val window = RealtimeWindow(
+            intervalSeconds = 60,
+            points = listOf(previousNight, dayOpen, midday, dayClose, nightOpen, nightMid, nightClose),
+            windowSeconds = 63_000L, // 17.5h
+        )
+        val points = MarketChartLogic.realtimePoints(window, nightClose.time)
+
+        assertEquals(listOf(dayOpen, midday, dayClose, nightOpen, nightMid, nightClose), points)
+        // chartSegments splits across the 4.5h afternoon close (15:30 -> 20:00) while keeping 12:15 in day session.
+        val continuousDay = listOf(
+            chartPoint("2026-11-27T03:30:00Z", 781.0), // 11:30
+            chartPoint("2026-11-27T03:31:00Z", 781.2), // 11:31
+            chartPoint("2026-11-27T07:30:00Z", 784.0), // 15:30
+            nightOpen,
+            chartPoint("2026-11-27T12:01:00Z", 785.5),
+        )
+        val segments = MarketChartLogic.chartSegments(continuousDay, intervalSeconds = 60)
+        assertEquals(3, segments.size)
+        assertEquals(listOf(continuousDay[0], continuousDay[1]), segments[0])
+        assertEquals(listOf(continuousDay[2]), segments[1])
+        assertEquals(listOf(continuousDay[3], continuousDay[4]), segments[2])
+    }
+
     private fun instant(raw: String): Instant = Instant.parse(raw)
 
     private fun chartPoint(raw: String, price: Double) = MarketChartPoint(instant(raw), price)

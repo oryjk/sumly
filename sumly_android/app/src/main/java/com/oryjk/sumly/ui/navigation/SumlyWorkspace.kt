@@ -14,6 +14,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.oryjk.sumly.bootstrap.AccountWorkspace
 import com.oryjk.sumly.design.GoldColors
+import com.oryjk.sumly.features.account.AccountHoldingsSource
 import com.oryjk.sumly.features.account.AccountHoldingsUi
 import com.oryjk.sumly.features.account.AccountIdentity
 import com.oryjk.sumly.features.account.AccountScreen
@@ -59,7 +61,13 @@ import com.oryjk.sumly.features.market.MarketViewModel
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+private val SyncTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 internal fun SumlyWorkspace(
@@ -117,10 +125,6 @@ internal fun SumlyWorkspace(
             }
         }
     }
-    val guestState by guestHoldings.state.collectAsStateWithLifecycle()
-    val accountHoldings = if (workspace == null) null else key(identity) {
-        AccountHoldingsControls(workspace, guestStore, guestState.snapshot.records.size)
-    }
     LaunchedEffect(workspace, lifecycle) {
         if (workspace != null) lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { workspace.sync.run() }
     }
@@ -131,27 +135,22 @@ internal fun SumlyWorkspace(
     var showingChanlun by rememberSaveable { mutableStateOf(false) }
     val sharedScreenState = rememberSaveableStateHolder()
     val ledgerScreenState = key(identity?.userId, identity?.generation) { rememberSaveableStateHolder() }
-    val marketState by market.uiState.collectAsStateWithLifecycle()
-    val holdingsState = key(holdings) { holdings.state.collectAsStateWithLifecycle().value }
-    val macroState by macro.state.collectAsStateWithLifecycle()
-    val overlay = remember(session.restoring, holdingsState.snapshot) {
-        if (session.restoring) null else HoldingMarketOverlay.from(holdingsState.snapshot)?.let { item ->
-            MarketHoldingOverlay(item.breakEven, item.markers.map { marker ->
-                MarketPurchaseMarker(marker.id, marker.cnyPerGram, marker.count, marker.items)
-            })
-        }
-    }
     LaunchedEffect(macro) { macro.load(MacroTab.Temperature) }
 
     LaunchedEffect(lifecycle, market) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { market.pollQuotes() }
     }
-    LaunchedEffect(holdings, marketState.basis, marketState.quote) {
-        holdings.setReferencePrice(
-            price = marketState.quote?.cnyPerGram,
-            basis = marketState.basis,
-            previousPrice = marketState.quote?.previousCloseCnyPerGram,
-        )
+    LaunchedEffect(holdings, market) {
+        market.uiState
+            .map { Triple(it.quote?.cnyPerGram, it.basis, it.quote?.previousCloseCnyPerGram) }
+            .distinctUntilChanged()
+            .collect { (price, basis, previousPrice) ->
+                holdings.setReferencePrice(
+                    price = price,
+                    basis = basis,
+                    previousPrice = previousPrice,
+                )
+            }
     }
 
     BackHandler(enabled = !showingAdd && (showingChanlun || showingMacro || selection != SumlyTab.Market)) {
@@ -173,6 +172,10 @@ internal fun SumlyWorkspace(
         return
     }
 
+    val onOpenMacro = remember { { showingMacro = true } }
+    val onOpenChanlun = remember { { showingChanlun = true } }
+    val onClearMarketCache: suspend () -> Unit = remember(market) { market::clearCache }
+
     Column(
         modifier = Modifier.fillMaxSize()
             .background(GoldColors.Background)
@@ -189,28 +192,25 @@ internal fun SumlyWorkspace(
                         MacroScreen(macro, onClose = { showingMacro = false })
                     } else {
                         screenState.SaveableStateProvider("market.panel") {
-                            MarketScreen(
-                                viewModel = market,
-                                temperature = macroState.temperature.result?.badge,
-                                onTemperature = { showingMacro = true },
-                                onChanlun = { showingChanlun = true },
-                                holdingOverlay = overlay,
-                            ) {
-                                TemperatureHomeCard(
-                                    macroState.temperature,
-                                    onOpen = { showingMacro = true },
-                                    onRetry = { macro.load(MacroTab.Temperature, force = true) },
-                                )
-                            }
+                            MarketTabContent(
+                                market = market,
+                                holdings = holdings,
+                                macro = macro,
+                                restoring = session.restoring,
+                                onTemperature = onOpenMacro,
+                                onChanlun = onOpenChanlun,
+                            )
                         }
                     }
                     SumlyTab.Holdings -> if (session.restoring) OpeningHoldings() else HoldingsScreen(holdings, accountWorkspace = workspace != null)
                     SumlyTab.Calendar -> if (session.restoring) OpeningHoldings() else HoldingsCalendarScreen(holdings)
-                    SumlyTab.Account -> AccountScreen(
-                        account,
-                        holdingsSync = accountHoldings,
-                        onOpenChanlun = { showingChanlun = true },
-                        onClearMarketCache = market::clearCache,
+                    SumlyTab.Account -> AccountTabContent(
+                        account = account,
+                        workspace = workspace,
+                        guestHoldings = guestHoldings,
+                        guestStore = guestStore,
+                        onOpenChanlun = onOpenChanlun,
+                        onClearMarketCache = onClearMarketCache,
                     )
                 }
             }
@@ -228,6 +228,88 @@ private class AccountWorkspaceOwner : ViewModelStoreOwner {
 }
 
 @Composable
+private fun MarketTabContent(
+    market: MarketViewModel,
+    holdings: HoldingsViewModel,
+    macro: MacroViewModel,
+    restoring: Boolean,
+    onTemperature: () -> Unit,
+    onChanlun: () -> Unit,
+) {
+    val snapshot = key(holdings) {
+        val (initialSnapshot, snapshotFlow) = remember(holdings) {
+            holdings.state.slicedFlow { it.snapshot }
+        }
+        snapshotFlow.collectAsStateWithLifecycle(initialValue = initialSnapshot).value
+    }
+    val overlay = remember(restoring, snapshot) {
+        if (restoring) null else HoldingMarketOverlay.from(snapshot)?.let { item ->
+            MarketHoldingOverlay(item.breakEven, item.markers.map { marker ->
+                MarketPurchaseMarker(marker.id, marker.cnyPerGram, marker.count, marker.items)
+            })
+        }
+    }
+    val (initialTemperature, temperatureFlow) = remember(macro) {
+        macro.state.slicedFlow { it.temperature }
+    }
+    val temperaturePanel by temperatureFlow.collectAsStateWithLifecycle(
+        initialValue = initialTemperature,
+    )
+    val onRetryTemperature = remember(macro) { { macro.load(MacroTab.Temperature, force = true) } }
+    MarketScreen(
+        viewModel = market,
+        temperature = temperaturePanel.result?.badge,
+        onTemperature = onTemperature,
+        onChanlun = onChanlun,
+        holdingOverlay = overlay,
+    ) {
+        TemperatureHomeCard(
+            temperaturePanel,
+            onOpen = onTemperature,
+            onRetry = onRetryTemperature,
+        )
+    }
+}
+
+@Composable
+private fun AccountTabContent(
+    account: AccountViewModel,
+    workspace: AccountWorkspace?,
+    guestHoldings: HoldingsViewModel,
+    guestStore: HoldingsStore,
+    onOpenChanlun: () -> Unit,
+    onClearMarketCache: suspend () -> Unit,
+) {
+    val holdingsSyncSource = remember(workspace, guestHoldings, guestStore) {
+        workspace?.let { WorkspaceHoldingsSource(it, guestHoldings, guestStore) }
+    }
+    AccountScreen(
+        account,
+        holdingsSyncSource = holdingsSyncSource,
+        onOpenChanlun = onOpenChanlun,
+        onClearMarketCache = onClearMarketCache,
+    )
+}
+
+@Stable
+private class WorkspaceHoldingsSource(
+    private val workspace: AccountWorkspace,
+    private val guestHoldings: HoldingsViewModel,
+    private val guestStore: HoldingsStore,
+) : AccountHoldingsSource {
+    @Composable
+    override fun collectUi(): AccountHoldingsUi =
+        accountHoldingsControls(workspace, guestHoldings, guestStore)
+}
+
+private class AccountHoldingsCallbacks(
+    val onSync: () -> Unit,
+    val onImportGuest: () -> Unit,
+    val onKeepLocal: (Long) -> Unit,
+    val onUseRemote: (Long) -> Unit,
+)
+
+@Composable
 private fun OpeningHoldings() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(color = GoldColors.Gold)
@@ -235,11 +317,27 @@ private fun OpeningHoldings() {
 }
 
 @Composable
-private fun AccountHoldingsControls(workspace: AccountWorkspace, guestStore: HoldingsStore, guestCount: Int): AccountHoldingsUi {
+private fun accountHoldingsControls(
+    workspace: AccountWorkspace,
+    guestHoldings: HoldingsViewModel,
+    guestStore: HoldingsStore,
+): AccountHoldingsUi {
     val scope = rememberCoroutineScope()
     val sync by workspace.sync.state.collectAsStateWithLifecycle()
     val hasChanges by workspace.store.hasLocalChanges.collectAsStateWithLifecycle()
-    val time = sync.lastSyncedAt?.let { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(it) }
+    val (initialGuestCount, guestCountFlow) = remember(guestHoldings) {
+        guestHoldings.state.slicedFlow { it.snapshot.records.size }
+    }
+    val guestCount by guestCountFlow.collectAsStateWithLifecycle(initialValue = initialGuestCount)
+    val callbacks = remember(workspace, guestStore, scope) {
+        AccountHoldingsCallbacks(
+            onSync = { scope.launch { workspace.sync.sync() } },
+            onImportGuest = { scope.launch { workspace.sync.importGuestRecords(guestStore) } },
+            onKeepLocal = { token -> scope.launch { workspace.sync.resolveConflict(token, HoldingsConflictChoice.Local) } },
+            onUseRemote = { token -> scope.launch { workspace.sync.resolveConflict(token, HoldingsConflictChoice.Cloud) } },
+        )
+    }
+    val time = sync.lastSyncedAt?.let { it.atZone(ZoneId.systemDefault()).format(SyncTimeFormatter) }
     val status = when {
         sync.isSyncing -> "正在同步云端…"
         sync.conflictCount > 0 -> "${sync.conflictCount} 条记录在不同设备上都有修改。"
@@ -254,9 +352,12 @@ private fun AccountHoldingsControls(workspace: AccountWorkspace, guestStore: Hol
         guestRecordCount = guestCount,
         conflictCount = sync.conflictCount,
         conflictToken = sync.conflictToken,
-        onSync = { scope.launch { workspace.sync.sync() } },
-        onImportGuest = { scope.launch { workspace.sync.importGuestRecords(guestStore) } },
-        onKeepLocal = { token -> scope.launch { workspace.sync.resolveConflict(token, HoldingsConflictChoice.Local) } },
-        onUseRemote = { token -> scope.launch { workspace.sync.resolveConflict(token, HoldingsConflictChoice.Cloud) } },
+        onSync = callbacks.onSync,
+        onImportGuest = callbacks.onImportGuest,
+        onKeepLocal = callbacks.onKeepLocal,
+        onUseRemote = callbacks.onUseRemote,
     )
 }
+
+private fun <T, R> StateFlow<T>.slicedFlow(selector: (T) -> R): Pair<R, Flow<R>> =
+    selector(value) to map(selector).distinctUntilChanged()

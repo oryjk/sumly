@@ -6,6 +6,7 @@ struct AccountView: View {
     var cloud: HoldingsCloud? = nil
     var membership: MembershipStore? = nil
     var remoteConfig: RemoteAppConfigStore? = nil
+    var isActive: Bool = true
     var onOpenMembership: (() -> Void)? = nil
     var onOpenChanlun: (() -> Void)? = nil
     var onOpenOnboarding: (() -> Void)? = nil
@@ -23,10 +24,6 @@ struct AccountView: View {
     @State private var confirmDelete = false
     @State private var deleting = false
     @State private var error: String?
-
-    private var cloudBadge: AccountCloudStatusBadge {
-        AccountCloudStatusBadge.from(session: session, cloud: cloud)
-    }
 
     var body: some View {
         let _ = languageStore.revision
@@ -50,11 +47,14 @@ struct AccountView: View {
     }
 
     private var accountContent: some View {
-        ScrollView {
+        let badge = isActive
+            ? AccountCloudStatusBadge.from(session: session, cloud: cloud)
+            : AccountCloudStatusBadge.resolve(isSignedIn: session.user != nil)
+        return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                headerBar
-                profileHeroSection
-                preferencesGroup
+                headerBar(badge: badge)
+                profileHeroSection(badge: badge)
+                preferencesGroup(badge: badge)
                 supportGroup
                 if session.user != nil {
                     securityGroup
@@ -109,7 +109,7 @@ struct AccountView: View {
 
     // MARK: - 1. 顶部标题栏
 
-    private var headerBar: some View {
+    private func headerBar(badge: AccountCloudStatusBadge) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(AccountProfileCopy.pageTitle)
@@ -133,7 +133,7 @@ struct AccountView: View {
                                 lineWidth: 1
                             )
                         )
-                    if let attention = cloudBadge.settingsAttention {
+                    if let attention = badge.settingsAttention {
                         GoldTheme.circleShape
                             .fill(attention.isUrgent ? GoldTheme.up : GoldTheme.gold)
                             .frame(width: 9, height: 9)
@@ -154,20 +154,19 @@ struct AccountView: View {
     // MARK: - 2. 暗黑金「个人攒金名片」Hero 卡片
 
     @ViewBuilder
-    private var profileHeroSection: some View {
+    private func profileHeroSection(badge: AccountCloudStatusBadge) -> some View {
         if let cloud {
             AccountHoldingsProfileBridge { summary in
-                heroCard(summary: summary)
+                heroCard(summary: summary, badge: badge)
             }
             .modelContainer(cloud.container)
         } else {
-            heroCard(summary: .empty)
+            heroCard(summary: .empty, badge: badge)
         }
     }
 
-    private func heroCard(summary: AccountGoldProfileSummary) -> some View {
-        let badge = cloudBadge
-        return AccountHeroCardSurface {
+    private func heroCard(summary: AccountGoldProfileSummary, badge: AccountCloudStatusBadge) -> some View {
+        AccountHeroCardSurface {
             if let user = session.user {
                 AccountSignedInHeroHeader(
                     user: user,
@@ -264,7 +263,7 @@ struct AccountView: View {
 
     // MARK: - 3. 「偏好与工具」分组卡片
 
-    private var preferencesGroup: some View {
+    private func preferencesGroup(badge: AccountCloudStatusBadge) -> some View {
         let isMemberActive = membership?.isActive ?? false
         let chanlunRequiresMembership = remoteConfig?.chanlunRequiresMembership ?? true
         let membershipEntryVisible = remoteConfig?.membershipEntryVisible ?? true
@@ -358,7 +357,7 @@ struct AccountView: View {
                                 .minimumScaleFactor(0.85)
                         }
                         Spacer(minLength: 8)
-                        if let attention = cloudBadge.settingsAttention {
+                        if let attention = badge.settingsAttention {
                             Text(attention.text)
                                 .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                                 .foregroundStyle(attention.isUrgent ? GoldTheme.up : GoldTheme.goldSoft)

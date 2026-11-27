@@ -111,5 +111,17 @@ func (h *InstrumentsHandler) Realtime(c *gin.Context) {
 		start = formatBeijingRFC3339(window.Start)
 		end = formatBeijingRFC3339(window.End)
 	}
-	shared.WriteSuccess(c, gin.H{"instrument": instrumentDTO(i), "unit": i.Unit, "interval_seconds": window.IntervalSeconds, "window_seconds": window.WindowSeconds, "window_start": start, "window_end": end, "points": list})
+	payload := gin.H{
+		"instrument":       instrumentDTO(i),
+		"unit":             i.Unit,
+		"interval_seconds": window.IntervalSeconds,
+		"window_seconds":   window.WindowSeconds,
+		"window_start":     start,
+		"window_end":       end,
+		"points":           list,
+	}
+	if window.PrevClose > 0 {
+		payload["prev_close"] = window.PrevClose
+	}
+	shared.WriteSuccess(c, payload)
 }

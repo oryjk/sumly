@@ -15,7 +15,7 @@ struct IntradayAxisTick: Sendable, Equatable, Identifiable {
     var id: Double { slot }
 }
 
-/// 国内交易日时段切换分界线（如午休 11:30/13:30、夜盘 20:00）。
+/// 国内交易日时段切换分界线（日盘 15:30 收盘与夜盘 20:00 开盘衔接）。
 struct IntradaySessionDivider: Sendable, Equatable, Identifiable {
     let slot: Double
     let label: String
@@ -33,14 +33,18 @@ struct IntradaySplitSegment: Sendable, Equatable {
 }
 
 /// 完整当日分时连续压缩时间轴（纯逻辑、`Sendable`）：
-/// - 国内 Au99.99：将当日早盘（09:00–11:30，150m）、午盘（13:30–15:30，120m）与当晚夜盘（20:00–次日 02:30，390m）
-///   无缝拼接为 `0...660` 连续交易分钟轴，整天走势零断档。
+/// - 国内 Au99.99 自然日全天（方案 A）：将当日连续日盘（09:00–15:30，390m，无午休）与当晚夜盘（20:00–次日 02:30，390m）
+///   无缝拼接为 `0...780` 连续交易分钟轴，整天走势零断档。
+/// - 国内 Au99.99 仅夜盘回退：当后端降级 `window=session` 仅返回夜盘（20:00–次日 02:30）数据时，
+///   动态切为 `0...390` 夜盘单轴，消除左半屏大片空白。
 /// - 国际 XAUUSD：按美东 `America/New_York` 18:00 交易日切换点（自动适配夏/冬令时，对应北京时间 06:00/07:00）
 ///   映射为 `0...1380`（23 小时）连续进度轴。
 struct RealtimeIntradayAxis: Sendable, Equatable {
     enum Kind: Sendable, Equatable {
         /// `dayAnchor` 为该交易日北京时间 00:00。
         case domestic(dayAnchor: Date)
+        /// `sessionOpen` 为该夜盘北京时间 20:00 对应的绝对时刻。
+        case domesticNightSession(sessionOpen: Date)
         /// `sessionOpen` 为该交易日美东 18:00 对应的绝对时刻。
         case international(sessionOpen: Date)
     }
@@ -48,10 +52,9 @@ struct RealtimeIntradayAxis: Sendable, Equatable {
     static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai") ?? TimeZone(secondsFromGMT: 8 * 3600)!
     static let newYorkTimeZone = TimeZone(identifier: "America/New_York") ?? TimeZone(secondsFromGMT: -5 * 3600)!
 
-    static let domesticMorningMinutes: Double = 150  // 09:00 - 11:30
-    static let domesticAfternoonMinutes: Double = 120 // 13:30 - 15:30
+    static let domesticDayMinutes: Double = 390       // 09:00 - 15:30（连续交易，无午休）
     static let domesticNightMinutes: Double = 390     // 20:00 - 次日 02:30
-    static let domesticTotalSlots: Double = 660       // 11 小时
+    static let domesticTotalSlots: Double = 780       // 13 小时
     static let internationalTotalSlots: Double = 1380 // 23 小时
 
     let kind: Kind
@@ -59,6 +62,7 @@ struct RealtimeIntradayAxis: Sendable, Equatable {
     var totalSlots: Double {
         switch kind {
         case .domestic: Self.domesticTotalSlots
+        case .domesticNightSession: Self.domesticNightMinutes
         case .international: Self.internationalTotalSlots
         }
     }
@@ -67,10 +71,9 @@ struct RealtimeIntradayAxis: Sendable, Equatable {
         switch kind {
         case .domestic:
             return [
-                IntradaySessionDivider(slot: Self.domesticMorningMinutes, label: L10n.tr("午休")),
-                IntradaySessionDivider(slot: Self.domesticMorningMinutes + Self.domesticAfternoonMinutes, label: L10n.tr("20:00 夜盘"))
+                IntradaySessionDivider(slot: Self.domesticDayMinutes, label: L10n.tr("20:00 夜盘"))
             ]
-        case .international:
+        case .domesticNightSession, .international:
             return []
         }
     }
@@ -80,9 +83,16 @@ struct RealtimeIntradayAxis: Sendable, Equatable {
         case .domestic:
             return [
                 IntradayAxisTick(slot: 0, label: "09:00"),
-                IntradayAxisTick(slot: Self.domesticMorningMinutes, label: "11:30/13:30"),
-                IntradayAxisTick(slot: Self.domesticMorningMinutes + Self.domesticAfternoonMinutes, label: "20:00"),
+                IntradayAxisTick(slot: Self.domesticDayMinutes / 2, label: "12:15"),
+                IntradayAxisTick(slot: Self.domesticDayMinutes, label: "15:30/20:00"),
                 IntradayAxisTick(slot: Self.domesticTotalSlots, label: "02:30")
+            ]
+        case .domesticNightSession:
+            return [
+                IntradayAxisTick(slot: 0, label: "20:00"),
+                IntradayAxisTick(slot: 120, label: "22:00"),
+                IntradayAxisTick(slot: 240, label: "00:00"),
+                IntradayAxisTick(slot: Self.domesticNightMinutes, label: "02:30")
             ]
         case .international(let sessionOpen):
             let cal = Self.calendar(for: Self.shanghaiTimeZone)
@@ -102,7 +112,8 @@ struct RealtimeIntradayAxis: Sendable, Equatable {
     }
 
     /// 按行情口径与锚定时刻（优先最新成交点，其次当前时间）构造当日连续时间轴。
-    static func make(basis: GoldMarketBasis, anchorDate: Date) -> RealtimeIntradayAxis {
+    /// 若国内数据仅包含 20:00 起的夜盘点（例如旧后端降级 `window=session`），动态切换为夜盘轴避免左半屏空白。
+    static func make(basis: GoldMarketBasis, anchorDate: Date, points: [MarketChartPoint] = []) -> RealtimeIntradayAxis {
         switch basis {
         case .domestic:
             let cal = calendar(for: shanghaiTimeZone)
@@ -110,6 +121,14 @@ struct RealtimeIntradayAxis: Sendable, Equatable {
             let base = hour < 9 ? (cal.date(byAdding: .day, value: -1, to: anchorDate) ?? anchorDate) : anchorDate
             let comps = cal.dateComponents([.year, .month, .day], from: base)
             let dayAnchor = cal.date(from: DateComponents(year: comps.year, month: comps.month, day: comps.day, hour: 0, minute: 0)) ?? base
+            let nightOpen = dayAnchor.addingTimeInterval(20 * 3600)
+            if !points.isEmpty {
+                let isNightAnchor = hour >= 20 || hour < 9
+                let allInNightSession = points.allSatisfy { $0.date >= nightOpen.addingTimeInterval(-60) }
+                if isNightAnchor && allInNightSession {
+                    return RealtimeIntradayAxis(kind: .domesticNightSession(sessionOpen: nightOpen))
+                }
+            }
             return RealtimeIntradayAxis(kind: .domestic(dayAnchor: dayAnchor))
         case .international:
             let nyCal = calendar(for: newYorkTimeZone)
@@ -125,15 +144,16 @@ struct RealtimeIntradayAxis: Sendable, Equatable {
     func slot(for date: Date) -> Double {
         switch kind {
         case .domestic(let dayAnchor):
-            // 相对 dayAnchor 00:00 的分钟数（09:00 = 540, 11:30 = 690, 13:30 = 810, 15:30 = 930, 20:00 = 1200, 次日 02:30 = 1590）
+            // 相对 dayAnchor 00:00 的分钟数（09:00 = 540, 15:30 = 930, 20:00 = 1200, 次日 02:30 = 1590）
             let minute = date.timeIntervalSince(dayAnchor) / 60.0
             if minute <= 540 { return 0 }
-            if minute <= 690 { return minute - 540 }
-            if minute < 810 { return 150 }
-            if minute <= 930 { return 150 + (minute - 810) }
-            if minute < 1200 { return 270 }
-            if minute <= 1590 { return 270 + (minute - 1200) }
+            if minute <= 930 { return minute - 540 }
+            if minute < 1200 { return Self.domesticDayMinutes }
+            if minute <= 1590 { return Self.domesticDayMinutes + (minute - 1200) }
             return Self.domesticTotalSlots
+        case .domesticNightSession(let sessionOpen):
+            let minute = date.timeIntervalSince(sessionOpen) / 60.0
+            return min(max(minute, 0), Self.domesticNightMinutes)
         case .international(let sessionOpen):
             let minute = date.timeIntervalSince(sessionOpen) / 60.0
             return min(max(minute, 0), Self.internationalTotalSlots)
@@ -177,6 +197,28 @@ struct RealtimeIntradayAxis: Sendable, Equatable {
         return abs(prev.slot - target) <= abs(next.slot - target) ? prev : next
     }
 
+    /// 判断国内分时点列是否同时覆盖了当日连续日盘（09:00–15:30）与当晚夜盘（20:00–次日 02:30），
+    /// 并返回该自然日的北京时间 00:00 锚点，供顶部「今日涨跌」与分时图「较昨收」共享同一基准日。
+    static func domesticDayPlusNightAnchor(for points: [MarketChartPoint]) -> Date? {
+        guard let first = points.first, let last = points.last else { return nil }
+        let cal = calendar(for: shanghaiTimeZone)
+        let firstHour = cal.component(.hour, from: first.date)
+        let lastHour = cal.component(.hour, from: last.date)
+        let hasDaySession = (9..<16).contains(firstHour)
+        let hasNightSession = lastHour >= 20 || lastHour < 9
+        guard hasDaySession && hasNightSession else { return nil }
+        return cal.startOfDay(for: first.date)
+    }
+
+    /// 查找指定自然日（北京时间 00:00）之前最近一个交易日的收盘价。
+    static func priorTradingDayClose(before dayAnchor: Date, in daily: [GoldDailyPrice]) -> Double? {
+        let cal = calendar(for: shanghaiTimeZone)
+        return daily
+            .filter { cal.startOfDay(for: $0.date) < dayAnchor && $0.close.isFinite && $0.close > 0 }
+            .max(by: { $0.date < $1.date })?
+            .close
+    }
+
     /// 解析用于当日分时图 `0.00%` 水平虚线与红涨绿跌分色的昨收基准价。
     static func resolveReferenceClose(
         basis: GoldMarketBasis,
@@ -194,21 +236,10 @@ struct RealtimeIntradayAxis: Sendable, Equatable {
         case .domestic:
             // 当国内当日曲线同时包含今天白天日盘（09:00–15:30）与当晚夜盘（>=20:00 或次日 <=02:30）时，
             // 新浪实时报价在 20:00 后已把 prevClose 切换为今日日盘收盘价；
-            // 为保证整条日+夜连贯曲线的「昨收基准线」与今日白天涨势一致，优先采用日盘前一个交易日的收盘价。
-            if let first = points.first, let last = points.last {
-                let cal = calendar(for: shanghaiTimeZone)
-                let firstHour = cal.component(.hour, from: first.date)
-                let lastHour = cal.component(.hour, from: last.date)
-                let hasDaySession = (9..<16).contains(firstHour)
-                let hasNightSession = lastHour >= 20 || lastHour < 9
-                if hasDaySession && hasNightSession {
-                    let dayAnchor = cal.startOfDay(for: first.date)
-                    if let priorBar = daily
-                        .filter({ cal.startOfDay(for: $0.date) < dayAnchor && $0.close.isFinite && $0.close > 0 })
-                        .max(by: { $0.date < $1.date }) {
-                        return priorBar.close
-                    }
-                }
+            // 为保证整条日+夜连贯曲线的「昨收基准线」与顶部「今日涨跌」一致，优先采用日盘前一个交易日的收盘价。
+            if let dayAnchor = domesticDayPlusNightAnchor(for: points),
+               let priorClose = priorTradingDayClose(before: dayAnchor, in: daily) {
+                return priorClose
             }
             if let quote, quote.prevClose.isFinite, quote.prevClose > 0 {
                 return quote.prevClose

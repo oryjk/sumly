@@ -112,3 +112,39 @@ func TestDelayedSamplesDoNotManufactureRepeatedTicks(t *testing.T) {
 		t.Fatal(points, err)
 	}
 }
+
+func TestSaveIntradayMergesDayAndNightAndPrunesBeyond48Hours(t *testing.T) {
+	pool := testsupport.OpenTestPostgres(t)
+	ctx := context.Background()
+	writer := postgres.NewNativeWriter(pool, "AU9999")
+	reader := postgres.NewNativeReader(pool, "AU9999")
+
+	tz := time.FixedZone("CST", 8*3600)
+	latest := time.Date(2026, 11, 27, 23, 22, 0, 0, tz)
+	expired := latest.Add(-48*time.Hour - time.Minute)
+	dayOpen := time.Date(2026, 11, 27, 9, 0, 0, 0, tz)
+	dayClose := time.Date(2026, 11, 27, 15, 30, 0, 0, tz)
+	nightOpen := time.Date(2026, 11, 27, 20, 0, 0, 0, tz)
+
+	if err := writer.SaveIntraday(ctx, []domain.IntradayPoint{
+		{Time: expired, Price: 740.0},
+		{Time: dayOpen, Price: 765.0},
+		{Time: dayClose, Price: 784.0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.SaveIntraday(ctx, []domain.IntradayPoint{
+		{Time: nightOpen, Price: 785.0},
+		{Time: latest, Price: 779.2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	points, err := reader.LoadIntraday(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 4 || !points[0].Time.Equal(dayOpen) || !points[3].Time.Equal(latest) {
+		t.Fatalf("expected merged day+night with expired pruned, got %+v", points)
+	}
+}

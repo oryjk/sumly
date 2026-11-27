@@ -5,6 +5,7 @@ struct HoldingsView: View {
     let marketBasis: GoldMarketBasis
     let cloud: HoldingsCloud?
     let quoteStore: LiveGoldQuoteStore?
+    let isActive: Bool
     let onOpenCalendar: (() -> Void)?
     let onOpenChartOverlay: (() -> Void)?
     let embedInNavigationStack: Bool
@@ -41,6 +42,7 @@ struct HoldingsView: View {
         marketBasis: GoldMarketBasis = .domestic,
         cloud: HoldingsCloud? = nil,
         quoteStore: LiveGoldQuoteStore? = nil,
+        isActive: Bool = true,
         onOpenCalendar: (() -> Void)? = nil,
         onOpenChartOverlay: (() -> Void)? = nil,
         embedInNavigationStack: Bool = true
@@ -48,6 +50,7 @@ struct HoldingsView: View {
         self.cloud = cloud
         self.marketBasis = marketBasis
         self.quoteStore = quoteStore
+        self.isActive = isActive
         self.onOpenCalendar = onOpenCalendar
         self.onOpenChartOverlay = onOpenChartOverlay
         self.embedInNavigationStack = embedInNavigationStack
@@ -96,7 +99,7 @@ struct HoldingsView: View {
                 header.padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 12)
                 List {
                     if let cloud {
-                        Text(cloud.status).font(.caption).foregroundStyle(GoldTheme.textSecondary)
+                        HoldingsCloudStatusRow(cloud: cloud)
                             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
                             .listRowBackground(GoldTheme.background).listRowSeparator(.hidden)
                     }
@@ -175,22 +178,14 @@ struct HoldingsView: View {
                 if batch { batchBar.padding(.horizontal, 16).padding(.bottom, 10) }
             }
         }
-        .task(id: scenePhase) {
-            if quoteStore == nil, scenePhase == .active { await model.start() }
+        .task(id: HoldingsPollingKey(isActive: isActive, scenePhase: scenePhase)) {
+            if quoteStore == nil, isActive, scenePhase == .active { await model.start() }
         }
-        .onChange(of: quoteStore?.quote(for: marketBasis)) { _, latest in
-            if let quoteStore {
-                model.applyExternalQuote(latest, failed: quoteStore.isFailed(for: marketBasis))
-            }
-        }
-        .onChange(of: quoteStore?.isFailed(for: marketBasis)) { _, failed in
-            if let quoteStore {
-                model.applyExternalQuote(quoteStore.quote(for: marketBasis), failed: failed ?? false)
-            }
-        }
-        .onChange(of: marketBasis) { _, updatedBasis in
-            if let quoteStore {
-                model.applyExternalQuote(quoteStore.quote(for: updatedBasis), failed: quoteStore.isFailed(for: updatedBasis))
+        .background {
+            if isActive, let quoteStore {
+                LiveQuoteSyncBridge(quoteStore: quoteStore, basis: marketBasis) { latest, failed in
+                    model.applyExternalQuote(latest, failed: failed)
+                }
             }
         }
         .sensoryFeedback(.selection, trigger: book)
@@ -218,6 +213,7 @@ struct HoldingsView: View {
                 let name = newBook.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
                 guard !name.isEmpty else { return }
                 savedBooks = (books + [name]).joined(separator: "\n"); book = name; search = ""; selection = []
+                cloud?.refreshLocalStatus()
             }
         }
         .confirmationDialog(L10n.tr("删除所选持仓？"), isPresented: $showingDelete, titleVisibility: .visible) {
@@ -409,7 +405,33 @@ struct HoldingsView: View {
         }
     }
 
-    private func mutate(_ operation: () -> Void) { operation(); do { try context.save() } catch { context.rollback(); self.error = L10n.tr("未能保存修改，请重试。") } }
+    private func mutate(_ operation: () -> Void) {
+        operation()
+        do {
+            try context.save()
+            cloud?.refreshLocalStatus()
+            NotificationCenter.default.post(name: .holdingsLocalDataDidChange, object: nil)
+        } catch {
+            context.rollback()
+            self.error = L10n.tr("未能保存修改，请重试。")
+        }
+    }
+}
+
+private struct HoldingsPollingKey: Equatable {
+    let isActive: Bool
+    let scenePhase: ScenePhase
+}
+
+/// 隔离云同步状态观察边界，避免后台同步状态切换导致整个持仓列表重绘。
+private struct HoldingsCloudStatusRow: View {
+    let cloud: HoldingsCloud
+
+    var body: some View {
+        Text(cloud.status)
+            .font(.caption)
+            .foregroundStyle(GoldTheme.textSecondary)
+    }
 }
 
 enum HoldingPageSheet: String, Identifiable { case add, calendar, history, calculator, overview; var id: String { rawValue } }

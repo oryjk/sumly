@@ -160,8 +160,8 @@ internal const val GRAMS_PER_TROY_OUNCE = 31.1034768
 
 internal object MarketChartLogic {
     const val REALTIME_WINDOW_SECONDS = 1200L
-    private const val MAX_SESSION_SECONDS = 12 * 3_600L
-    private val sessionGap = Duration.ofHours(3)
+    private const val MAX_SESSION_SECONDS = 24 * 3_600L
+    private val sessionGap = Duration.ofHours(6)
 
     fun historicalPoints(
         observations: List<MarketObservation>,
@@ -170,8 +170,24 @@ internal object MarketChartLogic {
         usdCny: Double?,
         now: Instant,
         zone: ZoneId,
+    ): List<MarketChartPoint> = historicalPoints(
+        observations = observations,
+        basis = basis,
+        range = range,
+        usdCny = usdCny,
+        today = now.atZone(zone).toLocalDate(),
+        zone = zone,
+    )
+
+    fun historicalPoints(
+        observations: List<MarketObservation>,
+        basis: MarketBasis,
+        range: MarketRange,
+        usdCny: Double?,
+        today: LocalDate,
+        zone: ZoneId,
     ): List<MarketChartPoint> {
-        val bounds = range.dateBounds(now.atZone(zone).toLocalDate()) ?: return emptyList()
+        val bounds = range.dateBounds(today) ?: return emptyList()
         val rate = when (basis) {
             MarketBasis.Domestic -> 1.0
             MarketBasis.International -> {

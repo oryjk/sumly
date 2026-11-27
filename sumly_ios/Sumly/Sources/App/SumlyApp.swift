@@ -277,6 +277,7 @@ private struct GoldWorkspaceView: View {
                         marketBasis: marketBasisBinding,
                         quoteStore: quoteStore,
                         bottomTabBarInset: tabBarLayout.homeAdditionalBottomInset,
+                        isActive: selectedTab == 0,
                         isMembershipActive: membership.isActive,
                         chanlunRequiresMembership: remoteConfig.chanlunRequiresMembership,
                         onOpenHoldings: { selectedTab = 1 },
@@ -291,6 +292,7 @@ private struct GoldWorkspaceView: View {
                         marketBasis: marketBasis,
                         cloud: cloud,
                         quoteStore: quoteStore,
+                        isActive: selectedTab == 1,
                         onOpenCalendar: {
                             visitedCalendar = true
                             selectedTab = 2
@@ -307,7 +309,8 @@ private struct GoldWorkspaceView: View {
                         hideAmounts: hideAmounts,
                         marketBasis: marketBasis,
                         quoteStore: quoteStore,
-                        isEmbeddedTab: true
+                        isEmbeddedTab: true,
+                        isActive: selectedTab == 2
                     )
                     .id(languageRevision)
                     .opacity(selectedTab == 2 ? 1 : 0)
@@ -319,6 +322,7 @@ private struct GoldWorkspaceView: View {
                         cloud: cloud,
                         membership: membership,
                         remoteConfig: remoteConfig,
+                        isActive: selectedTab == 3,
                         onOpenMembership: openMembership,
                         onOpenChanlun: openChanlun,
                         onOpenOnboarding: openOnboarding
@@ -450,6 +454,7 @@ private struct GoldWorkspaceView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .marketCacheCleared)) { _ in
             quoteStore.clearCache()
+            Task { await quoteStore.refresh(basis: marketBasis) }
         }
         .task(id: cloud.id) {
             evaluateOnboardingLaunch()
@@ -464,7 +469,13 @@ private struct GoldWorkspaceView: View {
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             async let cloudSync: Void = cloud.run()
-            async let quotePolling: Void = quoteStore.start { self.marketBasis }
+            async let quotePolling: Void = quoteStore.start(
+                primaryBasis: { self.marketBasis },
+                shouldRefreshSecondary: {
+                    let secondary: GoldMarketBasis = self.marketBasis == .domestic ? .international : .domestic
+                    return self.selectedTab == 0 || self.quoteStore.quote(for: secondary) == nil
+                }
+            )
             _ = await (cloudSync, quotePolling)
         }
         .onDisappear {
@@ -472,5 +483,35 @@ private struct GoldWorkspaceView: View {
             chartOverlayHintTask = nil
         }
         .modifier(HoldingAlertsLifecycle())
+    }
+}
+
+/// 隔离报价订阅边界的零尺寸桥接视图：仅在所在 Tab 激活时挂载，
+/// 非激活 Tab 不读取 `LiveGoldQuoteStore` 属性，避免后台 5 秒报价触发不可见 Tab 重绘；
+/// 切回激活时立即在 `onAppear` 同步最新报价与失败状态。
+struct LiveQuoteSyncBridge: View {
+    let quoteStore: LiveGoldQuoteStore
+    let basis: GoldMarketBasis
+    let onUpdate: @MainActor (GoldQuote?, Bool) -> Void
+
+    var body: some View {
+        let latest = quoteStore.quote(for: basis)
+        let failed = quoteStore.isFailed(for: basis)
+        Color.clear
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onAppear {
+                onUpdate(latest, failed)
+            }
+            .onChange(of: latest) { _, updated in
+                onUpdate(updated, quoteStore.isFailed(for: basis))
+            }
+            .onChange(of: failed) { _, updatedFailed in
+                onUpdate(quoteStore.quote(for: basis), updatedFailed)
+            }
+            .onChange(of: basis) { _, updatedBasis in
+                onUpdate(quoteStore.quote(for: updatedBasis), quoteStore.isFailed(for: updatedBasis))
+            }
     }
 }

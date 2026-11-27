@@ -90,7 +90,11 @@ func (h *Handler) grants(c *gin.Context) {
 	if !decode(c, &req) {
 		return
 	}
-	result, err := h.alerts.Grants(ctx, req.JsCode, req.DeviceID, req.TemplateID, h.ActorUserID(c), h.Workspace(c))
+	actorUserID := int64(0)
+	if h.ActorUserID != nil {
+		actorUserID = h.ActorUserID(c)
+	}
+	result, err := h.alerts.Grants(ctx, req.JsCode, req.DeviceID, req.TemplateID, actorUserID, h.Workspace(c))
 	if err != nil {
 		writeError(c, err)
 		return

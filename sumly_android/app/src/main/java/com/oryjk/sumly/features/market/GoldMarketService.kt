@@ -63,13 +63,22 @@ class BackendGoldMarketService(
 
     override suspend fun fetchRealtime(basis: MarketBasis): RealtimeWindow {
         val maxResponseBytes = 4L * 1024 * 1024
-        val payload = try {
-            api.get(basis.realtimePath, mapOf("window" to "session"), maxResponseBytes = maxResponseBytes)
-        } catch (rejected: ApiException) {
-            if (rejected.httpStatus != 400 && rejected.httpStatus != 422) throw rejected
-            api.get(basis.realtimePath, maxResponseBytes = maxResponseBytes)
-        }
+        val payload = fetchRealtimePayload(basis.realtimePath, maxResponseBytes)
         return withContext(Dispatchers.Default) { MarketPayload.realtime(payload) }
+    }
+
+    private suspend fun fetchRealtimePayload(path: String, maxResponseBytes: Long): JSONObject {
+        val attempts = listOf(mapOf("window" to "day"), mapOf("window" to "session"), emptyMap())
+        var lastRejected: ApiException? = null
+        for (query in attempts) {
+            try {
+                return api.get(path, query, maxResponseBytes = maxResponseBytes)
+            } catch (rejected: ApiException) {
+                if (rejected.httpStatus != 400 && rejected.httpStatus != 422) throw rejected
+                lastRejected = rejected
+            }
+        }
+        throw checkNotNull(lastRejected)
     }
 
     override suspend fun fetchHistory(basis: MarketBasis, force: Boolean): List<MarketObservation> =

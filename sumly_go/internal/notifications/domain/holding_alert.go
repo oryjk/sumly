@@ -82,11 +82,32 @@ const (
 	AlertReturnPct    AlertKind = "returnPercent"
 )
 
+// QuoteBasis 是持仓提醒采用的行情口径：国内（AU9999）或国际（XAUUSD 折算）。
+type QuoteBasis string
+
+const (
+	BasisDomestic      QuoteBasis = "domestic"
+	BasisInternational QuoteBasis = "international"
+)
+
+// NormalizeBasis 校验并规范化行情口径；空值回退为国际口径以兼容未传 basis 的旧客户端。
+func NormalizeBasis(value QuoteBasis) (QuoteBasis, bool) {
+	switch QuoteBasis(lower(trim(string(value)))) {
+	case "", BasisInternational:
+		return BasisInternational, true
+	case BasisDomestic:
+		return BasisDomestic, true
+	default:
+		return "", false
+	}
+}
+
 // Alert 是参与评估的提醒配置。
 type Alert struct {
-	ID        string    `json:"id"`
-	Kind      AlertKind `json:"kind"`
-	Threshold float64   `json:"threshold"`
+	ID        string     `json:"id"`
+	Kind      AlertKind  `json:"kind"`
+	Threshold float64    `json:"threshold"`
+	Basis     QuoteBasis `json:"basis,omitempty"`
 }
 
 // GoldInput 是评估所需的收益输入，与持仓 domain 字段一致。
@@ -154,6 +175,9 @@ func (v ValidatedRecord) Valid() bool {
 			return false
 		}
 		if a.Kind == AlertPrice && a.Threshold <= 0 {
+			return false
+		}
+		if _, ok := NormalizeBasis(a.Basis); !ok {
 			return false
 		}
 	}

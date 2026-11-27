@@ -8,6 +8,7 @@ struct HomeView: View {
     private let quoteStore: LiveGoldQuoteStore?
     private let macroService: any MacroServicing
     private let bottomTabBarInset: CGFloat?
+    private let isActive: Bool
     private let isMembershipActive: Bool
     private let chanlunRequiresMembership: Bool
     private let onOpenHoldings: (() -> Void)?
@@ -39,6 +40,7 @@ struct HomeView: View {
         quoteStore: LiveGoldQuoteStore? = nil,
         macroService: any MacroServicing = BackendMacroService(),
         bottomTabBarInset: CGFloat? = nil,
+        isActive: Bool = true,
         isMembershipActive: Bool = false,
         chanlunRequiresMembership: Bool = true,
         onOpenHoldings: (() -> Void)? = nil,
@@ -49,11 +51,22 @@ struct HomeView: View {
         self.quoteStore = quoteStore
         self.macroService = macroService
         self.bottomTabBarInset = bottomTabBarInset
+        self.isActive = isActive
         self.isMembershipActive = isMembershipActive
         self.chanlunRequiresMembership = chanlunRequiresMembership
         self.onOpenHoldings = onOpenHoldings
         self.onOpenChanlun = onOpenChanlun
-        _model = State(initialValue: MarketHomeViewModel(basis: marketBasis.wrappedValue))
+        let vm = MarketHomeViewModel(basis: marketBasis.wrappedValue)
+        if let quoteStore {
+            vm.applyExternalQuote(
+                quoteStore.quote(for: marketBasis.wrappedValue),
+                failed: quoteStore.isFailed(for: marketBasis.wrappedValue)
+            )
+            vm.onNetworkQuote = { latest, basis in
+                quoteStore.ingest(latest, for: basis)
+            }
+        }
+        _model = State(initialValue: vm)
         _macroModel = State(initialValue: MacroDashboardViewModel(service: macroService))
     }
 
@@ -76,15 +89,12 @@ struct HomeView: View {
 
     private var holdingOverlay: MarketHoldingOverlay? {
         guard !activeBookRecords.isEmpty else { return nil }
+        // 组合保本价与买入打点均不依赖实时报价，传 nil 避免 HomeView.body 订阅高频 model.price。
         return HoldingsInsights.marketOverlay(
             entries: activeBookRecords.map(\.insightEntry),
             window: nil,
-            referencePrice: model.price
+            referencePrice: nil
         )
-    }
-
-    private var currentQuoteSnapshot: MarketQuoteSnapshot? {
-        model.quote.flatMap { MarketQuoteSnapshot.make(from: $0, basis: model.basis) }
     }
 
     var body: some View {
@@ -110,16 +120,20 @@ struct HomeView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { stopBasisTransition(); model.selectedDate = nil }
         }
+        .onChange(of: isActive) { _, active in
+            if !active { stopBasisTransition(); model.selectedDate = nil }
+        }
         .alert(L10n.tr("口径切换失败"), isPresented: $showingBasisError) {
             Button(L10n.tr("知道了"), role: .cancel) {}
         } message: {
             Text(L10n.tr("已保留原口径数据，请检查网络后重试。"))
         }
-        .task(id: scenePhase) {
-            if scenePhase == .active { await model.start() }
+        .task(id: HomePollingKey(isActive: isActive, scenePhase: scenePhase)) {
+            guard isActive, scenePhase == .active else { return }
+            await model.start(includeQuotePolling: quoteStore == nil)
         }
-        .task(id: MacroSummaryLoadKey(scenePhase: scenePhase, trigger: macroLoadTrigger)) {
-            guard scenePhase == .active else { return }
+        .task(id: MacroSummaryLoadKey(isActive: isActive, scenePhase: scenePhase, trigger: macroLoadTrigger)) {
+            guard isActive, scenePhase == .active else { return }
             await macroModel.loadSummary()
         }
         .onChange(of: showingMacroDashboard) { _, isPresented in
@@ -128,11 +142,20 @@ struct HomeView: View {
         .onChange(of: model.showsInitialLoading) { _, isLoading in
             if !isLoading { ensureMacroSummaryLoaded() }
         }
-        .task(id: model.range) {
-            if model.range != .realtime { await model.loadHistory() }
+        .task(id: HomeRangeTaskKey(isActive: isActive, range: model.range)) {
+            guard isActive else { return }
+            if model.range != .realtime {
+                await model.loadHistory()
+            } else {
+                await model.refreshRealtimeIfNeeded()
+            }
         }
-        .onChange(of: model.quote) { _, latest in
-            if let latest { quoteStore?.ingest(latest, for: model.basis) }
+        .background {
+            if isActive, let quoteStore {
+                LiveQuoteSyncBridge(quoteStore: quoteStore, basis: model.basis) { latest, failed in
+                    model.applyExternalQuote(latest, failed: failed)
+                }
+            }
         }
         .sensoryFeedback(.selection, trigger: highlightedBasis)
         .sheet(isPresented: $showingDates) {
@@ -291,129 +314,26 @@ struct HomeView: View {
                     )
                     .padding(.top, 14)
 
-                    if let snapshot = currentQuoteSnapshot {
-                        marketMetricsCard(snapshot: snapshot)
-                    }
+                    HomeMarketMetricsCard(
+                        model: model,
+                        quoteStore: quoteStore,
+                        isActive: isActive
+                    )
 
                     if !activeBookRecords.isEmpty {
-                        holdingsLinkCard
+                        HomeHoldingsLinkCard(
+                            inputs: activeBookRecords.map(\.returnInput),
+                            displayedBookName: displayedBookName,
+                            hideAmounts: hideAmounts,
+                            model: model,
+                            onOpenHoldings: onOpenHoldings
+                        )
                     }
                 }.padding(.horizontal, 18).padding(.bottom, bottomInset)
             }.scrollIndicators(.hidden).background(GoldTheme.background)
         }
     }
 
-    private func marketMetricsCard(snapshot: MarketQuoteSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(L10n.tr("今日盘口参考"))
-                    .font(.subheadline.bold())
-                    .foregroundStyle(GoldTheme.text)
-                Spacer()
-                Text(L10n.fmt("%@ · 元/克", snapshot.basis.title))
-                    .font(.caption)
-                    .foregroundStyle(GoldTheme.textSecondary)
-            }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                metricCell(L10n.tr("今开"), snapshot.openCNY.map { "¥" + $0.moneyText } ?? "—")
-                metricCell(L10n.tr("昨收"), snapshot.prevCloseCNY.map { "¥" + $0.moneyText } ?? "—")
-                metricCell(L10n.tr("最高"), snapshot.highCNY.map { "¥" + $0.moneyText } ?? "—", tint: GoldTheme.up)
-                metricCell(L10n.tr("最低"), snapshot.lowCNY.map { "¥" + $0.moneyText } ?? "—", tint: GoldTheme.down)
-            }
-            if let spread = quoteStore?.spread {
-                GoldTheme.cardStroke.frame(height: 1)
-                HStack(spacing: 8) {
-                    Text(L10n.tr("沪伦实时价差"))
-                        .font(.caption)
-                        .foregroundStyle(GoldTheme.textSecondary)
-                    Spacer()
-                    let label = spread.spreadCNY >= 0 ? L10n.tr("国内溢价") : L10n.tr("国内折价")
-                    Text(L10n.fmt("%@ %@ 元/克 (%@%%)", label, spread.spreadCNY.signedMoneyText, spread.spreadPercent.signedMoneyText))
-                        .font(.caption.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(spread.spreadCNY >= 0 ? GoldTheme.up : GoldTheme.down)
-                }
-            }
-            if let usd = snapshot.usdPerOz, let fx = snapshot.usdCNY {
-                HStack(spacing: 8) {
-                    Text(L10n.tr("伦敦金现货"))
-                        .font(.caption)
-                        .foregroundStyle(GoldTheme.textSecondary)
-                    Spacer()
-                    Text(L10n.fmt("$%@/oz · 汇率 %@", usd.moneyText, fx.formatted(.number.precision(.fractionLength(2...4)))))
-                        .font(.caption.weight(.medium))
-                        .monospacedDigit()
-                        .foregroundStyle(GoldTheme.textSecondary)
-                }
-            }
-        }
-        .goldCard(padding: 16)
-    }
-
-    private func metricCell(_ title: String, _ value: String, tint: Color = GoldTheme.text) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(GoldTheme.textSecondary)
-            Text(value)
-                .font(.system(.footnote, design: .rounded).weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var holdingsLinkCard: some View {
-        let portfolio = GoldReturnCalculator.aggregate(activeBookRecords.map(\.returnInput), referencePrice: model.price)
-        return Button {
-            onOpenHoldings?()
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Label(L10n.fmt("我的持仓 · %@", displayedBookName), systemImage: "bag.fill")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(GoldTheme.gold)
-                    Spacer()
-                    Text(hideAmounts ? "•••• g" : "\((portfolio?.grams ?? 0).moneyText) g")
-                        .font(.caption.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(GoldTheme.textSecondary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(GoldTheme.textSecondary)
-                }
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(L10n.tr("预计到手"))
-                            .font(.caption2)
-                            .foregroundStyle(GoldTheme.textSecondary)
-                        Text(GoldReturnPresentation.money(portfolio?.proceeds, hidden: hideAmounts))
-                            .font(.system(.title3, design: .rounded).bold())
-                            .monospacedDigit()
-                            .foregroundStyle(GoldTheme.text)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(L10n.tr("真实盈亏"))
-                            .font(.caption2)
-                            .foregroundStyle(GoldTheme.textSecondary)
-                        Text(GoldReturnPresentation.money(portfolio?.profit, hidden: hideAmounts, signed: true))
-                            .font(.system(.title3, design: .rounded).bold())
-                            .monospacedDigit()
-                            .foregroundStyle(hideAmounts ? GoldTheme.text : (portfolio?.profit ?? 0) >= 0 ? GoldTheme.up : GoldTheme.down)
-                    }
-                }
-                Text(GoldReturnPresentation.status(price: model.price, breakEven: portfolio?.breakEvenPrice, hidden: hideAmounts))
-                    .font(.caption)
-                    .foregroundStyle(GoldTheme.goldSoft)
-            }
-            .goldCard(padding: 16)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
     private var marketBasisPicker: some View {
         HStack(spacing: 4) {
             ForEach(GoldMarketBasis.allCases) { basis in
@@ -493,7 +413,7 @@ struct HomeView: View {
     }
 
     private func ensureMacroSummaryLoaded() {
-        guard scenePhase == .active, !showingMacroDashboard else { return }
+        guard isActive, scenePhase == .active, !showingMacroDashboard else { return }
         guard !macroModel.isLoadingTemperature, !macroModel.isLoadingTreasury else { return }
         let needsTemperature = macroModel.temperature == nil && macroModel.temperatureError == nil
         let needsTreasury = macroModel.treasury == nil && macroModel.treasuryError == nil
@@ -518,7 +438,150 @@ struct HomeView: View {
     }
 }
 
+/// 隔离高频盘口与沪伦价差观察边界的子视图，避免每 5 秒报价变化触发整个 `HomeView.body` 重算。
+private struct HomeMarketMetricsCard: View {
+    let model: MarketHomeViewModel
+    let quoteStore: LiveGoldQuoteStore?
+    let isActive: Bool
+
+    var body: some View {
+        if let snapshot = model.quoteSnapshot {
+            let spread = isActive ? quoteStore?.spread : nil
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(L10n.tr("今日盘口参考"))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(GoldTheme.text)
+                    Spacer()
+                    Text(L10n.fmt("%@ · 元/克", snapshot.basis.title))
+                        .font(.caption)
+                        .foregroundStyle(GoldTheme.textSecondary)
+                }
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    metricCell(L10n.tr("今开"), snapshot.openCNY.map { "¥" + $0.moneyText } ?? "—")
+                    metricCell(L10n.tr("昨收"), snapshot.prevCloseCNY.map { "¥" + $0.moneyText } ?? "—")
+                    metricCell(L10n.tr("最高"), snapshot.highCNY.map { "¥" + $0.moneyText } ?? "—", tint: GoldTheme.up)
+                    metricCell(L10n.tr("最低"), snapshot.lowCNY.map { "¥" + $0.moneyText } ?? "—", tint: GoldTheme.down)
+                }
+                if let spread {
+                    GoldTheme.cardStroke.frame(height: 1)
+                    HStack(spacing: 8) {
+                        Text(L10n.tr("沪伦实时价差"))
+                            .font(.caption)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                        Spacer()
+                        let label = spread.spreadCNY >= 0 ? L10n.tr("国内溢价") : L10n.tr("国内折价")
+                        Text(L10n.fmt("%@ %@ 元/克 (%@%%)", label, spread.spreadCNY.signedMoneyText, spread.spreadPercent.signedMoneyText))
+                            .font(.caption.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(spread.spreadCNY >= 0 ? GoldTheme.up : GoldTheme.down)
+                    }
+                }
+                if let usd = snapshot.usdPerOz, let fx = snapshot.usdCNY {
+                    HStack(spacing: 8) {
+                        Text(L10n.tr("伦敦金现货"))
+                            .font(.caption)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                        Spacer()
+                        Text(L10n.fmt("$%@/oz · 汇率 %@", usd.moneyText, fx.formatted(.number.precision(.fractionLength(2...4)))))
+                            .font(.caption.weight(.medium))
+                            .monospacedDigit()
+                            .foregroundStyle(GoldTheme.textSecondary)
+                    }
+                }
+            }
+            .goldCard(padding: 16)
+        }
+    }
+
+    private func metricCell(_ title: String, _ value: String, tint: Color = GoldTheme.text) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(GoldTheme.textSecondary)
+            Text(value)
+                .font(.system(.footnote, design: .rounded).weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 隔离高频实时金价对首页持仓速览卡的观察边界，仅在 `model.price` 变化时重算组合盈亏。
+private struct HomeHoldingsLinkCard: View {
+    let inputs: [GoldReturnInput]
+    let displayedBookName: String
+    let hideAmounts: Bool
+    let model: MarketHomeViewModel
+    let onOpenHoldings: (() -> Void)?
+
+    var body: some View {
+        let price = model.price
+        let portfolio = GoldReturnCalculator.aggregate(inputs, referencePrice: price)
+        Button {
+            onOpenHoldings?()
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label(L10n.fmt("我的持仓 · %@", displayedBookName), systemImage: "bag.fill")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(GoldTheme.gold)
+                    Spacer()
+                    Text(hideAmounts ? "•••• g" : "\((portfolio?.grams ?? 0).moneyText) g")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(GoldTheme.textSecondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(GoldTheme.textSecondary)
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.tr("预计到手"))
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                        Text(GoldReturnPresentation.money(portfolio?.proceeds, hidden: hideAmounts))
+                            .font(.system(.title3, design: .rounded).bold())
+                            .monospacedDigit()
+                            .foregroundStyle(GoldTheme.text)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(L10n.tr("真实盈亏"))
+                            .font(.caption2)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                        Text(GoldReturnPresentation.money(portfolio?.profit, hidden: hideAmounts, signed: true))
+                            .font(.system(.title3, design: .rounded).bold())
+                            .monospacedDigit()
+                            .foregroundStyle(hideAmounts ? GoldTheme.text : (portfolio?.profit ?? 0) >= 0 ? GoldTheme.up : GoldTheme.down)
+                    }
+                }
+                Text(GoldReturnPresentation.status(price: price, breakEven: portfolio?.breakEvenPrice, hidden: hideAmounts))
+                    .font(.caption)
+                    .foregroundStyle(GoldTheme.goldSoft)
+            }
+            .goldCard(padding: 16)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct HomePollingKey: Equatable {
+    let isActive: Bool
+    let scenePhase: ScenePhase
+}
+
+private struct HomeRangeTaskKey: Equatable {
+    let isActive: Bool
+    let range: MarketRange
+}
+
 private struct MacroSummaryLoadKey: Equatable {
+    let isActive: Bool
     let scenePhase: ScenePhase
     let trigger: Int
 }

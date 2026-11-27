@@ -128,13 +128,13 @@ private func timingDate(_ value: String) -> Date { BackendGoldPriceService.parse
         #expect(timing.caption == "周末休市 · 展示最近交易时段分时")
     }
 
-    // 午间休盘：周二 12:00
+    // 连续日盘 11:30–13:30（无午休）：周二 12:00 属于正常交易时段，短暂无新价时按暂无新成交处理，不再误报午间休盘
     let tueMidday = timingDate("2026-11-24T12:00:00+08:00")
     let tueMorningLast = timingDate("2026-11-24T11:29:45+08:00")
     let middayTiming = RealtimeChartTiming(latestSample: tueMorningLast, latestQuote: tueMorningLast, basis: .domestic, intervalSeconds: 60, windowSpan: 9000, now: tueMidday, calendar: calendar)
-    #expect(middayTiming.sessionStatus == .middayBreak)
-    #expect(middayTiming.pausedMessage(for: tueMorningLast) == "午间休盘 · 最近报价 11/24 11:29")
-    #expect(middayTiming.caption == "午间休盘 · 展示最近交易时段分时")
+    #expect(middayTiming.sessionStatus == .awaitingTrade)
+    #expect(middayTiming.pausedMessage(for: tueMorningLast) == "暂无新成交 · 最近报价 11/24 11:29")
+    #expect(middayTiming.caption == "暂无新成交 · 本交易时段分时")
 
     // 日盘收盘后：周二 17:00
     let tueAfterDay = timingDate("2026-11-24T17:00:00+08:00")

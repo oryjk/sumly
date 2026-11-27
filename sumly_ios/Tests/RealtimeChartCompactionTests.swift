@@ -15,10 +15,14 @@ private struct FlatRealtimeFixture: GoldPriceServicing, GoldQuoteServicing, Gold
 }
 
 @MainActor @Test func realtimeRenderingMergesFlatRunWithoutLosingSelectableObservations() async throws {
-    let start = Date.now.addingTimeInterval(-1200)
+    // 固定在夜盘轴（20:00–02:30，390m）中点 23:15 前后 10 分钟，使 0.5 槽位稳定命中 samples[120]，消除时钟波动
+    var shanghai = Calendar(identifier: .gregorian)
+    shanghai.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+    let now = shanghai.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 23, minute: 25))!
+    let start = now.addingTimeInterval(-1200)
     let samples = (0...240).map { MarketChartPoint(date: start.addingTimeInterval(Double($0) * 5), price: 900) }
     let service = FlatRealtimeFixture(samples: samples)
-    let model = MarketHomeViewModel(basis: .domestic, dailyService: service, quoteService: service, realtimeService: service)
+    let model = MarketHomeViewModel(basis: .domestic, dailyService: service, quoteService: service, realtimeService: service, nowProvider: { now }, calendar: shanghai)
     model.range = .realtime
     await model.refresh()
     #expect(model.visiblePoints == [samples[0], samples[240]])

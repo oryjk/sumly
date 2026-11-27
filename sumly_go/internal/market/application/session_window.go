@@ -113,29 +113,100 @@ func (s *GoldQuery) getSessionRealtimeWindow(ctx context.Context, mode domain.Re
 	}
 
 	domestic := forceDomestic || (s.native && hasQuote && isDomesticSGEQuote(quote))
+	var (
+		window domain.GoldWindow
+		ok     bool
+	)
 	if domestic {
 		if mode == domain.RealtimeWindowModeDay {
-			if window, ok := buildDomesticSGEDayWindow(minutes, realtime, quotePoint, live); ok {
-				return window, nil
-			}
+			window, ok = buildDomesticSGEDayWindow(minutes, realtime, quotePoint, live)
 		} else {
-			if window, ok := buildDomesticSGESessionWindow(minutes, realtime, quotePoint, live); ok {
-				return window, nil
-			}
+			window, ok = buildDomesticSGESessionWindow(minutes, realtime, quotePoint, live)
 		}
 	} else {
 		if mode == domain.RealtimeWindowModeDay {
-			if window, ok := buildInternationalDayWindow(minutes, realtime, quotePoint, live); ok {
-				return window, nil
-			}
+			window, ok = buildInternationalDayWindow(minutes, realtime, quotePoint, live)
 		} else {
-			if window, ok := buildInternationalSessionWindow(minutes, realtime, quotePoint, live); ok {
-				return window, nil
-			}
+			window, ok = buildInternationalSessionWindow(minutes, realtime, quotePoint, live)
 		}
 	}
+	if ok {
+		window.PrevClose = s.resolveWindowPrevClose(ctx, mode, domestic, window, quote, hasQuote)
+		return window, nil
+	}
 
-	return buildSessionSecondFallback(rawPoints, minutes, realtime, quotePoint, domestic, live, hasQuote, quoteErr)
+	fallback, err := buildSessionSecondFallback(rawPoints, minutes, realtime, quotePoint, domestic, live, hasQuote, quoteErr)
+	if err != nil {
+		return domain.GoldWindow{}, err
+	}
+	fallback.PrevClose = s.resolveWindowPrevClose(ctx, mode, domestic, fallback, quote, hasQuote)
+	return fallback, nil
+}
+
+// resolveWindowPrevClose 为分时窗口提供语义自洽的昨收基准价：
+//   - 国内 Au99.99 自然日全天（window=day，09:00→次日02:30）：20:00 后新浪报价已按 SGE 交易日
+//     将 prev_close 切换为今日 15:30 收盘价，与当日 09:00 起步的整日曲线冲突；此时优先取严格早于
+//     window.Start 所在自然日的最近日线收盘价作为自然日昨收基准。
+//   - 国内单盘口（window=session）或日盘时段（09:00~19:59）：直接使用报价 prev_close（缺失时回退前一日线）。
+//   - 国际金价：按窗口计价单位返回 prev_close（native 为 USD/oz，旧接口折算为 CNY/g）。
+func (s *GoldQuery) resolveWindowPrevClose(
+	ctx context.Context,
+	mode domain.RealtimeWindowMode,
+	domestic bool,
+	window domain.GoldWindow,
+	quote domain.GoldQuote,
+	hasQuote bool,
+) float64 {
+	quotePrev := 0.0
+	if hasQuote && quote.PrevClose > 0 && !math.IsNaN(quote.PrevClose) && !math.IsInf(quote.PrevClose, 0) {
+		if domestic || s.native {
+			quotePrev = quote.PrevClose
+		} else if quote.USDCNY > 0 && !math.IsNaN(quote.USDCNY) && !math.IsInf(quote.USDCNY, 0) {
+			quotePrev = quote.PrevClose / domain.GramsPerTroyOunce * quote.USDCNY
+		}
+	}
+	if !domestic || mode != domain.RealtimeWindowModeDay || window.Start.IsZero() {
+		return quotePrev
+	}
+
+	endBJ := window.End.In(shanghaiZone)
+	inNight := !window.End.IsZero() && (endBJ.Hour() >= 20 || endBJ.Hour() < 9)
+	if !inNight && quotePrev > 0 {
+		return quotePrev
+	}
+
+	bars, err := s.store.LoadDaily(ctx)
+	if err == nil {
+		if prior := priorDailyCloseBeforeDate(bars, window.Start); prior > 0 {
+			return prior
+		}
+	}
+	return quotePrev
+}
+
+func priorDailyCloseBeforeDate(bars []domain.DailyBar, anchor time.Time) float64 {
+	if len(bars) == 0 || anchor.IsZero() {
+		return 0
+	}
+	dayKey := shanghaiDateKey(anchor)
+	bestKey := -1
+	bestClose := 0.0
+	for _, bar := range bars {
+		if bar.Date.IsZero() || bar.Close <= 0 || math.IsNaN(bar.Close) || math.IsInf(bar.Close, 0) {
+			continue
+		}
+		key := shanghaiDateKey(bar.Date)
+		if key < dayKey && key > bestKey {
+			bestKey = key
+			bestClose = bar.Close
+		}
+	}
+	return bestClose
+}
+
+func shanghaiDateKey(t time.Time) int {
+	bj := t.In(shanghaiZone)
+	return bj.Year()*10000 + int(bj.Month())*100 + bj.Day()
 }
 
 func isDomesticSGEInstrument(i domain.Instrument) bool {

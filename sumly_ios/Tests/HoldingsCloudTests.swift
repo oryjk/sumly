@@ -230,3 +230,60 @@ private actor CloudServerFixture: HoldingCloudServicing {
         #expect(merged.document.records.first?.note == (choice == .local ? "本机" : "云端"))
     }
 }
+
+@MainActor @Test func cloudCachedLocalStatusTracksRecordBookAndGuestMutations() async throws {
+    let server = CloudServerFixture()
+    let (session, guest, cloud, _) = try await cloudFixture(server: server)
+    defer { try? cloud.eraseDeletedAccountCache() }
+
+    #expect(!cloud.hasPendingLocalChanges)
+    #expect(cloud.guestRecordCount == 0)
+    #expect(AccountCloudStatusBadge.from(session: session, cloud: cloud).tone == .synced)
+
+    // 1. 游客容器新增记录保存后，cached guestRecordCount 自动更新
+    guest.mainContext.insert(HoldingRecord(grams: 2, unitPriceCNY: 800, timestamp: .now))
+    try guest.mainContext.save()
+    for _ in 0..<20 where cloud.guestRecordCount == 0 {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(cloud.guestRecordCount == 1)
+    #expect(AccountCloudStatusBadge.from(session: session, cloud: cloud).guestRecordCount == 1)
+
+    // 2. 登录工作区本地新增持仓 + 发出变更通知，立即反映为待同步
+    let record = HoldingRecord(grams: 5, unitPriceCNY: 810, timestamp: .now)
+    cloud.container.mainContext.insert(record)
+    try cloud.container.mainContext.save()
+    NotificationCenter.default.post(name: .holdingsLocalDataDidChange, object: nil)
+    #expect(cloud.hasPendingLocalChanges)
+    #expect(cloud.status == L10n.tr("有更改等待同步，记录已保存在本机。"))
+    #expect(AccountCloudStatusBadge.from(session: session, cloud: cloud).tone == .pending)
+
+    // 3. 同步完成后清除待同步标记
+    await cloud.sync()
+    #expect(!cloud.hasPendingLocalChanges)
+    #expect(AccountCloudStatusBadge.from(session: session, cloud: cloud).tone == .synced)
+
+    // 4. 直接编辑本地记录并 save（未发自定义通知），didSave 监听自动刷新缓存
+    record.note = "仅本机保存"
+    try cloud.container.mainContext.save()
+    for _ in 0..<20 where !cloud.hasPendingLocalChanges {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(cloud.hasPendingLocalChanges)
+    #expect(AccountCloudStatusBadge.from(session: session, cloud: cloud).tone == .pending)
+
+    await cloud.sync()
+    #expect(!cloud.hasPendingLocalChanges)
+
+    // 5. 新增账本（UserDefaults 变化）触发待同步缓存刷新
+    cloud.defaults.set("默认账本\n家人", forKey: "holdings.books")
+    for _ in 0..<20 where !cloud.hasPendingLocalChanges {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(cloud.hasPendingLocalChanges)
+    #expect(AccountCloudStatusBadge.from(session: session, cloud: cloud).tone == .pending)
+
+    await cloud.sync()
+    #expect(!cloud.hasPendingLocalChanges)
+    #expect(AccountCloudStatusBadge.from(session: session, cloud: cloud).tone == .synced)
+}

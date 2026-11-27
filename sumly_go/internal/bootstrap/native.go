@@ -6,8 +6,10 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/credentials"
 	authhttp "gitee.com/oryjk/sumly/sumly_go/internal/auth/adapters/http"
@@ -112,7 +114,7 @@ func buildNative(config Config, pool *pgxpool.Pool, tokens *jwt.Service) (*authh
 	// LegacyAppID 只有在明确确认归属时才允许迁移旧裸 openid 身份。
 	var wechat *application.WechatSessions
 	if config.WechatAppID != "" {
-		gateway := wechatclient.NewClient(nil, wechatEndpoint, config.WechatAppID, config.WechatAppSecret)
+		gateway := wechatclient.NewClient(&http.Client{Timeout: 10 * time.Second}, wechatEndpoint, config.WechatAppID, config.WechatAppSecret)
 		wechat = &application.WechatSessions{
 			Wechat:      gateway,
 			Store:       store,

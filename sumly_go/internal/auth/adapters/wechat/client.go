@@ -9,11 +9,15 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"gitee.com/oryjk/sumly/sumly_go/internal/auth/ports"
 )
 
-const maxResponseBytes = 1 << 20
+const (
+	maxResponseBytes   = 1 << 20
+	defaultHTTPTimeout = 10 * time.Second
+)
 
 type Client struct {
 	httpClient *http.Client
@@ -31,6 +35,9 @@ type loginResponse struct {
 }
 
 func NewClient(httpClient *http.Client, endpoint, appID, appSecret string) *Client {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: defaultHTTPTimeout}
+	}
 	return &Client{
 		httpClient: httpClient,
 		endpoint:   endpoint,

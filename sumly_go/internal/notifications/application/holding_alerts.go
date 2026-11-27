@@ -157,13 +157,30 @@ func (h HoldingAlerts) Evaluate(ctx context.Context, in EvaluateInput) (Evaluate
 		return EvaluateResult{Events: []domain.Event{}}, nil
 	}
 
-	price, asOf, err := h.Quotes.Read(ctx, grant.TemplateID)
-	if err != nil {
-		return EvaluateResult{}, err
+	type cachedQuote struct {
+		price float64
+		asOf  time.Time
 	}
-	// 报价必须新鲜，与 App 的 300 秒窗口一致
-	if h.now().Sub(asOf) > 300*time.Second || h.now().Sub(asOf) < -60*time.Second {
-		return EvaluateResult{}, domain.ErrUnavailable
+	quotes := make(map[domain.QuoteBasis]cachedQuote, 2)
+	for _, config := range configs {
+		for _, alert := range config.Alerts {
+			basis, ok := domain.NormalizeBasis(alert.Basis)
+			if !ok {
+				return EvaluateResult{}, domain.ErrInvalid
+			}
+			if _, loaded := quotes[basis]; loaded {
+				continue
+			}
+			price, asOf, err := h.Quotes.Read(ctx, string(basis))
+			if err != nil {
+				return EvaluateResult{}, err
+			}
+			// 报价必须新鲜，与 App 的 300 秒窗口一致
+			if h.now().Sub(asOf) > 300*time.Second || h.now().Sub(asOf) < -60*time.Second {
+				return EvaluateResult{}, domain.ErrUnavailable
+			}
+			quotes[basis] = cachedQuote{price: price, asOf: asOf}
+		}
 	}
 
 	baselines, err := h.Store.Baselines(ctx, deviceID, in.Workspace)
@@ -174,22 +191,29 @@ func (h HoldingAlerts) Evaluate(ctx context.Context, in EvaluateInput) (Evaluate
 	events := make([]domain.Event, 0, len(configs))
 	for _, config := range configs {
 		input := config.Input
-		hash := configHash(config)
-		baseline := baselines[hash]
 
 		for _, alert := range config.Alerts {
+			basis, _ := domain.NormalizeBasis(alert.Basis)
+			quote := quotes[basis]
+			hash := alertConfigHash(config.RecordID, alert, basis)
+			baseline := baselines[hash]
+
 			// 幂等：同一 requestID + alert 只处理一次
-			if existing, found, _ := h.Store.Event(ctx, deviceID, in.Workspace, requestID, alert.ID); found {
+			existing, found, err := h.Store.Event(ctx, deviceID, in.Workspace, requestID, alert.ID)
+			if err != nil {
+				return EvaluateResult{}, err
+			}
+			if found {
 				events = append(events, existing)
 				continue
 			}
-			triggered, next := EvaluateOne(alert, input, baseline, price, asOf, h.now())
+			triggered, next := EvaluateOne(alert, input, baseline, quote.price, quote.asOf, h.now())
 			if !triggered {
 				// 未穿越也要更新基线，供下次判断
 				baselines[hash] = next
 				continue
 			}
-			status := h.deliver(ctx, grant, config, alert, price)
+			status := h.deliver(ctx, grant, config, alert, quote.price)
 			// 只有成功才消耗基线与冷却；失败保留可重试状态
 			if status == domain.EventDelivered {
 				baselines[hash] = next
@@ -286,17 +310,16 @@ func newEventID(seed string) string {
 	return strings.Join([]string{raw[0:8], raw[8:12], raw[12:16], raw[16:20], raw[20:32]}, "-")
 }
 
-func configHash(config domain.ValidatedRecord) string {
+func alertConfigHash(recordID string, alert domain.Alert, basis domain.QuoteBasis) string {
 	var b strings.Builder
-	b.WriteString(config.RecordID)
+	b.WriteString(recordID)
 	b.WriteByte('|')
-	for _, a := range config.Alerts {
-		b.WriteString(a.ID)
-		b.WriteByte(':')
-		b.WriteString(string(a.Kind))
-		b.WriteByte(':')
-		b.WriteString(formatFloat(a.Threshold))
-		b.WriteByte(';')
-	}
+	b.WriteString(alert.ID)
+	b.WriteByte(':')
+	b.WriteString(string(alert.Kind))
+	b.WriteByte(':')
+	b.WriteString(formatFloat(alert.Threshold))
+	b.WriteByte(':')
+	b.WriteString(string(basis))
 	return digest(b.String())
 }

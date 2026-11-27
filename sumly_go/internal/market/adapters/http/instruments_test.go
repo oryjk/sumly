@@ -54,12 +54,15 @@ type closedMarketFixture struct {
 	quote   domain.GoldQuote
 	points  []domain.RealtimePoint
 	minutes []domain.IntradayPoint
+	bars    []domain.DailyBar
 }
 
 func (f closedMarketFixture) LoadQuote(context.Context) (domain.GoldQuote, bool, error) {
 	return f.quote, true, nil
 }
-func (f closedMarketFixture) LoadDaily(context.Context) ([]domain.DailyBar, error) { return nil, nil }
+func (f closedMarketFixture) LoadDaily(context.Context) ([]domain.DailyBar, error) {
+	return f.bars, nil
+}
 func (f closedMarketFixture) LoadRealtime(context.Context) ([]domain.RealtimePoint, error) {
 	return f.points, nil
 }
@@ -147,8 +150,12 @@ func TestRealtimeRoutesWindowQueryParamContract(t *testing.T) {
 		})
 	}
 	auStore := closedMarketFixture{
-		quote:   domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 755.01, AsOf: auCloseAt},
+		quote:   domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 755.01, PrevClose: 775.00, AsOf: auCloseAt},
 		minutes: auMinutes,
+		bars: []domain.DailyBar{
+			{Date: time.Date(2025, 11, 19, 0, 0, 0, 0, tz), Close: 760.50},
+			{Date: time.Date(2025, 11, 20, 0, 0, 0, 0, tz), Close: 775.00},
+		},
 	}
 
 	// 国际 XAUUSD：12 小时分钟线，截止 05:00
@@ -178,11 +185,12 @@ func TestRealtimeRoutesWindowQueryParamContract(t *testing.T) {
 	type realtimeResp struct {
 		Code int `json:"code"`
 		Data struct {
-			Unit            string `json:"unit"`
-			IntervalSeconds int    `json:"interval_seconds"`
-			WindowSeconds   int    `json:"window_seconds"`
-			WindowStart     string `json:"window_start"`
-			WindowEnd       string `json:"window_end"`
+			Unit            string  `json:"unit"`
+			IntervalSeconds int     `json:"interval_seconds"`
+			WindowSeconds   int     `json:"window_seconds"`
+			WindowStart     string  `json:"window_start"`
+			WindowEnd       string  `json:"window_end"`
+			PrevClose       float64 `json:"prev_close"`
 			Points          []struct {
 				Time  string  `json:"time"`
 				Price float64 `json:"price"`
@@ -271,6 +279,12 @@ func TestRealtimeRoutesWindowQueryParamContract(t *testing.T) {
 		}
 		if resp.Code != 0 || resp.Data.IntervalSeconds != 60 || len(resp.Data.Points) <= 196 {
 			t.Fatalf("au9999 day should include day session + night session, got %d points: %s", len(resp.Data.Points), w.Body.String())
+		}
+		if resp.Data.WindowStart != "2025-11-20T09:00:00+08:00" || resp.Data.WindowEnd != "2025-11-21T02:30:00+08:00" {
+			t.Fatalf("au9999 day bounds mismatch: start=%s end=%s", resp.Data.WindowStart, resp.Data.WindowEnd)
+		}
+		if resp.Data.PrevClose != 760.50 {
+			t.Fatalf("au9999 day prev_close = %v, want 760.50 (prior natural day close)", resp.Data.PrevClose)
 		}
 	}
 	{

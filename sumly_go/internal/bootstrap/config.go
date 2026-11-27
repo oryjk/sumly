@@ -3,11 +3,41 @@ package bootstrap
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"gitee.com/oryjk/sumly/sumly_go/internal/appconfig/domain"
 	"gitee.com/oryjk/sumly/sumly_go/internal/shared/configenv"
 )
+
+const (
+	defaultDBPoolMaxConns          int32 = 25
+	defaultDBPoolMinConns          int32 = 4
+	defaultDBPoolMaxConnLifetime         = 30 * time.Minute
+	defaultDBPoolMaxConnIdleTime         = 5 * time.Minute
+	defaultDBPoolHealthCheckPeriod       = 30 * time.Second
+)
+
+// DBPoolConfig 控制 pgxpool 连接池容量与健康检查参数，可通过环境变量覆盖。
+type DBPoolConfig struct {
+	MaxConns           int32
+	MinConns           int32
+	MaxConnLifetime    time.Duration
+	MaxConnIdleTime    time.Duration
+	HealthCheckPeriod  time.Duration
+	minConnsConfigured bool
+}
+
+func defaultDBPoolConfig() DBPoolConfig {
+	return DBPoolConfig{
+		MaxConns:          defaultDBPoolMaxConns,
+		MinConns:          defaultDBPoolMinConns,
+		MaxConnLifetime:   defaultDBPoolMaxConnLifetime,
+		MaxConnIdleTime:   defaultDBPoolMaxConnIdleTime,
+		HealthCheckPeriod: defaultDBPoolHealthCheckPeriod,
+	}
+}
 
 type AppEnvironment string
 
@@ -21,6 +51,7 @@ type Config struct {
 	Native          NativeConfig
 	HTTPAddr        string
 	DatabaseURL     string
+	DBPool          DBPoolConfig
 	JWTSecret       string
 	WechatAppID     string
 	WechatAppSecret string
@@ -113,11 +144,64 @@ func LoadConfig() (Config, error) {
 		}
 	}
 	var err error
+	config.DBPool, err = loadDBPoolConfig()
+	if err != nil {
+		return Config{}, err
+	}
 	config.Native, err = loadNativeConfig(config.AppEnvironment)
 	if err != nil {
 		return Config{}, err
 	}
 	return config, nil
+}
+
+func loadDBPoolConfig() (DBPoolConfig, error) {
+	cfg := defaultDBPoolConfig()
+
+	if raw := strings.TrimSpace(os.Getenv("DB_POOL_MAX_CONNS")); raw != "" {
+		v, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || v <= 0 {
+			return DBPoolConfig{}, fmt.Errorf("invalid DB_POOL_MAX_CONNS")
+		}
+		cfg.MaxConns = int32(v)
+	}
+	if raw := strings.TrimSpace(os.Getenv("DB_POOL_MIN_CONNS")); raw != "" {
+		v, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || v < 0 {
+			return DBPoolConfig{}, fmt.Errorf("invalid DB_POOL_MIN_CONNS")
+		}
+		cfg.MinConns = int32(v)
+		cfg.minConnsConfigured = true
+	}
+	if cfg.minConnsConfigured {
+		if cfg.MinConns > cfg.MaxConns {
+			return DBPoolConfig{}, fmt.Errorf("DB_POOL_MIN_CONNS (%d) cannot exceed DB_POOL_MAX_CONNS (%d)", cfg.MinConns, cfg.MaxConns)
+		}
+	} else if cfg.MinConns > cfg.MaxConns {
+		cfg.MinConns = cfg.MaxConns
+	}
+	if raw := strings.TrimSpace(os.Getenv("DB_POOL_MAX_CONN_LIFETIME")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			return DBPoolConfig{}, fmt.Errorf("invalid DB_POOL_MAX_CONN_LIFETIME")
+		}
+		cfg.MaxConnLifetime = d
+	}
+	if raw := strings.TrimSpace(os.Getenv("DB_POOL_MAX_CONN_IDLE_TIME")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			return DBPoolConfig{}, fmt.Errorf("invalid DB_POOL_MAX_CONN_IDLE_TIME")
+		}
+		cfg.MaxConnIdleTime = d
+	}
+	if raw := strings.TrimSpace(os.Getenv("DB_POOL_HEALTH_CHECK_PERIOD")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			return DBPoolConfig{}, fmt.Errorf("invalid DB_POOL_HEALTH_CHECK_PERIOD")
+		}
+		cfg.HealthCheckPeriod = d
+	}
+	return cfg, nil
 }
 
 func parseAppEnvironment(value string) AppEnvironment {

@@ -74,7 +74,12 @@ struct HoldingAlertSheet: View {
         }
         guard !Task.isCancelled, record.disposition == "holding" else { return }
         guard let updated = HoldingAlertForm.merge(edited: alerts, values: values, latest: record.alerts, basis: basis) else { return }
-        do { try record.setAlerts(updated); try context.save(); dismiss() }
+        do {
+            try record.setAlerts(updated)
+            try context.save()
+            NotificationCenter.default.post(name: .holdingsLocalDataDidChange, object: nil)
+            dismiss()
+        }
         catch { context.rollback(); self.error = L10n.tr("提醒保存失败，请重试。") }
     }
 }

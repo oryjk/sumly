@@ -14,29 +14,146 @@ struct RealtimeIntradaySessionTests {
         return cal.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
 
-    @Test func domesticAxisCompressesLunchAndAfternoonBreakWithoutGaps() {
+    @Test func domesticAxisCoversContinuousDayAndNightWithoutLunchFolding() {
         let nightNow = Self.bjDate(2026, 11, 27, 22, 30)
         let axis = RealtimeIntradayAxis.make(basis: .domestic, anchorDate: nightNow)
 
-        #expect(axis.totalSlots == 660)
-        #expect(axis.dividers.count == 2)
-        #expect(axis.ticks.map(\.label) == ["09:00", "11:30/13:30", "20:00", "02:30"])
+        #expect(axis.totalSlots == 780)
+        #expect(axis.dividers.count == 1)
+        #expect(axis.dividers.first?.slot == 390)
+        #expect(axis.ticks.map(\.label) == ["09:00", "12:15", "15:30/20:00", "02:30"])
 
-        // 早盘 09:00 -> 0，11:30 -> 150
+        // 连续日盘 09:00 -> 0，11:30 -> 150，12:15 -> 195，13:30 -> 270（不再折叠午休），15:30 -> 390
         #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 9, 0)) == 0)
         #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 11, 30)) == 150)
-        // 午盘 13:30 无缝衔接在 150，15:30 -> 270
-        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 13, 30)) == 150)
-        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 15, 30)) == 270)
-        // 夜盘 20:00 无缝衔接在 270，22:30 -> 420，次日 02:30 -> 660
-        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 20, 0)) == 270)
-        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 22, 30)) == 420)
-        #expect(axis.slot(for: Self.bjDate(2026, 11, 28, 2, 30)) == 660)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 12, 15)) == 195)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 13, 30)) == 270)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 15, 30)) == 390)
+        // 夜盘 20:00 无缝衔接在 390，22:30 -> 540，次日 02:30 -> 780
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 20, 0)) == 390)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 22, 30)) == 540)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 28, 2, 30)) == 780)
 
         // 跨午夜 01:00 锚定仍归属于前一日 09:00 开始的完整自然交易日
         let postMidnightAxis = RealtimeIntradayAxis.make(basis: .domestic, anchorDate: Self.bjDate(2026, 11, 28, 1, 0))
         #expect(postMidnightAxis == axis)
-        #expect(postMidnightAxis.slot(for: Self.bjDate(2026, 11, 28, 1, 0)) == 570)
+        #expect(postMidnightAxis.slot(for: Self.bjDate(2026, 11, 28, 1, 0)) == 690)
+
+        // 11:31~13:29 连续日盘点投影后全部保留，不被午休折叠去重
+        let middayPoints = [
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 11, 30), price: 778.0, intervalSeconds: 60),
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 12, 0), price: 780.5, intervalSeconds: 60),
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 12, 30), price: 782.0, intervalSeconds: 60),
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 13, 30), price: 784.5, intervalSeconds: 60)
+        ]
+        let projected = axis.project(middayPoints)
+        #expect(projected.count == 4)
+        #expect(projected.map(\.slot) == [150, 180, 210, 270])
+    }
+
+    @Test func domesticNightOnlyFallbackUsesNightSessionAxisWithoutBlankLeftHalf() {
+        let nightPoints = [
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 20, 2), price: 785.0, intervalSeconds: 60),
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 22, 0), price: 781.2, intervalSeconds: 60),
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 23, 14), price: 779.0, intervalSeconds: 60)
+        ]
+        let axis = RealtimeIntradayAxis.make(
+            basis: .domestic,
+            anchorDate: Self.bjDate(2026, 11, 27, 23, 14),
+            points: nightPoints
+        )
+
+        #expect(axis.totalSlots == 390)
+        #expect(axis.dividers.isEmpty)
+        #expect(axis.ticks.map(\.label) == ["20:00", "22:00", "00:00", "02:30"])
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 20, 0)) == 0)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 20, 2)) == 2)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 22, 0)) == 120)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 27, 23, 14)) == 194)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 28, 0, 0)) == 240)
+        #expect(axis.slot(for: Self.bjDate(2026, 11, 28, 2, 30)) == 390)
+
+        // 若包含日盘点（window=day），自动回到全天 780 槽位轴
+        let fullDayPoints = [
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 9, 0), price: 765.8, intervalSeconds: 60)
+        ] + nightPoints
+        let fullAxis = RealtimeIntradayAxis.make(
+            basis: .domestic,
+            anchorDate: Self.bjDate(2026, 11, 27, 23, 14),
+            points: fullDayPoints
+        )
+        #expect(fullAxis.totalSlots == 780)
+        #expect(fullAxis.ticks.map(\.label) == ["09:00", "12:15", "15:30/20:00", "02:30"])
+    }
+
+    private struct UnifiedReferenceFixture: GoldPriceServicing, GoldQuoteServicing, GoldRealtimeServicing, GoldHistoryServicing {
+        let quote: GoldQuote
+        let realtime: [MarketChartPoint]
+        let daily: [GoldDailyPrice]
+        func fetchQuote() async throws -> GoldQuote { quote }
+        func fetchDailyPrices() async throws -> [GoldDailyPrice] { daily }
+        func fetchRealtime() async throws -> [MarketChartPoint] { realtime }
+        func fetchHistory() async throws -> [GoldHistoryPoint] { [] }
+    }
+
+    @MainActor @Test func domesticHeadlineAndIntradayShareUnifiedReferenceCloseAfterNightOpen() async throws {
+        let now = Self.bjDate(2026, 11, 27, 22, 30)
+        // 新浪在 20:00 后把 prevClose 切换为今日 15:30 日盘收盘 784.0
+        let nightQuote = GoldQuote(
+            symbol: "AU9999", price: 779.0, open: 785.0, high: 787.5, low: 778.0,
+            prevClose: 784.0, usdCNY: 6.6547, cnyPerGram: 779.0, asOf: now
+        )
+        let daily = [
+            GoldDailyPrice(date: Self.bjDate(2026, 11, 26, 12, 0), open: 760, high: 766, low: 758, close: 764.5)
+        ]
+
+        // 1. 全天（日盘 + 夜盘）：顶部今日涨跌与分时图较昨收统一使用前一日收盘 764.5（均显示红涨 +14.50）
+        let fullDayPoints = [
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 9, 0), price: 765.8, intervalSeconds: 60),
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 15, 30), price: 784.0, intervalSeconds: 60),
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 20, 0), price: 785.0, intervalSeconds: 60),
+            MarketChartPoint(date: now, price: 779.0, intervalSeconds: 60)
+        ]
+        let fullFixture = UnifiedReferenceFixture(quote: nightQuote, realtime: fullDayPoints, daily: daily)
+        let fullModel = MarketHomeViewModel(
+            basis: .domestic,
+            dailyService: fullFixture,
+            quoteService: fullFixture,
+            realtimeService: fullFixture,
+            historyService: fullFixture,
+            nowProvider: { now }
+        )
+        fullModel.range = .realtime
+        await fullModel.refresh()
+
+        let fullSnapshot = try #require(fullModel.quoteSnapshot)
+        #expect(fullModel.realtimeReferenceClose == 764.5)
+        #expect(fullSnapshot.prevCloseCNY == 764.5)
+        #expect(abs((fullSnapshot.changeCNY ?? 0) - 14.5) < 1e-6)
+        #expect(fullModel.realtimeIntradayAxis.totalSlots == 780)
+
+        // 2. 降级仅夜盘（window=session）：两者统一使用夜盘昨收 784.0（均显示 -5.00），轴切为 20:00–02:30
+        let nightOnlyPoints = [
+            MarketChartPoint(date: Self.bjDate(2026, 11, 27, 20, 2), price: 785.0, intervalSeconds: 60),
+            MarketChartPoint(date: now, price: 779.0, intervalSeconds: 60)
+        ]
+        let nightFixture = UnifiedReferenceFixture(quote: nightQuote, realtime: nightOnlyPoints, daily: daily)
+        let nightModel = MarketHomeViewModel(
+            basis: .domestic,
+            dailyService: nightFixture,
+            quoteService: nightFixture,
+            realtimeService: nightFixture,
+            historyService: nightFixture,
+            nowProvider: { now }
+        )
+        nightModel.range = .realtime
+        await nightModel.refresh()
+
+        let nightSnapshot = try #require(nightModel.quoteSnapshot)
+        #expect(nightModel.realtimeReferenceClose == 784.0)
+        #expect(nightSnapshot.prevCloseCNY == 784.0)
+        #expect(abs((nightSnapshot.changeCNY ?? 0) - (-5.0)) < 1e-6)
+        #expect(nightModel.realtimeIntradayAxis.totalSlots == 390)
     }
 
     @Test func internationalAxisHandlesWinterAndSummerDSTFull23Hours() {

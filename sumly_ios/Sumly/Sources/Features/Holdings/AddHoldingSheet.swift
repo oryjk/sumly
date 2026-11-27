@@ -671,6 +671,7 @@ struct AddHoldingSheet: View {
             errorMessage = L10n.tr("保存失败，请重试。")
             return
         }
+        NotificationCenter.default.post(name: .holdingsLocalDataDidChange, object: nil)
 
         onSaved?()
 

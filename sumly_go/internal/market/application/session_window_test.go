@@ -628,3 +628,65 @@ func TestInternationalXAUUSDDayWindowCoversFullTradingDayUpTo23Hours(t *testing.
 		t.Fatalf("leaked prior trading day point: %+v", window.Points[0])
 	}
 }
+
+func TestDomesticAU9999DayWindowAfter2000UsesPriorNaturalDayPrevCloseAndKeepsContinuousDay(t *testing.T) {
+	tz := time.FixedZone("CST", 8*3600)
+	dayStart := time.Date(2026, 11, 27, 9, 0, 0, 0, tz)
+	midday := time.Date(2026, 11, 27, 12, 15, 0, 0, tz) // 11:31~13:29 连续日盘真实成交
+	dayClose := time.Date(2026, 11, 27, 15, 30, 0, 0, tz)
+	nightOpen := time.Date(2026, 11, 27, 20, 0, 0, 0, tz)
+	lateNight := time.Date(2026, 11, 28, 1, 30, 0, 0, tz)
+
+	bars := []domain.DailyBar{
+		{Date: time.Date(2026, 11, 26, 0, 0, 0, 0, tz), Close: 765.0},
+		{Date: time.Date(2026, 11, 27, 0, 0, 0, 0, tz), Close: 784.0}, // 今日日盘收盘价，不能误当作自然日昨收
+	}
+	minutes := []domain.IntradayPoint{
+		{Time: time.Date(2026, 11, 27, 2, 20, 0, 0, tz), Price: 762.0}, // 前一日夜盘尾点，应排除
+		{Time: dayStart, Price: 766.0},
+		{Time: midday, Price: 780.5},
+		{Time: dayClose, Price: 784.0},
+		{Time: nightOpen, Price: 785.0},
+		{Time: lateNight.Add(-time.Minute), Price: 779.5},
+	}
+
+	// 新浪在 20:00 后已把 quote.PrevClose 切为今日 15:30 收盘价 784.0
+	store := &readOnlyMarket{
+		found:   true,
+		quote:   domain.GoldQuote{Symbol: "AU9999", Currency: "CNY", Price: 779.0, PrevClose: 784.0, AsOf: lateNight},
+		minutes: minutes,
+		bars:    bars,
+	}
+	q := NewNativeGoldQuery(store)
+	q.now = func() time.Time { return lateNight.Add(5 * time.Second) }
+
+	// window=day（自然日全天 09:00→次日02:30）：window_start=11-27 09:00、保留 12:15 连续日盘点、prev_close 必须为 11-26 收盘价 765.0
+	dayWin, err := q.GetGoldRealtimeWindow(context.Background(), domain.RealtimeWindowModeDay)
+	if err != nil {
+		t.Fatalf("day window error: %v", err)
+	}
+	if !dayWin.Start.Equal(dayStart) || !dayWin.End.Equal(lateNight) {
+		t.Fatalf("day window = [%v, %v], want [%v, %v]", dayWin.Start, dayWin.End, dayStart, lateNight)
+	}
+	if dayWin.PrevClose != 765.0 {
+		t.Fatalf("day window prev_close = %v, want 765.0 (prior natural day close)", dayWin.PrevClose)
+	}
+	hasMidday := false
+	for _, p := range dayWin.Points {
+		if p.Time.Equal(midday) && p.Price == 780.5 {
+			hasMidday = true
+		}
+	}
+	if !hasMidday {
+		t.Fatalf("expected continuous midday point 12:15 to be preserved, got %+v", dayWin.Points)
+	}
+
+	// window=session（单盘口夜盘 20:00→02:30）：与交易所官方切换一致，prev_close 沿用 784.0
+	sessWin, err := q.GetGoldRealtimeWindow(context.Background(), domain.RealtimeWindowModeSession)
+	if err != nil {
+		t.Fatalf("session window error: %v", err)
+	}
+	if sessWin.PrevClose != 784.0 {
+		t.Fatalf("session window prev_close = %v, want 784.0", sessWin.PrevClose)
+	}
+}

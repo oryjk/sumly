@@ -53,11 +53,61 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.oryjk.sumly.design.GoldColors
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 private val quickRanges = listOf(MarketRange.Realtime, MarketRange.Month, MarketRange.Quarter, MarketRange.Year, MarketRange.FiveYears)
+
+private data class MarketQuoteHeaderState(
+    val quote: MarketQuote?,
+    val quoteLoading: Boolean,
+    val quoteFailed: Boolean,
+    val switchFailed: Boolean,
+)
+
+private data class MarketChartState(
+    val basis: MarketBasis,
+    val range: MarketRange,
+    val scale: ChartScale,
+    val pendingBasis: MarketBasis?,
+    val chartLoading: Boolean,
+    val chartFailed: Boolean,
+    val observedDate: LocalDate,
+    val historicalUsdCny: Double?,
+    val observations: List<MarketObservation>,
+    val realtime: RealtimeWindow?,
+    val realtimePaused: Boolean,
+)
+
+private fun MarketUiState.toQuoteHeaderState(): MarketQuoteHeaderState = MarketQuoteHeaderState(
+    quote = quote,
+    quoteLoading = quoteLoading,
+    quoteFailed = quoteFailed,
+    switchFailed = switchFailed,
+)
+
+private fun MarketUiState.toChartState(zone: ZoneId): MarketChartState {
+    val live = range == MarketRange.Realtime
+    return MarketChartState(
+        basis = basis,
+        range = range,
+        scale = scale,
+        pendingBasis = pendingBasis,
+        chartLoading = chartLoading,
+        chartFailed = chartFailed,
+        observedDate = observedDate(zone),
+        historicalUsdCny = if (!live && basis == MarketBasis.International) quote?.usdCny else null,
+        observations = if (live) emptyList() else observations,
+        realtime = if (live) realtime else null,
+        realtimePaused = isRealtimePaused(),
+    )
+}
 
 @Composable
 fun MarketScreen(
@@ -72,63 +122,158 @@ fun MarketScreen(
     LaunchedEffect(lifecycle, viewModel) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.pollCharts() }
     }
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
     val zone = viewModel.chartZone
-    val points = remember(state, zone) { state.visiblePoints(zone) }
-    var showingSources by remember { mutableStateOf(false) }
-    var showHoldings by rememberSaveable { mutableStateOf(true) }
-    var canReset by remember(state.basis, state.range) { mutableStateOf(false) }
-    var resetRevision by remember { mutableIntStateOf(0) }
     Column(
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            MarketBasisPicker(state.basis, state.pendingBasis, viewModel::selectBasis)
-            if (onTemperature != null) {
-                val tint = when {
-                    temperature == null -> GoldColors.GoldSoft
-                    temperature < 20 -> GoldColors.TempFreezing
-                    temperature < 40 -> GoldColors.Down
-                    temperature < 60 -> GoldColors.GoldSoft
-                    temperature < 80 -> GoldColors.TempWarm
-                    else -> GoldColors.Up
-                }
-                MarketHeaderAction(
-                    temperature?.let { "$it°" } ?: "温度", Icons.Default.Thermostat, tint,
-                    onTemperature, Modifier.align(Alignment.CenterStart),
-                )
-            }
-            if (onChanlun != null) {
-                MarketHeaderAction("禅观", Icons.AutoMirrored.Filled.ShowChart, GoldColors.GoldSoft, onChanlun, Modifier.align(Alignment.CenterEnd))
-            }
-        }
-        MarketQuoteHeader(state, zone, viewModel::refresh)
-        MarketRangePicker(
-            state = state,
-            onRange = viewModel::selectRange,
-            onScale = viewModel::selectScale,
-            showHoldings = showHoldings,
-            onToggleHoldings = { showHoldings = !showHoldings },
-            canReset = canReset,
-            onReset = { resetRevision++; canReset = false },
+        MarketTopBar(
+            viewModel = viewModel,
+            temperature = temperature,
+            onTemperature = onTemperature,
+            onChanlun = onChanlun,
         )
-        MarketPriceChart(
-            state = state,
-            observations = points,
+        MarketQuoteHeaderSection(viewModel = viewModel, zone = zone)
+        MarketChartSection(
+            viewModel = viewModel,
             zone = zone,
-            overlay = holdingOverlay?.takeIf { showHoldings },
-            resetRevision = resetRevision,
-            onZoomChanged = { canReset = it },
-            onSources = { showingSources = true },
-            onRetry = viewModel::refresh,
+            holdingOverlay = holdingOverlay,
         )
         footer()
-        state.quote?.takeIf { it.cnyPerGram != null }?.let { MarketQuoteDetails(state.basis, it) }
+        MarketQuoteDetailsSection(viewModel = viewModel)
     }
-    if (showingSources) MarketSourcesDialog(state.basis) { showingSources = false }
 }
+
+@Composable
+private fun MarketTopBar(
+    viewModel: MarketViewModel,
+    temperature: Int?,
+    onTemperature: (() -> Unit)?,
+    onChanlun: (() -> Unit)?,
+) {
+    val (initialBasisState, basisFlow) = remember(viewModel) {
+        viewModel.uiState.slicedFlow { it.basis to it.pendingBasis }
+    }
+    val basisState by basisFlow.collectAsStateWithLifecycle(initialValue = initialBasisState)
+    val (basis, pendingBasis) = basisState
+    val onSelectBasis = remember(viewModel) { viewModel::selectBasis }
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        MarketBasisPicker(basis, pendingBasis, onSelectBasis)
+        if (onTemperature != null) {
+            val tint = when {
+                temperature == null -> GoldColors.GoldSoft
+                temperature < 20 -> GoldColors.TempFreezing
+                temperature < 40 -> GoldColors.Down
+                temperature < 60 -> GoldColors.GoldSoft
+                temperature < 80 -> GoldColors.TempWarm
+                else -> GoldColors.Up
+            }
+            MarketHeaderAction(
+                temperature?.let { "$it°" } ?: "温度", Icons.Default.Thermostat, tint,
+                onTemperature, Modifier.align(Alignment.CenterStart),
+            )
+        }
+        if (onChanlun != null) {
+            MarketHeaderAction("禅观", Icons.AutoMirrored.Filled.ShowChart, GoldColors.GoldSoft, onChanlun, Modifier.align(Alignment.CenterEnd))
+        }
+    }
+}
+
+@Composable
+private fun MarketQuoteHeaderSection(viewModel: MarketViewModel, zone: ZoneId) {
+    val (initialHeader, headerFlow) = remember(viewModel) {
+        viewModel.uiState.slicedFlow { it.toQuoteHeaderState() }
+    }
+    val header by headerFlow.collectAsStateWithLifecycle(initialValue = initialHeader)
+    val onRetry = remember(viewModel) { viewModel::refresh }
+    MarketQuoteHeader(header, zone, onRetry)
+}
+
+@Composable
+private fun MarketChartSection(
+    viewModel: MarketViewModel,
+    zone: ZoneId,
+    holdingOverlay: MarketHoldingOverlay?,
+) {
+    val (initialChartState, chartStateFlow) = remember(viewModel, zone) {
+        viewModel.uiState.slicedFlow { it.toChartState(zone) }
+    }
+    val chartState by chartStateFlow.collectAsStateWithLifecycle(initialValue = initialChartState)
+    val points = if (chartState.range == MarketRange.Realtime) {
+        remember(chartState.realtime) { chartState.realtime?.points.orEmpty() }
+    } else {
+        remember(
+            chartState.observations,
+            chartState.basis,
+            chartState.range,
+            chartState.historicalUsdCny,
+            chartState.observedDate,
+            zone,
+        ) {
+            MarketChartLogic.historicalPoints(
+                observations = chartState.observations,
+                basis = chartState.basis,
+                range = chartState.range,
+                usdCny = chartState.historicalUsdCny,
+                today = chartState.observedDate,
+                zone = zone,
+            )
+        }
+    }
+    var showingSources by remember { mutableStateOf(false) }
+    var showHoldings by rememberSaveable { mutableStateOf(true) }
+    var canReset by remember(chartState.basis, chartState.range) { mutableStateOf(false) }
+    var resetRevision by remember { mutableIntStateOf(0) }
+    val onRange = remember(viewModel) { viewModel::selectRange }
+    val onScale = remember(viewModel) { viewModel::selectScale }
+    val onRetry = remember(viewModel) { viewModel::refresh }
+
+    MarketRangePicker(
+        basis = chartState.basis,
+        range = chartState.range,
+        scale = chartState.scale,
+        pendingBasis = chartState.pendingBasis,
+        onRange = onRange,
+        onScale = onScale,
+        showHoldings = showHoldings,
+        onToggleHoldings = { showHoldings = !showHoldings },
+        canReset = canReset,
+        onReset = { resetRevision++; canReset = false },
+    )
+    MarketPriceChart(
+        basis = chartState.basis,
+        range = chartState.range,
+        scale = chartState.scale,
+        chartLoading = chartState.chartLoading,
+        chartFailed = chartState.chartFailed,
+        observedDate = chartState.observedDate,
+        realtimeIntervalSeconds = chartState.realtime?.intervalSeconds,
+        realtimePaused = chartState.realtimePaused,
+        observations = points,
+        zone = zone,
+        overlay = holdingOverlay?.takeIf { showHoldings },
+        resetRevision = resetRevision,
+        onZoomChanged = { canReset = it },
+        onSources = { showingSources = true },
+        onRetry = onRetry,
+    )
+    if (showingSources) MarketSourcesDialog(chartState.basis) { showingSources = false }
+}
+
+@Composable
+private fun MarketQuoteDetailsSection(viewModel: MarketViewModel) {
+    val (initialDetails, detailsFlow) = remember(viewModel) {
+        viewModel.uiState.slicedFlow { state ->
+            state.quote?.takeIf { it.cnyPerGram != null }?.let { state.basis to it }
+        }
+    }
+    val details by detailsFlow.collectAsStateWithLifecycle(initialValue = initialDetails)
+    details?.let { (basis, quote) -> MarketQuoteDetails(basis, quote) }
+}
+
+private fun <T, R> StateFlow<T>.slicedFlow(selector: (T) -> R): Pair<R, Flow<R>> =
+    selector(value) to map(selector).distinctUntilChanged()
 
 @Composable
 private fun MarketBasisPicker(selected: MarketBasis, pending: MarketBasis?, onSelect: (MarketBasis) -> Unit) {
@@ -166,7 +311,7 @@ private fun MarketHeaderAction(label: String, icon: ImageVector, tint: Color, ac
 }
 
 @Composable
-private fun MarketQuoteHeader(state: MarketUiState, zone: ZoneId, onRetry: () -> Unit) {
+private fun MarketQuoteHeader(state: MarketQuoteHeaderState, zone: ZoneId, onRetry: () -> Unit) {
     val quote = state.quote
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("黄金价格", color = GoldColors.GoldSoft, style = MaterialTheme.typography.labelMedium)
@@ -203,7 +348,10 @@ private fun MarketQuoteHeader(state: MarketUiState, zone: ZoneId, onRetry: () ->
 
 @Composable
 private fun MarketRangePicker(
-    state: MarketUiState,
+    basis: MarketBasis,
+    range: MarketRange,
+    scale: ChartScale,
+    pendingBasis: MarketBasis?,
     onRange: (MarketRange) -> Unit,
     onScale: (ChartScale) -> Unit,
     showHoldings: Boolean,
@@ -211,14 +359,14 @@ private fun MarketRangePicker(
     canReset: Boolean,
     onReset: () -> Unit,
 ) {
-    val enabled = state.pendingBasis == null
+    val enabled = pendingBasis == null
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            for (range in quickRanges) {
-                MarketPill(range.label, state.range == range, enabled, modifier = Modifier.weight(1f)) { onRange(range) }
+            for (item in quickRanges) {
+                MarketPill(item.label, range == item, enabled, modifier = Modifier.weight(1f)) { onRange(item) }
             }
         }
         Row(
@@ -229,22 +377,22 @@ private fun MarketRangePicker(
         ) {
             var expanded by remember { mutableStateOf(false) }
             Box(Modifier.weight(1f)) {
-                val alternate = state.range.takeUnless { it in quickRanges }
+                val alternate = range.takeUnless { it in quickRanges }
                 MarketPill(
-                    alternate?.labelFor(state.basis) ?: "更多区间", alternate != null, enabled,
+                    alternate?.labelFor(basis) ?: "更多区间", alternate != null, enabled,
                     modifier = Modifier.fillMaxWidth(), icon = Icons.Default.KeyboardArrowDown, compact = true,
                 ) { expanded = true }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    for (range in MarketRange.entries) {
-                        DropdownMenuItem(text = { Text(range.labelFor(state.basis)) }, onClick = {
+                    for (item in MarketRange.entries) {
+                        DropdownMenuItem(text = { Text(item.labelFor(basis)) }, onClick = {
                             expanded = false
-                            onRange(range)
+                            onRange(item)
                         })
                     }
                 }
             }
             Row(Modifier.background(GoldColors.Background, CircleShape)) {
-                for (scale in ChartScale.entries) MarketPill(scale.label, state.scale == scale, enabled, compact = true) { onScale(scale) }
+                for (item in ChartScale.entries) MarketPill(item.label, scale == item, enabled, compact = true) { onScale(item) }
             }
             MarketPill("持仓", showHoldings, enabled, icon = Icons.Default.CheckCircle, compact = true, onClick = onToggleHoldings)
             MarketPill("复位", false, canReset, icon = Icons.Default.RestartAlt, compact = true, onClick = onReset)

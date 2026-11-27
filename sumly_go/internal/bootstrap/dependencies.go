@@ -81,8 +81,53 @@ type Dependencies struct {
 	AdminStaticDir  string
 }
 
+func buildPoolConfig(databaseURL string, poolCfg DBPoolConfig) (*pgxpool.Config, error) {
+	parsed, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse PostgreSQL config: %w", err)
+	}
+	defaults := defaultDBPoolConfig()
+	maxConns := poolCfg.MaxConns
+	if maxConns <= 0 {
+		maxConns = defaults.MaxConns
+	}
+	minConns := poolCfg.MinConns
+	if !poolCfg.minConnsConfigured && minConns <= 0 {
+		minConns = defaults.MinConns
+	}
+	if minConns < 0 {
+		minConns = 0
+	}
+	if minConns > maxConns {
+		minConns = maxConns
+	}
+	maxConnLifetime := poolCfg.MaxConnLifetime
+	if maxConnLifetime <= 0 {
+		maxConnLifetime = defaults.MaxConnLifetime
+	}
+	maxConnIdleTime := poolCfg.MaxConnIdleTime
+	if maxConnIdleTime <= 0 {
+		maxConnIdleTime = defaults.MaxConnIdleTime
+	}
+	healthCheckPeriod := poolCfg.HealthCheckPeriod
+	if healthCheckPeriod <= 0 {
+		healthCheckPeriod = defaults.HealthCheckPeriod
+	}
+
+	parsed.MaxConns = maxConns
+	parsed.MinConns = minConns
+	parsed.MaxConnLifetime = maxConnLifetime
+	parsed.MaxConnIdleTime = maxConnIdleTime
+	parsed.HealthCheckPeriod = healthCheckPeriod
+	return parsed, nil
+}
+
 func BuildDependencies(ctx context.Context, config Config) (Dependencies, func(), error) {
-	pool, err := pgxpool.New(ctx, config.DatabaseURL)
+	poolConfig, err := buildPoolConfig(config.DatabaseURL, config.DBPool)
+	if err != nil {
+		return Dependencies{}, nil, err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return Dependencies{}, nil, fmt.Errorf("open PostgreSQL pool: %w", err)
 	}
@@ -143,10 +188,12 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		Intraday: jijinhao.NewClient(&http.Client{Timeout: 10 * time.Second}, "JO_71"),
 	}
 	comexSource := &yahoo.Client{HTTP: &http.Client{Timeout: 10 * time.Second}, Symbol: "GCZ26.CMX", FX: londonSource}
+	au9999Reader := marketpostgres.NewNativeReader(pool, "AU9999")
+	xauusdReader := marketpostgres.NewNativeReader(pool, "XAUUSD")
 	markets := []marketapplication.InstrumentMarket{
 		{Instrument: domain.Instrument{ID: "comex-gold", Name: "纽约黄金期货", Symbol: "GCZ26.CMX", Kind: "future", Currency: "USD", Unit: "USD/troy_oz", QuoteSource: "yahoo", DailySource: "yahoo", Exchange: "COMEX", Contract: "GCZ26", DelaySeconds: 1800}, Service: marketapplication.NewNativeGoldQuery(marketpostgres.NewNativeReader(pool, "GCZ26.CMX"))},
-		{Instrument: domain.Instrument{ID: "au9999", Name: "国内黄金", Symbol: "AU9999", Kind: "spot", Currency: "CNY", Unit: "CNY/g", QuoteSource: "sina", DailySource: "sge", Exchange: "SGE"}, Service: marketapplication.NewNativeGoldQuery(marketpostgres.NewNativeReader(pool, "AU9999"))},
-		{Instrument: domain.Instrument{ID: "xauusd", Name: "伦敦现货黄金", Symbol: "XAUUSD", Kind: "spot", Currency: "USD", Unit: "USD/troy_oz", QuoteSource: "sina", DailySource: "sina"}, Service: marketapplication.NewNativeGoldQuery(marketpostgres.NewNativeReader(pool, "XAUUSD"))},
+		{Instrument: domain.Instrument{ID: "au9999", Name: "国内黄金", Symbol: "AU9999", Kind: "spot", Currency: "CNY", Unit: "CNY/g", QuoteSource: "sina", DailySource: "sge", Exchange: "SGE"}, Service: marketapplication.NewNativeGoldQuery(au9999Reader)},
+		{Instrument: domain.Instrument{ID: "xauusd", Name: "伦敦现货黄金", Symbol: "XAUUSD", Kind: "spot", Currency: "USD", Unit: "USD/troy_oz", QuoteSource: "sina", DailySource: "sina"}, Service: marketapplication.NewNativeGoldQuery(xauusdReader)},
 	}
 	instruments := marketapplication.NewInstruments(markets)
 	instrumentsHandler := markethttp.NewInstrumentsHandler(instruments)
@@ -224,8 +271,11 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 		return Dependencies{}, nil, fmt.Errorf("create notification credentials: %w", err)
 	}
 	notificationHandler := notificationhttp.NewHandler(notificationapp.HoldingAlerts{
-		Store:  notificationpostgres.NewStore(pool),
-		Quotes: marketQuoteReader{reader: goldReader},
+		Store: notificationpostgres.NewStore(pool),
+		Quotes: marketQuoteReader{
+			domestic:      au9999Reader,
+			international: xauusdReader,
+		},
 		Holdings: holdingsReader{
 			repository: holdingspostgres.NewRepository(pool),
 		},
@@ -240,6 +290,7 @@ func BuildDependencies(ctx context.Context, config Config) (Dependencies, func()
 			},
 		},
 	})
+	notificationHandler.ActorUserID = notificationActorUserID(&authMiddleware, appUserService)
 
 	adminAuthService := appconfigapplication.NewAdminAuthService(
 		appconfigpostgres.NewAdminAuthRepository(pool),

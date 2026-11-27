@@ -175,7 +175,18 @@ func fromHoldingsDocument(doc holdingsdomain.Document) domain.GuestConfiguration
 		}
 		alerts := make([]domain.Alert, 0, len(record.Alerts))
 		for _, a := range record.Alerts {
-			alerts = append(alerts, domain.Alert{ID: a.ID, Kind: domain.AlertKind(a.Kind), Threshold: a.Threshold})
+			if !a.Enabled {
+				continue
+			}
+			alerts = append(alerts, domain.Alert{
+				ID:        a.ID,
+				Kind:      domain.AlertKind(a.Kind),
+				Threshold: a.Threshold,
+				Basis:     domain.QuoteBasis(a.Basis),
+			})
+		}
+		if len(alerts) == 0 {
+			continue
 		}
 		out = append(out, domain.ValidatedRecord{
 			RecordID: record.ID,

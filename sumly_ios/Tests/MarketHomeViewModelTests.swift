@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 @testable import Sumly
 
@@ -999,7 +1000,7 @@ private struct StatusCopyFixture: GoldPriceServicing, GoldQuoteServicing, GoldRe
         ("2026-11-21T02:35:00+08:00", "2026-11-21T02:30:00+08:00", "周末休市 · 收盘价 11/21 02:30", "周末休市 · 展示最近交易时段分时"),
         ("2026-11-22T10:38:00+08:00", "2026-11-21T02:30:00+08:00", "周末休市 · 收盘价 11/21 02:30", "周末休市 · 展示最近交易时段分时"),
         ("2026-11-23T08:50:00+08:00", "2026-11-21T02:30:00+08:00", "周末休市 · 收盘价 11/21 02:30", "周末休市 · 展示最近交易时段分时"),
-        ("2026-11-24T12:00:00+08:00", "2026-11-24T11:30:00+08:00", "午间休盘 · 最近报价 11/24 11:30", "午间休盘 · 展示最近交易时段分时"),
+        ("2026-11-24T12:00:00+08:00", "2026-11-24T11:30:00+08:00", "暂无新成交 · 最近报价 11/24 11:30", "暂无新成交 · 本交易时段分时"),
         ("2026-11-24T17:00:00+08:00", "2026-11-24T15:30:00+08:00", "已收盘 · 收盘价 11/24 15:30", "已收盘 · 展示最近交易时段分时"),
         ("2026-11-25T04:00:00+08:00", "2026-11-25T02:30:00+08:00", "已收盘 · 收盘价 11/25 02:30", "已收盘 · 展示最近交易时段分时"),
         ("2026-10-01T10:30:00+08:00", "2026-09-30T15:30:00+08:00", "当前休市 · 最近报价 09/30 15:30", "当前休市 · 展示最近交易时段分时"),
@@ -1068,4 +1069,68 @@ private struct StatusCopyFixture: GoldPriceServicing, GoldQuoteServicing, GoldRe
         #expect(model.message == item.expectedMessage)
         #expect(model.message?.contains("更新暂停") == false)
     }
+}
+
+private actor CountingQuoteService: GoldQuoteServicing {
+    var fetchCount = 0
+    func fetchQuote() async throws -> GoldQuote {
+        fetchCount += 1
+        return GoldQuote(symbol: "AU9999", price: 632, open: 630, high: 635, low: 629, prevClose: 630, usdCNY: 0, cnyPerGram: 632, asOf: .now)
+    }
+}
+
+@MainActor private final class MarketObservationFlag {
+    var triggered = false
+}
+
+@MainActor @Test func marketHomeSkipsDuplicateQuotePollingAndIsolatesShowsInitialLoading() async throws {
+    let fixture = HomeMarketFixture()
+    let countingQuote = CountingQuoteService()
+    let model = MarketHomeViewModel(
+        basis: .domestic,
+        dailyService: fixture,
+        quoteService: countingQuote,
+        realtimeService: fixture
+    )
+    #expect(model.showsInitialLoading)
+
+    let task = Task { await model.start(includeQuotePolling: false) }
+    try await waitForMarketCondition { !model.points.isEmpty }
+    task.cancel()
+    await task.value
+
+    // 当外部由 LiveGoldQuoteStore 统一轮询时，MarketHomeViewModel 不应再额外拉取 quote
+    #expect(await countingQuote.fetchCount == 0)
+
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let firstQuote = GoldQuote(symbol: "AU9999", price: 632, open: 630, high: 635, low: 629, prevClose: 630, usdCNY: 0, cnyPerGram: 632, asOf: now)
+    let olderQuote = GoldQuote(symbol: "AU9999", price: 610, open: 610, high: 610, low: 610, prevClose: 610, usdCNY: 0, cnyPerGram: 610, asOf: now.addingTimeInterval(-30))
+    let newerQuote = GoldQuote(symbol: "AU9999", price: 634, open: 630, high: 635, low: 629, prevClose: 630, usdCNY: 0, cnyPerGram: 634, asOf: now.addingTimeInterval(5))
+
+    model.applyExternalQuote(firstQuote, failed: false)
+    #expect(!model.showsInitialLoading)
+    #expect(model.quote == firstQuote)
+
+    // 1. 相同报价与更旧报价不触发 quote 观察者
+    let quoteInvalidated = MarketObservationFlag()
+    withObservationTracking {
+        _ = model.quote
+    } onChange: {
+        MainActor.assumeIsolated { quoteInvalidated.triggered = true }
+    }
+    model.applyExternalQuote(firstQuote, failed: false)
+    model.applyExternalQuote(olderQuote, failed: false)
+    #expect(!quoteInvalidated.triggered)
+
+    // 2. 新报价更新 quote，但不应触发 showsInitialLoading 观察者（隔离 HomeView.body）
+    let initialLoadingInvalidated = MarketObservationFlag()
+    withObservationTracking {
+        _ = model.showsInitialLoading
+    } onChange: {
+        MainActor.assumeIsolated { initialLoadingInvalidated.triggered = true }
+    }
+    model.applyExternalQuote(newerQuote, failed: false)
+    #expect(quoteInvalidated.triggered)
+    #expect(!initialLoadingInvalidated.triggered)
+    #expect(model.quote == newerQuote)
 }

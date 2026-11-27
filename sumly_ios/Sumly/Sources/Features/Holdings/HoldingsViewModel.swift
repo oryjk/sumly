@@ -36,10 +36,16 @@ final class HoldingsViewModel {
     /// 同步外部共享报价源，避免多个 Tab 重复轮询同一接口。
     func applyExternalQuote(_ externalQuote: GoldQuote?, failed: Bool) {
         if let externalQuote, GoldReturnCalculator.validPrice(externalQuote.cnyPerGram) != nil {
-            quote = externalQuote
-            quoteFailed = false
+            if quote != externalQuote {
+                quote = externalQuote
+            }
+            if quoteFailed {
+                quoteFailed = false
+            }
         } else if failed {
-            quoteFailed = true
+            if !quoteFailed {
+                quoteFailed = true
+            }
         }
     }
 
@@ -48,10 +54,16 @@ final class HoldingsViewModel {
         guard let quoteService else { return }
         do {
             let fetched = try await quoteService.fetchQuote()
-            guard GoldReturnCalculator.validPrice(fetched.cnyPerGram) != nil else { quoteFailed = true; return }
+            guard GoldReturnCalculator.validPrice(fetched.cnyPerGram) != nil else {
+                if !quoteFailed { quoteFailed = true }
+                return
+            }
             guard !Task.isCancelled else { return }
-            quote = fetched; quoteFailed = false
-        } catch { quoteFailed = true }
+            if quote != fetched { quote = fetched }
+            if quoteFailed { quoteFailed = false }
+        } catch {
+            if !quoteFailed { quoteFailed = true }
+        }
     }
 
     func returns(for records: [HoldingRecord]) -> GoldPortfolioReturn? {

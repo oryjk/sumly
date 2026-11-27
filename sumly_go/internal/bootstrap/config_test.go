@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadConfigRejectsAppleTestCredentialOutsideTest(t *testing.T) {
@@ -217,5 +218,89 @@ func TestLoadConfigFeedbackDefaultsAndOverrides(t *testing.T) {
 		cfg.FeedbackPublicBaseURL != "https://oryjk.cn/sumly" ||
 		cfg.FeishuFeedbackWebhookURL != "https://open.feishu.cn/open-apis/bot/v2/hook/test-only" {
 		t.Fatalf("unexpected feedback overrides: %+v", cfg)
+	}
+}
+
+func TestLoadConfigDBPoolDefaultsAndOverrides(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://sumly:pass@localhost:5432/sumly?sslmode=disable")
+	t.Setenv("JWT_SECRET", "secret")
+	t.Setenv("WECHAT_APP_ID", "appid")
+	t.Setenv("WECHAT_APP_SECRET", "appsecret")
+	t.Setenv("DB_POOL_MAX_CONNS", "")
+	t.Setenv("DB_POOL_MIN_CONNS", "")
+	t.Setenv("DB_POOL_MAX_CONN_LIFETIME", "")
+	t.Setenv("DB_POOL_MAX_CONN_IDLE_TIME", "")
+	t.Setenv("DB_POOL_HEALTH_CHECK_PERIOD", "")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load config defaults: %v", err)
+	}
+	if cfg.DBPool.MaxConns != 25 ||
+		cfg.DBPool.MinConns != 4 ||
+		cfg.DBPool.MaxConnLifetime != 30*time.Minute ||
+		cfg.DBPool.MaxConnIdleTime != 5*time.Minute ||
+		cfg.DBPool.HealthCheckPeriod != 30*time.Second {
+		t.Fatalf("unexpected DBPool defaults: %+v", cfg.DBPool)
+	}
+
+	parsed, err := buildPoolConfig(cfg.DatabaseURL, cfg.DBPool)
+	if err != nil {
+		t.Fatalf("buildPoolConfig defaults: %v", err)
+	}
+	if parsed.MaxConns != 25 ||
+		parsed.MinConns != 4 ||
+		parsed.MaxConnLifetime != 30*time.Minute ||
+		parsed.MaxConnIdleTime != 5*time.Minute ||
+		parsed.HealthCheckPeriod != 30*time.Second {
+		t.Fatalf("unexpected parsed pool config defaults: max=%d min=%d life=%v idle=%v hc=%v",
+			parsed.MaxConns, parsed.MinConns, parsed.MaxConnLifetime, parsed.MaxConnIdleTime, parsed.HealthCheckPeriod)
+	}
+
+	t.Setenv("DB_POOL_MAX_CONNS", "40")
+	t.Setenv("DB_POOL_MIN_CONNS", "0")
+	t.Setenv("DB_POOL_MAX_CONN_LIFETIME", "45m")
+	t.Setenv("DB_POOL_MAX_CONN_IDLE_TIME", "10m")
+	t.Setenv("DB_POOL_HEALTH_CHECK_PERIOD", "15s")
+
+	cfg, err = LoadConfig()
+	if err != nil {
+		t.Fatalf("load config overrides: %v", err)
+	}
+	parsed, err = buildPoolConfig(cfg.DatabaseURL, cfg.DBPool)
+	if err != nil {
+		t.Fatalf("buildPoolConfig overrides: %v", err)
+	}
+	if parsed.MaxConns != 40 ||
+		parsed.MinConns != 0 ||
+		parsed.MaxConnLifetime != 45*time.Minute ||
+		parsed.MaxConnIdleTime != 10*time.Minute ||
+		parsed.HealthCheckPeriod != 15*time.Second {
+		t.Fatalf("unexpected parsed pool config overrides: max=%d min=%d life=%v idle=%v hc=%v",
+			parsed.MaxConns, parsed.MinConns, parsed.MaxConnLifetime, parsed.MaxConnIdleTime, parsed.HealthCheckPeriod)
+	}
+
+	// 未显式指定 MinConns 且 MaxConns < 默认 MinConns 时自动夹紧
+	t.Setenv("DB_POOL_MAX_CONNS", "2")
+	t.Setenv("DB_POOL_MIN_CONNS", "")
+	cfg, err = LoadConfig()
+	if err != nil {
+		t.Fatalf("load config small max conns: %v", err)
+	}
+	if cfg.DBPool.MaxConns != 2 || cfg.DBPool.MinConns != 2 {
+		t.Fatalf("expected MinConns clamped to MaxConns=2, got %+v", cfg.DBPool)
+	}
+
+	// 显式指定 MinConns > MaxConns 时报错
+	t.Setenv("DB_POOL_MIN_CONNS", "5")
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "DB_POOL_MIN_CONNS") {
+		t.Fatalf("expected error when DB_POOL_MIN_CONNS > DB_POOL_MAX_CONNS, got %v", err)
+	}
+
+	// 非法 duration 报错
+	t.Setenv("DB_POOL_MIN_CONNS", "1")
+	t.Setenv("DB_POOL_MAX_CONN_LIFETIME", "not-a-duration")
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "DB_POOL_MAX_CONN_LIFETIME") {
+		t.Fatalf("expected invalid DB_POOL_MAX_CONN_LIFETIME error, got %v", err)
 	}
 }

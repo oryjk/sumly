@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	holdingsdomain "gitee.com/oryjk/sumly/sumly_go/internal/holdings/domain"
 	"gitee.com/oryjk/sumly/sumly_go/internal/notifications/domain"
 	"gitee.com/oryjk/sumly/sumly_go/internal/notifications/ports"
 )
@@ -415,6 +416,199 @@ func TestEvaluateGuestWithoutRecordsSendsNothing(t *testing.T) {
 	}
 	if wechat.sent != 0 {
 		t.Fatal("guest without configuration must not send")
+	}
+}
+
+type basisQuotes struct {
+	prices map[string]float64
+	asOf   time.Time
+	seen   []string
+}
+
+func (q *basisQuotes) Read(_ context.Context, basis string) (float64, time.Time, error) {
+	q.seen = append(q.seen, basis)
+	price, ok := q.prices[basis]
+	if !ok {
+		return 0, time.Time{}, domain.ErrInvalid
+	}
+	return price, q.asOf, nil
+}
+
+type cloudHoldingsStub struct {
+	userID int64
+	doc    holdingsdomain.Document
+}
+
+func (h *cloudHoldingsStub) Read(_ context.Context, userID int64) (holdingsdomain.Document, error) {
+	h.userID = userID
+	return h.doc, nil
+}
+
+func TestEvaluatePassesAlertBasisNotTemplateID(t *testing.T) {
+	store := newFakeStore()
+	wechat := &fakeWechat{openID: "o"}
+	clock := baseTime
+	quotes := &basisQuotes{
+		prices: map[string]float64{
+			"domestic":      590,
+			"international": 580,
+		},
+		asOf: clock,
+	}
+	alerts := HoldingAlerts{
+		Store:  store,
+		Quotes: quotes,
+		Wechat: wechat,
+		Crypto: &fakeCrypto{},
+		Template: TemplateConfig{
+			TemplateID: "tmpl-never-pass-as-basis",
+			Fields:     map[string]string{"kind": "thing1", "price": "thing2", "threshold": "thing3"},
+		},
+		Now:      func() time.Time { return clock },
+		GrantTTL: 15 * time.Minute,
+	}
+	issued, err := alerts.Grants(context.Background(), "code", deviceID, "tmpl-never-pass-as-basis", 0, "guest")
+	if err != nil {
+		t.Fatalf("Grants: %v", err)
+	}
+
+	const domesticAlertID = "a1111111-1111-4111-8111-111111111111"
+	const internationalAlertID = "a2222222-2222-4222-8222-222222222222"
+	guestCfg := domain.GuestConfiguration{{
+		RecordID: recordID,
+		Input:    domain.GoldInput{Grams: 10, Purity: 1, UnitPrice: 500},
+		Alerts: []domain.Alert{
+			{ID: domesticAlertID, Kind: domain.AlertPrice, Threshold: 600, Basis: domain.BasisDomestic},
+			{ID: internationalAlertID, Kind: domain.AlertPrice, Threshold: 610, Basis: domain.BasisInternational},
+		},
+	}}
+
+	// 第一轮：domestic=590 (<600 -> armed), international=580 (<610 -> armed)
+	if _, err := alerts.Evaluate(context.Background(), EvaluateInput{
+		DeviceID: deviceID, RequestID: "req-arm", Grant: issued.Grant, Workspace: "guest", Guest: guestCfg,
+	}); err != nil {
+		t.Fatalf("first Evaluate: %v", err)
+	}
+	for _, b := range quotes.seen {
+		if b == "tmpl-never-pass-as-basis" {
+			t.Fatalf("Quotes.Read received templateID as basis: %v", quotes.seen)
+		}
+		if b != "domestic" && b != "international" {
+			t.Fatalf("unexpected basis passed to Quotes.Read: %q", b)
+		}
+	}
+	if wechat.sent != 0 {
+		t.Fatalf("expected 0 notifications on arming, got %d", wechat.sent)
+	}
+
+	// 第二轮：仅 domestic 穿越到 605 (>=600)，international 仍在 595 (<610)
+	clock = baseTime.Add(10 * time.Second)
+	quotes.asOf = clock
+	quotes.prices["domestic"] = 605
+	quotes.prices["international"] = 595
+
+	res, err := alerts.Evaluate(context.Background(), EvaluateInput{
+		DeviceID: deviceID, RequestID: "req-cross", Grant: issued.Grant, Workspace: "guest", Guest: guestCfg,
+	})
+	if err != nil {
+		t.Fatalf("second Evaluate: %v", err)
+	}
+	if len(res.Events) != 1 || res.Events[0].Status != domain.EventDelivered {
+		t.Fatalf("expected 1 delivered event for domestic crossing only, got %+v", res.Events)
+	}
+	if wechat.sent != 1 {
+		t.Fatalf("wechat.sent = %d, want 1", wechat.sent)
+	}
+}
+
+func TestEvaluateAccountModeReadsCloudHoldingsBasisAndSkipsDisabledAlerts(t *testing.T) {
+	store := newFakeStore()
+	wechat := &fakeWechat{openID: "o"}
+	clock := baseTime
+	quotes := &basisQuotes{
+		prices: map[string]float64{"domestic": 590},
+		asOf:   clock,
+	}
+	holdings := &cloudHoldingsStub{
+		doc: holdingsdomain.Document{
+			SchemaVersion: 1,
+			Books:         []string{holdingsdomain.DefaultBook},
+			Records: []holdingsdomain.Record{{
+				ID:           recordID,
+				Grams:        10,
+				Purity:       1,
+				UnitPriceCNY: 500,
+				Disposition:  "holding",
+				Alerts: []holdingsdomain.Alert{
+					{ID: alertID, Kind: "price", Threshold: 600, Enabled: true, Basis: "domestic"},
+					{ID: "a9999999-9999-4999-8999-999999999999", Kind: "price", Threshold: 1, Enabled: false, Basis: "international"},
+				},
+			}},
+		},
+	}
+	alerts := HoldingAlerts{
+		Store:    store,
+		Quotes:   quotes,
+		Holdings: holdings,
+		Wechat:   wechat,
+		Crypto:   &fakeCrypto{},
+		Template: TemplateConfig{
+			TemplateID: "tmpl-account",
+			Fields:     map[string]string{"kind": "thing1", "price": "thing2", "threshold": "thing3"},
+		},
+		Now:      func() time.Time { return clock },
+		GrantTTL: 15 * time.Minute,
+	}
+
+	issued, err := alerts.Grants(context.Background(), "code", deviceID, "tmpl-account", 77, "user")
+	if err != nil {
+		t.Fatalf("Grants: %v", err)
+	}
+
+	// 第一轮建立基线：仅应读取 domestic（disabled 的 international 提醒被忽略）
+	if _, err := alerts.Evaluate(context.Background(), EvaluateInput{
+		DeviceID: deviceID, RequestID: "req-1", Grant: issued.Grant, Workspace: "user",
+	}); err != nil {
+		t.Fatalf("first evaluate: %v", err)
+	}
+	if holdings.userID != 77 {
+		t.Fatalf("expected Holdings.Read(77), got %d", holdings.userID)
+	}
+	if len(quotes.seen) != 1 || quotes.seen[0] != "domestic" {
+		t.Fatalf("expected only domestic quote read, got %v", quotes.seen)
+	}
+
+	// 第二轮国内价突破 605 -> 触发
+	clock = baseTime.Add(10 * time.Second)
+	quotes.asOf = clock
+	quotes.prices["domestic"] = 605
+	res, err := alerts.Evaluate(context.Background(), EvaluateInput{
+		DeviceID: deviceID, RequestID: "req-2", Grant: issued.Grant, Workspace: "user",
+	})
+	if err != nil {
+		t.Fatalf("second evaluate: %v", err)
+	}
+	if len(res.Events) != 1 || wechat.sent != 1 {
+		t.Fatalf("expected 1 delivered event, got events=%+v sent=%d", res.Events, wechat.sent)
+	}
+}
+
+func TestGuestConfigurationValidatesBasis(t *testing.T) {
+	base := domain.ValidatedRecord{
+		RecordID: recordID,
+		Input:    domain.GoldInput{Grams: 10, Purity: 1, UnitPrice: 500},
+	}
+	for _, basis := range []domain.QuoteBasis{"", domain.BasisDomestic, domain.BasisInternational} {
+		rec := base
+		rec.Alerts = []domain.Alert{{ID: alertID, Kind: domain.AlertPrice, Threshold: 600, Basis: basis}}
+		if err := (domain.GuestConfiguration{rec}).Validate(); err != nil {
+			t.Fatalf("basis %q should be valid, got %v", basis, err)
+		}
+	}
+	bad := base
+	bad.Alerts = []domain.Alert{{ID: alertID, Kind: domain.AlertPrice, Threshold: 600, Basis: "arbitrary-text"}}
+	if err := (domain.GuestConfiguration{bad}).Validate(); err == nil {
+		t.Fatal("expected rejection of invalid alert basis")
 	}
 }
 

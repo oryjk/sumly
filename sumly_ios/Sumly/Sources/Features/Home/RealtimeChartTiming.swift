@@ -39,8 +39,8 @@ enum GoldMarketSessionStatus: Sendable, Equatable {
     }
 
     /// 上金所 Au99.99（北京时间 Asia/Shanghai）：
+    /// - 交易时段：周一至周五连续日盘 09:00–15:30（无午休）+ 夜盘 20:00–次日 02:30
     /// - 周末休市：周六 02:30 起至周一 09:00 前（含周日全天）
-    /// - 午间休盘：周一至周五 11:30 起至 13:30 前
     /// - 已收盘：周一至周五 15:30 起至 20:00 前，或周二至周五 02:30 起至 09:00 前
     /// - 其余时段为常规交易时段（含周六 00:00–02:30 夜盘尾段）；若距最近有效报价 > 6 小时判为法定节假日休市
     private static func resolveDomestic(now: Date, latestQuote: Date?) -> GoldMarketSessionStatus {
@@ -52,9 +52,6 @@ enum GoldMarketSessionStatus: Sendable, Equatable {
             || (weekday == 7 && minuteOfDay >= 150)
             || (weekday == 2 && minuteOfDay < 540) {
             return .weekendClosed
-        }
-        if (2...6).contains(weekday), minuteOfDay >= 690, minuteOfDay < 810 {
-            return .middayBreak
         }
         if (2...6).contains(weekday), minuteOfDay >= 930, minuteOfDay < 1200 {
             return .closed

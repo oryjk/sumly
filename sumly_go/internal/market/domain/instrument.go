@@ -24,4 +24,5 @@ type GoldWindow struct {
 	WindowSeconds   int
 	Start           time.Time
 	End             time.Time
+	PrevClose       float64
 }

@@ -7,6 +7,7 @@ struct HoldingsCalendarSheet: View {
     let marketBasis: GoldMarketBasis
     let quoteStore: LiveGoldQuoteStore?
     let isEmbeddedTab: Bool
+    let isActive: Bool
 
     @Query private var records: [HoldingRecord]
     @AppStorage("holdings.books") private var savedBooks = "默认账本"
@@ -16,6 +17,7 @@ struct HoldingsCalendarSheet: View {
 
     @State private var filter = HoldingCalendarFilter()
     @State private var didInitialize = false
+    @State private var needsCalendarSync = false
     @State private var showingFilter = false
     @State private var showingAdd = false
     @State private var showingPoster = false
@@ -31,13 +33,15 @@ struct HoldingsCalendarSheet: View {
         hideAmounts: Bool,
         marketBasis: GoldMarketBasis = .domestic,
         quoteStore: LiveGoldQuoteStore? = nil,
-        isEmbeddedTab: Bool = false
+        isEmbeddedTab: Bool = false,
+        isActive: Bool = true
     ) {
         self.initialBook = initialBook
         self.hideAmounts = hideAmounts
         self.marketBasis = marketBasis
         self.quoteStore = quoteStore
         self.isEmbeddedTab = isEmbeddedTab
+        self.isActive = isActive
         self.skipAutomaticNetworkSync = false
         let vm = HoldingsDesignPreview.makeModel(basis: marketBasis)
         if let quoteStore {
@@ -54,6 +58,7 @@ struct HoldingsCalendarSheet: View {
         marketBasis: GoldMarketBasis = .domestic,
         quoteStore: LiveGoldQuoteStore? = nil,
         isEmbeddedTab: Bool = false,
+        isActive: Bool = true,
         preloadedViewModel: HoldingsCalendarViewModel
     ) {
         self.initialBook = initialBook
@@ -61,6 +66,7 @@ struct HoldingsCalendarSheet: View {
         self.marketBasis = marketBasis
         self.quoteStore = quoteStore
         self.isEmbeddedTab = isEmbeddedTab
+        self.isActive = isActive
         self.skipAutomaticNetworkSync = true
         let vm = HoldingsDesignPreview.makeModel(basis: marketBasis)
         if let quoteStore {
@@ -71,7 +77,7 @@ struct HoldingsCalendarSheet: View {
     }
 
     private var activeQuote: GoldQuote? {
-        quoteStore?.quote(for: marketBasis) ?? model.quote
+        model.quote
     }
 
     private var books: [String] {
@@ -210,17 +216,23 @@ struct HoldingsCalendarSheet: View {
             sectionExpansion = [:]
             syncCalendarInputs()
         }
-        .onChange(of: marketBasis) { _, updatedBasis in
-            if let quoteStore {
-                model.applyExternalQuote(quoteStore.quote(for: updatedBasis), failed: quoteStore.isFailed(for: updatedBasis))
-            }
+        .onChange(of: marketBasis) { _, _ in
             syncCalendarInputs()
         }
-        .onChange(of: activeQuote) { _, latest in
-            if let quoteStore {
-                model.applyExternalQuote(latest, failed: quoteStore.isFailed(for: marketBasis))
-            }
+        .onChange(of: model.quote) { _, _ in
             syncCalendarInputs()
+        }
+        .onChange(of: isActive) { _, active in
+            if active && needsCalendarSync {
+                syncCalendarInputs()
+            }
+        }
+        .background {
+            if isActive, let quoteStore {
+                LiveQuoteSyncBridge(quoteStore: quoteStore, basis: marketBasis) { latest, failed in
+                    model.applyExternalQuote(latest, failed: failed)
+                }
+            }
         }
         .onChange(of: calendarVM.selectedDate) { _, _ in
             sectionExpansion = [:]
@@ -228,18 +240,18 @@ struct HoldingsCalendarSheet: View {
         .onChange(of: statsPeriod) { _, _ in
             sectionExpansion = [:]
         }
-        .task(id: scenePhase) {
+        .task(id: CalendarPollingKey(isActive: isActive, scenePhase: scenePhase)) {
             guard !skipAutomaticNetworkSync else { return }
-            if quoteStore == nil, scenePhase == .active {
+            if quoteStore == nil, isActive, scenePhase == .active {
                 await model.start()
             }
         }
-        .task(id: marketBasis) {
-            guard !skipAutomaticNetworkSync else { return }
+        .task(id: CalendarMarketLoadKey(isActive: isActive, basis: marketBasis)) {
+            guard !skipAutomaticNetworkSync, isActive else { return }
             await calendarVM.loadMarketData(for: marketBasis)
         }
-        .task(id: calendarVM.focusedYear) {
-            guard !skipAutomaticNetworkSync else { return }
+        .task(id: CalendarYearLoadKey(isActive: isActive, year: calendarVM.focusedYear)) {
+            guard !skipAutomaticNetworkSync, isActive else { return }
             await calendarVM.ensureTemperatureCoverageIfNeeded(for: calendarVM.focusedYear)
         }
         .onReceive(NotificationCenter.default.publisher(for: .marketCacheCleared)) { _ in
@@ -650,6 +662,11 @@ struct HoldingsCalendarSheet: View {
 
     private func syncCalendarInputs() {
         guard !skipAutomaticNetworkSync else { return }
+        guard isActive else {
+            needsCalendarSync = true
+            return
+        }
+        needsCalendarSync = false
         calendarVM.syncInputs(
             items: records.map(\.calendarItem),
             filter: filter,
@@ -750,6 +767,21 @@ struct HoldingCalendarFilterSheet: View {
                 }
         }
     }
+}
+
+private struct CalendarPollingKey: Equatable {
+    let isActive: Bool
+    let scenePhase: ScenePhase
+}
+
+private struct CalendarMarketLoadKey: Equatable {
+    let isActive: Bool
+    let basis: GoldMarketBasis
+}
+
+private struct CalendarYearLoadKey: Equatable {
+    let isActive: Bool
+    let year: Int
 }
 
 private struct EmbeddedCalendarTabBarSafeArea: ViewModifier {

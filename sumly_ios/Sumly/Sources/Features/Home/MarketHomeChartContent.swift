@@ -19,7 +19,7 @@ struct MarketHomeChartContent: View {
     private static let quickRanges: [MarketRange] = [.realtime, .month, .quarter, .year, .fiveYears]
 
     private var quoteSnapshot: MarketQuoteSnapshot? {
-        model.quote.flatMap { MarketQuoteSnapshot.make(from: $0, basis: model.basis) }
+        model.quoteSnapshot
     }
 
     var body: some View {

@@ -145,6 +145,7 @@ func (h *Handler) GoldRealtime(c *gin.Context) {
 		windowSeconds int
 		windowStart   string
 		windowEnd     string
+		prevClose     float64
 		err           error
 	)
 	if mode == domain.RealtimeWindowModeSession || mode == domain.RealtimeWindowModeDay {
@@ -156,6 +157,7 @@ func (h *Handler) GoldRealtime(c *gin.Context) {
 		points = window.Points
 		interval = window.IntervalSeconds
 		windowSeconds = window.WindowSeconds
+		prevClose = window.PrevClose
 		if !window.End.IsZero() {
 			windowStart = formatBeijingRFC3339(window.Start)
 			windowEnd = formatBeijingRFC3339(window.End)
@@ -180,8 +182,9 @@ func (h *Handler) GoldRealtime(c *gin.Context) {
 		WindowSeconds   int             `json:"window_seconds"`
 		WindowStart     string          `json:"window_start,omitempty"`
 		WindowEnd       string          `json:"window_end,omitempty"`
+		PrevClose       float64         `json:"prev_close,omitempty"`
 		Points          []pointResponse `json:"points"`
-	}{Symbol: "XAUUSD", Unit: "CNY/g", IntervalSeconds: interval, WindowSeconds: windowSeconds, WindowStart: windowStart, WindowEnd: windowEnd, Points: make([]pointResponse, 0, len(points))}
+	}{Symbol: "XAUUSD", Unit: "CNY/g", IntervalSeconds: interval, WindowSeconds: windowSeconds, WindowStart: windowStart, WindowEnd: windowEnd, PrevClose: prevClose, Points: make([]pointResponse, 0, len(points))}
 	for _, p := range points {
 		response.Points = append(response.Points, pointResponse{
 			Time:       formatBeijingRFC3339(p.Time),

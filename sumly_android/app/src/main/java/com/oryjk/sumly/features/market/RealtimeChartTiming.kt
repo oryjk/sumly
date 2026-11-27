@@ -2,6 +2,7 @@ package com.oryjk.sumly.features.market
 
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -9,12 +10,25 @@ import java.util.Locale
 internal class RealtimeChartTiming(
     first: Instant?,
     last: Instant?,
-    quote: Instant?,
-    intervalSeconds: Int,
-    private val now: Instant,
+    val paused: Boolean,
+    private val today: LocalDate,
     private val zone: ZoneId,
 ) {
-    val paused = last != null && MarketChartLogic.isPaused(last, quote, intervalSeconds, now)
+    constructor(
+        first: Instant?,
+        last: Instant?,
+        quote: Instant?,
+        intervalSeconds: Int,
+        now: Instant,
+        zone: ZoneId,
+    ) : this(
+        first = first,
+        last = last,
+        paused = last != null && MarketChartLogic.isPaused(last, quote, intervalSeconds, now),
+        today = now.atZone(zone).toLocalDate(),
+        zone = zone,
+    )
+
     val caption: String = when {
         first == null || last == null -> "暂无实时走势"
         isSession(first..last) && paused -> "休市停盘 · 最近交易时段分时"
@@ -31,7 +45,7 @@ internal class RealtimeChartTiming(
         val end = window.endInclusive
         return when {
             !sameDay(start, end) -> "${format(start, "$day $time")} — ${format(end, "$day $time")}"
-            !sameDay(end, now) -> "${format(start, "$day $time")} — ${format(end, time)}"
+            !sameDay(end, today) -> "${format(start, "$day $time")} — ${format(end, time)}"
             else -> "${format(start, time)} — ${format(end, time)}"
         }
     }
@@ -41,12 +55,13 @@ internal class RealtimeChartTiming(
 
     private fun label(time: Instant, window: ClosedRange<Instant>, separator: String): String {
         val clock = format(time, "HH:mm")
-        if (sameDay(time, now) && sameDay(window.start, window.endInclusive)) return clock
+        if (sameDay(time, today) && sameDay(window.start, window.endInclusive)) return clock
         val day = format(time, if (isSession(window)) "MM/dd" else "MM.dd")
         return "$day$separator$clock"
     }
 
     private fun sameDay(a: Instant, b: Instant): Boolean = a.atZone(zone).toLocalDate() == b.atZone(zone).toLocalDate()
+    private fun sameDay(a: Instant, b: LocalDate): Boolean = a.atZone(zone).toLocalDate() == b
     private fun isSession(window: ClosedRange<Instant>): Boolean =
         Duration.between(window.start, window.endInclusive) > Duration.ofMinutes(30)
 

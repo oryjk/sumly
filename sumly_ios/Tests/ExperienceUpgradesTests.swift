@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 @testable import Sumly
 
@@ -50,6 +51,109 @@ import Testing
     #expect(abs((store.spread?.spreadCNY ?? 0) - 7.0) < 0.001)
     store.clearCache()
     #expect(store.quote(for: .domestic) == nil)
+}
+
+private actor MutableQuoteFixture: GoldQuoteServicing {
+    var result: Result<GoldQuote, Error>
+    init(_ result: Result<GoldQuote, Error>) { self.result = result }
+    func set(_ next: Result<GoldQuote, Error>) { result = next }
+    func fetchQuote() async throws -> GoldQuote { try result.get() }
+}
+
+@MainActor private final class ObservationFlag {
+    var triggered = false
+}
+
+@MainActor @Test func liveGoldQuoteStoreIsolatesBasisObservationAndDeduplicatesUnchangedQuotes() async {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let domesticQuote = GoldQuote(symbol: "AU9999", price: 632, open: 630, high: 635, low: 629, prevClose: 630, usdCNY: 0, cnyPerGram: 632, asOf: now)
+    let domesticUpdated = GoldQuote(symbol: "AU9999", price: 633.5, open: 630, high: 635, low: 629, prevClose: 630, usdCNY: 0, cnyPerGram: 633.5, asOf: now.addingTimeInterval(5))
+    let intlQuote = GoldQuote(symbol: "XAUUSD", price: 2700, open: 2700, high: 2700, low: 2700, prevClose: 2700, usdCNY: 7.2, cnyPerGram: 625, asOf: now)
+
+    let domesticService = MutableQuoteFixture(.success(domesticQuote))
+    let intlService = MutableQuoteFixture(.success(intlQuote))
+    let store = LiveGoldQuoteStore { basis in
+        basis == .domestic ? domesticService : intlService
+    }
+
+    await store.refresh(basis: .domestic)
+    #expect(store.domesticQuote == domesticQuote)
+    #expect(!store.isFailed(for: .domestic))
+
+    // 1. 仅订阅国内口径时，国际口径更新或失败不应触发国内观察者重绘
+    let domesticInvalidated = ObservationFlag()
+    withObservationTracking {
+        _ = store.quote(for: .domestic)
+        _ = store.isFailed(for: .domestic)
+    } onChange: {
+        MainActor.assumeIsolated { domesticInvalidated.triggered = true }
+    }
+
+    store.ingest(intlQuote, for: .international)
+    await intlService.set(.failure(URLError(.notConnectedToInternet)))
+    await store.refresh(basis: .international)
+    #expect(!domesticInvalidated.triggered)
+    #expect(store.isFailed(for: .international))
+
+    // 2. 相同国内报价重复 ingest / refresh 必须短路，不触发观察者
+    store.ingest(domesticQuote, for: .domestic)
+    await store.refresh(basis: .domestic)
+    #expect(!domesticInvalidated.triggered)
+
+    // 3. 真正的新国内报价应准确触发国内观察者
+    await domesticService.set(.success(domesticUpdated))
+    await store.refresh(basis: .domestic)
+    #expect(domesticInvalidated.triggered)
+    #expect(store.domesticQuote == domesticUpdated)
+
+    // 4. 连续失败去重：第二次失败不再触发 isFailed 观察者
+    await domesticService.set(.failure(URLError(.timedOut)))
+    await store.refresh(basis: .domestic)
+    #expect(store.isFailed(for: .domestic))
+    let repeatedFailInvalidated = ObservationFlag()
+    withObservationTracking {
+        _ = store.isFailed(for: .domestic)
+    } onChange: {
+        MainActor.assumeIsolated { repeatedFailInvalidated.triggered = true }
+    }
+    await store.refresh(basis: .domestic)
+    #expect(!repeatedFailInvalidated.triggered)
+}
+
+@MainActor @Test func holdingsViewModelDeduplicatesIdenticalExternalQuotes() {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let quoteA = GoldQuote(symbol: "AU9999", price: 632, open: 630, high: 635, low: 629, prevClose: 630, usdCNY: 0, cnyPerGram: 632, asOf: now)
+    let quoteB = GoldQuote(symbol: "AU9999", price: 634, open: 630, high: 635, low: 629, prevClose: 630, usdCNY: 0, cnyPerGram: 634, asOf: now.addingTimeInterval(5))
+    let vm = HoldingsViewModel(quoteService: nil)
+    vm.applyExternalQuote(quoteA, failed: false)
+    #expect(vm.quote == quoteA)
+    #expect(!vm.quoteFailed)
+
+    let invalidated = ObservationFlag()
+    withObservationTracking {
+        _ = vm.quote
+        _ = vm.quoteFailed
+    } onChange: {
+        MainActor.assumeIsolated { invalidated.triggered = true }
+    }
+
+    vm.applyExternalQuote(quoteA, failed: false)
+    #expect(!invalidated.triggered)
+
+    vm.applyExternalQuote(quoteB, failed: false)
+    #expect(invalidated.triggered)
+    #expect(vm.quote == quoteB)
+
+    vm.applyExternalQuote(nil, failed: true)
+    #expect(vm.quoteFailed)
+    let repeatedFailInvalidated = ObservationFlag()
+    withObservationTracking {
+        _ = vm.quoteFailed
+    } onChange: {
+        MainActor.assumeIsolated { repeatedFailInvalidated.triggered = true }
+    }
+    vm.applyExternalQuote(nil, failed: true)
+    #expect(!repeatedFailInvalidated.triggered)
 }
 
 @Test func holdingsAllocationGroupsByTypeAndBrand() {

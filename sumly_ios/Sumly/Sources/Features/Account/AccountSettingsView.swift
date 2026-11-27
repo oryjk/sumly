@@ -16,15 +16,16 @@ struct AccountSettingsView: View {
         GoldMarketBasis(rawValue: marketBasisRaw) ?? GoldMarketBasis.initialDefault()
     }
 
-    private var cloudBadge: AccountCloudStatusBadge {
-        AccountCloudStatusBadge.from(session: session, cloud: cloud)
-    }
-
     var body: some View {
         let _ = languageStore.revision
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                cloudSyncSection
+                AccountSettingsCloudSyncSection(
+                    session: session,
+                    cloud: cloud,
+                    onRequestImport: { confirmImport = true },
+                    onRequestConflictResolution: { confirmConflict = true }
+                )
                 if let scope = session.appleEmailLinkScope, allowedEmailLink == scope {
                     crossDeviceLoginSection(scope: scope)
                 }
@@ -55,117 +56,6 @@ struct AccountSettingsView: View {
             Button(L10n.tr("冲突记录使用云端版本"), role: .destructive) { Task { await cloud?.sync(choice: .remote) } }
         } message: {
             Text(L10n.tr("同一购入记录及其部分处置记录作为整体选择，其他记录自动合并。选择某一版本将放弃这些冲突记录在另一端的更改（包括删除）。"))
-        }
-    }
-
-    // MARK: - 1. 账户持仓云同步
-
-    private var cloudSyncSection: some View {
-        let badge = cloudBadge
-        let signedIn = session.user != nil
-        return VStack(alignment: .leading, spacing: 8) {
-            AccountSectionHeader(title: signedIn ? L10n.tr("账户持仓云同步") : L10n.tr("游客持仓"))
-
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
-                    AccountRowIconBadge(systemName: signedIn ? "icloud.fill" : "iphone")
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(signedIn ? L10n.tr("云端同步状态") : L10n.tr("本机游客持仓"))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(GoldTheme.text)
-                        Text(signedIn ? L10n.tr("离线可记录，联网自动合并") : L10n.tr("记录保存在当前设备"))
-                            .font(.caption)
-                            .foregroundStyle(GoldTheme.textSecondary)
-                    }
-                    Spacer(minLength: 6)
-                    statusCapsule(badge: badge)
-                }
-
-                Text(cloud?.status ?? L10n.tr("登录后持仓与账本保存到服务端，本机保留离线缓存。"))
-                    .font(.footnote)
-                    .foregroundStyle(GoldTheme.textSecondary)
-                    .lineSpacing(4)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(GoldTheme.background, in: GoldTheme.subCardShape)
-                    .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
-
-                if let cloud, signedIn {
-                    VStack(spacing: 10) {
-                        Button { Task { await cloud.sync() } } label: {
-                            HStack(spacing: 8) {
-                                if cloud.isSyncing {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                        .tint(GoldTheme.onGold)
-                                } else {
-                                    Image(systemName: "arrow.triangle.2.circlepath")
-                                        .font(.footnote.bold())
-                                }
-                                Text(cloud.isSyncing ? L10n.tr("正在同步…") : L10n.tr("立即同步"))
-                            }
-                        }
-                        .buttonStyle(GoldPrimaryButtonStyle())
-                        .disabled(cloud.isSyncing)
-
-                        if cloud.conflictCount > 0 {
-                            Button { confirmConflict = true } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.footnote.weight(.semibold))
-                                    Text(L10n.fmt("处理同步冲突（%d 条）", cloud.conflictCount))
-                                        .font(.subheadline.weight(.semibold))
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.semibold))
-                                }
-                                .foregroundStyle(GoldTheme.up)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 12)
-                                .frame(maxWidth: .infinity)
-                                .background(GoldTheme.up.opacity(0.13), in: GoldTheme.subCardShape)
-                                .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.up.opacity(0.38), lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        if cloud.guestRecordCount > 0 {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Button { confirmImport = true } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "tray.and.arrow.down.fill")
-                                            .font(.footnote.weight(.semibold))
-                                        Text(L10n.fmt("导入此设备的游客记录（%d 条）", cloud.guestRecordCount))
-                                            .font(.subheadline.weight(.semibold))
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.85)
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption.weight(.semibold))
-                                    }
-                                    .foregroundStyle(GoldTheme.goldSoft)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 12)
-                                    .frame(maxWidth: .infinity)
-                                    .background(GoldTheme.gold.opacity(0.12), in: GoldTheme.subCardShape)
-                                    .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.gold.opacity(0.36), lineWidth: 1))
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(cloud.isSyncing)
-
-                                Text(L10n.tr("游客记录不会自动归入账户；导入后原记录仍保留，重复导入会跳过相同记录。"))
-                                    .font(.caption)
-                                    .foregroundStyle(GoldTheme.textFaint)
-                                    .lineSpacing(3)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
-            .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
         }
     }
 
@@ -449,7 +339,139 @@ struct AccountSettingsView: View {
         }
     }
 
-    // MARK: - 辅助组件与能力校验
+    // MARK: - 能力校验
+
+    private func loadEmailLink() async {
+        allowedEmailLink = nil
+        guard let scope = session.appleEmailLinkScope,
+              let capabilities = try? await session.service.fetch(AuthCapabilities.self, .capabilities),
+              capabilities.canLinkAppleEmail, scope == session.appleEmailLinkScope,
+              (try? await session.loadAppleEmailProfile(scope)) != nil,
+              !Task.isCancelled, scope == session.appleEmailLinkScope else { return }
+        allowedEmailLink = scope
+    }
+}
+
+/// 独立观察云同步状态的子视图：每次渲染仅计算一次 `AccountCloudStatusBadge`，
+/// 并把 `HoldingsCloud` 的状态变化隔离在云同步卡片内部，避免整个设置页重绘。
+private struct AccountSettingsCloudSyncSection: View {
+    let session: AuthSession
+    let cloud: HoldingsCloud?
+    let onRequestImport: () -> Void
+    let onRequestConflictResolution: () -> Void
+
+    var body: some View {
+        let badge = AccountCloudStatusBadge.from(session: session, cloud: cloud)
+        let signedIn = session.user != nil
+        let statusText = cloud != nil
+            ? badge.detail
+            : L10n.tr("登录后持仓与账本保存到服务端，本机保留离线缓存。")
+
+        VStack(alignment: .leading, spacing: 8) {
+            AccountSectionHeader(title: signedIn ? L10n.tr("账户持仓云同步") : L10n.tr("游客持仓"))
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    AccountRowIconBadge(systemName: signedIn ? "icloud.fill" : "iphone")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(signedIn ? L10n.tr("云端同步状态") : L10n.tr("本机游客持仓"))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(GoldTheme.text)
+                        Text(signedIn ? L10n.tr("离线可记录，联网自动合并") : L10n.tr("记录保存在当前设备"))
+                            .font(.caption)
+                            .foregroundStyle(GoldTheme.textSecondary)
+                    }
+                    Spacer(minLength: 6)
+                    statusCapsule(badge: badge)
+                }
+
+                Text(statusText)
+                    .font(.footnote)
+                    .foregroundStyle(GoldTheme.textSecondary)
+                    .lineSpacing(4)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(GoldTheme.background, in: GoldTheme.subCardShape)
+                    .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+
+                if let cloud, signedIn {
+                    VStack(spacing: 10) {
+                        Button { Task { await cloud.sync() } } label: {
+                            HStack(spacing: 8) {
+                                if badge.isSyncing {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .tint(GoldTheme.onGold)
+                                } else {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(.footnote.bold())
+                                }
+                                Text(badge.isSyncing ? L10n.tr("正在同步…") : L10n.tr("立即同步"))
+                            }
+                        }
+                        .buttonStyle(GoldPrimaryButtonStyle())
+                        .disabled(badge.isSyncing)
+
+                        if badge.conflictCount > 0 {
+                            Button(action: onRequestConflictResolution) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.footnote.weight(.semibold))
+                                    Text(L10n.fmt("处理同步冲突（%d 条）", badge.conflictCount))
+                                        .font(.subheadline.weight(.semibold))
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .foregroundStyle(GoldTheme.up)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity)
+                                .background(GoldTheme.up.opacity(0.13), in: GoldTheme.subCardShape)
+                                .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.up.opacity(0.38), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if badge.guestRecordCount > 0 {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Button(action: onRequestImport) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "tray.and.arrow.down.fill")
+                                            .font(.footnote.weight(.semibold))
+                                        Text(L10n.fmt("导入此设备的游客记录（%d 条）", badge.guestRecordCount))
+                                            .font(.subheadline.weight(.semibold))
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.85)
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.semibold))
+                                    }
+                                    .foregroundStyle(GoldTheme.goldSoft)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
+                                    .frame(maxWidth: .infinity)
+                                    .background(GoldTheme.gold.opacity(0.12), in: GoldTheme.subCardShape)
+                                    .overlay(GoldTheme.subCardShape.strokeBorder(GoldTheme.gold.opacity(0.36), lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(badge.isSyncing)
+
+                                Text(L10n.tr("游客记录不会自动归入账户；导入后原记录仍保留，重复导入会跳过相同记录。"))
+                                    .font(.caption)
+                                    .foregroundStyle(GoldTheme.textFaint)
+                                    .lineSpacing(3)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(GoldTheme.card, in: GoldTheme.holdingsCardShape)
+            .overlay(GoldTheme.holdingsCardShape.strokeBorder(GoldTheme.cardStroke, lineWidth: 1))
+        }
+    }
 
     private func statusCapsule(badge: AccountCloudStatusBadge) -> some View {
         let foreground: Color = {
@@ -495,15 +517,5 @@ struct AccountSettingsView: View {
         .background(bg, in: GoldTheme.capsuleShape)
         .overlay(GoldTheme.capsuleShape.strokeBorder(stroke, lineWidth: 0.8))
         .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private func loadEmailLink() async {
-        allowedEmailLink = nil
-        guard let scope = session.appleEmailLinkScope,
-              let capabilities = try? await session.service.fetch(AuthCapabilities.self, .capabilities),
-              capabilities.canLinkAppleEmail, scope == session.appleEmailLinkScope,
-              (try? await session.loadAppleEmailProfile(scope)) != nil,
-              !Task.isCancelled, scope == session.appleEmailLinkScope else { return }
-        allowedEmailLink = scope
     }
 }

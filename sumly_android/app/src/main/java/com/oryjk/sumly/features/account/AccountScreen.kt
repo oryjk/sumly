@@ -74,6 +74,7 @@ import kotlinx.coroutines.launch
 fun AccountScreen(
     viewModel: AccountViewModel,
     holdingsSync: AccountHoldingsUi? = null,
+    holdingsSyncSource: AccountHoldingsSource? = null,
     onOpenChanlun: (() -> Unit)? = null,
     onClearMarketCache: (suspend () -> Unit)? = null,
 ) {
@@ -104,6 +105,7 @@ fun AccountScreen(
             session = session,
             actions = actions,
             holdingsSync = holdingsSync,
+            holdingsSyncSource = holdingsSyncSource,
             onClose = { settingsOpen = false },
             onClearMarketCache = onClearMarketCache,
         )
