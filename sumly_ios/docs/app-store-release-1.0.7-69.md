@@ -35,3 +35,10 @@
     - 关联错误原文：`Provider name mismatch.` / `Your developer name does not match MIIT's records.`
   - 原因与后续操作：与 `1.0.6 (61)` 提审时遇到的 Apple 后台限制一致，App Store Connect 公开 REST API 不提供 `/v1/appIcpNumberDetails` 的人工确认接口。`1.0.7 (69)` 的构建关联、6 语种更新说明与审核备注均已保存就绪，需开发者登录 App Store Connect 网页端确认中国大陆 ICP 备案提示后，在 `1.0.7` 版本页面点击「添加以供审核 / 提交以供审核」（或网页端确认后重新通过 API 提交审核单 `8d246dfc-67ff-435c-9a6a-e4134f6b19a2`）。
 - 线上在售版本核对：版本 `1.0.6`（`8a52f4ba-749a-4d27-a469-23507217cf3c`）保持 `READY_FOR_SALE`（`READY_FOR_DISTRIBUTION`），未受影响。
+
+## App Store 1.0.7（69）正式提审结果
+
+- 提交时间为 2026-11-28 12:25（北京时间），以 App Store Connect 审核详情为准。
+- 版本 `1.0.7`，构建 `69`。复用 `main` 分支源码提交 `b71bde412f7b29249354e4c4e98bc268a63c6152` 的签名构建。提审前已核实 `origin/main`（`bf2b43ccf2005434697400e3b986f2e4546f4b79`）包含该源码提交与提审准备记录。
+- 在 App Store Connect 网页端将版本添加至现有 iOS 草稿并提交。此前的 ICP 提供商名称不符提示未再阻断提审。
+- Apple 确认已提交 1 个项目。审核单 `8d246dfc-67ff-435c-9a6a-e4134f6b19a2` 中仅包含 iOS `1.0.7 (69)`，审核单和版本项目均显示「等待审核」。
